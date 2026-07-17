@@ -1,0 +1,24 @@
+# CODEOWNERS
+#
+# パスごとのレビュー担当者を定義します。より下の行が優先されます。
+# TODO: 実際のチーム編成が決まり次第、ダミーの @yastdkhs をチームハンドルに置き換える。
+#
+# 参考: https://docs.github.com/ja/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+
+# デフォルトオーナー（明示的な指定がないすべてのパス）
+*                       @yastdkhs
+
+# 設計・規約系ドキュメント（変更の影響が大きいため必須レビュー）
+/docs/adr/              @yastdkhs
+/CLAUDE.md              @yastdkhs
+/AGENTS.md              @yastdkhs
+/CONTRIBUTING.md        @yastdkhs
+
+# データモデル・ドメイン知識（データ品質に直結するため必須レビュー）
+/knowledge/             @yastdkhs
+/layouts/               @yastdkhs
+
+# ビルド・CI・依存関係
+/pyproject.toml         @yastdkhs
+/.pre-commit-config.yaml @yastdkhs
+/.github/               @yastdkhs

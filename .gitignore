@@ -1,0 +1,61 @@
+# --- Python ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+.eggs/
+pip-wheel-metadata/
+
+# --- 仮想環境 ---
+.venv/
+venv/
+env/
+ENV/
+
+# --- ツールキャッシュ ---
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.cache/
+.coverage
+.coverage.*
+htmlcov/
+
+# --- エディタ / OS ---
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*.swp
+
+# --- 秘匿情報 ---
+.env
+.env.*
+*.pem
+*.key
+secrets.*
+
+# --- 本プロジェクト固有 ---
+# 実行時ログ（logs/README.md の方針に従い .gitkeep のみ追跡）
+logs/*
+!logs/.gitkeep
+!logs/README.md
+
+# 一時作業領域（tmp/README.md の方針に従い .gitkeep のみ追跡）
+tmp/*
+!tmp/.gitkeep
+!tmp/README.md
+
+# ローカルDBファイル（テスト用フィクスチャ以外はコミットしない）
+*.sqlite3
+*.db
+!tests/**/*.sqlite3
+!tests/**/*.db
+
+# 大容量の実データPDF（sample_pdfs/README.md の基準を満たさないもの）
+# 意図的にコミットする場合のみ git add -f を使う運用とする
+/data/
