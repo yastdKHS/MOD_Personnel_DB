@@ -1,6 +1,6 @@
 # CONTRIBUTING.md
 
-本プロジェクトへの貢献方法について説明します。長期運用プロジェクトであるため、短期的な速度より「後から読める・直せる」ことを重視します。
+本プロジェクトへの貢献方法について説明します。長期運用プロジェクトであるため、短期的な速度より「後から読める・直せる」ことを重視します。**実装速度より設計品質を優先し、既存の設計を壊す変更は行いません**（[ADR-0014](docs/adr/0014-development-discipline.md)）。
 
 ## 開発環境セットアップ（実装開始後に有効化）
 
@@ -40,13 +40,29 @@ pre-commit install
 3. `CODEOWNERS` に基づくレビュー担当者の承認を得る。
 4. CI（lint / 型チェック / テスト）がグリーンであることを確認する。
 5. データモデル・レイアウトフォーマット・ドメイン知識のスキーマに影響する変更は、最低1名の追加レビューを必須とする。
+6. **1つのPRは1つの責務のみを変更する**（[ADR-0014](docs/adr/0014-development-discipline.md)）。例: 「新しいLayoutの追加」と「無関係なリファクタリング」を同じPRに含めない。レビュー中に無関係な変更が見つかった場合は別PRに切り出す。
 
 ## コーディング規約
 
 - Lint / フォーマット: `ruff`（設定は `pyproject.toml`）
 - 型チェック: `mypy`。新規コードには型ヒントを付与する。
 - テスト: `pytest`。新機能には対応するテストを追加する。パーサー関連の変更には可能な限りゴールデンファイルテスト（`tests/golden`）を追加する。
+- **大きな関数を作らない**。目安は1関数あたり最大30文・最大分岐数8・最大循環的複雑度8・最大引数5。`pyproject.toml` のruff設定（`C90`, `PLR09xx`）で機械的に検出する。閾値内でも複数責務を持つ関数は分割する（[ADR-0014](docs/adr/0014-development-discipline.md)）。
 - 詳細な設計原則は [`docs/architecture.md`](docs/architecture.md) を参照。
+
+## 未知パターンへの対応優先順位
+
+パース・正規化で「既存ロジックでは扱えないパターン」に遭遇した場合、対応の優先順位は以下の通りとする（[ADR-0012](docs/adr/0012-error-handling-priority-order.md)）。
+
+1. `knowledge/` へのデータ追加（表記ゆれ・別名・改称履歴等）— 正規表現の追加より常に優先する
+2. `layouts/` へのレイアウト定義追加（様式・構造の差異）— `src/` の例外処理より常に優先する
+3. `src/` 内の例外処理・正規表現による特殊対応 — 最後の手段。追加する場合は、なぜ上記2つで表現できなかったかをコードコメントとPR説明に明記する
+
+中核処理パイプライン（Document Analyzer → Layout Detector → Section Parser → Field Extractor → Normalizer → Validator）は[固定](docs/adr/0011-fixed-core-pipeline.md)されており、この段階構成自体を変更する提案は、ADR追加だけでなくプロジェクトオーナーの明示的な承認を要する。
+
+## 誤りの修正記録（Learning Dataset）
+
+Validatorでの検証NGや、公開後に判明した誤りは、単なる修正ログ（いつ・誰が・何を直したか）ではなく、`knowledge/learning_dataset/` にLearning Datasetとして記録する。誤りの分類・発生した中核パイプライン段階・`knowledge/`/`layouts/`への反映有無を含める（[ADR-0013](docs/adr/0013-learning-dataset-not-correction-log.md)）。
 
 ## 新しいPDFレイアウトへの対応手順（概要）
 

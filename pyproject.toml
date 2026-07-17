@@ -56,8 +56,25 @@ target-version = "py312"
 src = ["src", "tests", "scripts"]
 
 [tool.ruff.lint]
-select = ["E", "F", "W", "I", "UP", "B", "SIM", "N"]
+# C90 / PLR091x: 「大きな関数の禁止」(docs/adr/0014-development-discipline.md) を
+# 機械的に強制するためのルール群。閾値は同ADRの数値と一致させる。
+# PLR0911: return文が多すぎる / PLR0912: 分岐が多すぎる
+# PLR0913: 引数が多すぎる / PLR0915: 文が多すぎる
+select = ["E", "F", "W", "I", "UP", "B", "SIM", "N", "C90", "PLR0911", "PLR0912", "PLR0913", "PLR0915"]
 ignore = []
+
+[tool.ruff.lint.mccabe]
+# 最大循環的複雑度 = 8（docs/adr/0014-development-discipline.md）
+max-complexity = 8
+
+[tool.ruff.lint.pylint]
+# 以下の閾値は docs/adr/0014-development-discipline.md の数値と一致させること。
+# 変更する場合はADR本文ではなく本ファイルの調整のみでよいが、
+# 閾値を大幅に緩める場合は理由をコミットメッセージに明記する。
+max-statements = 30   # 1関数あたり最大30文
+max-branches = 8       # 1関数あたり最大分岐数8
+max-args = 5            # 1関数あたり最大引数5
+max-returns = 6         # 1関数あたり最大return文数
 
 [tool.ruff.lint.isort]
 known-first-party = ["mod_personnel_db"]

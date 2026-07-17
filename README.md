@@ -19,6 +19,10 @@
 3. **枯れた技術を選ぶ** — 流行より「10年後も動く」を優先する（[ADR-0001](docs/adr/0001-python-packaging.md), [ADR-0004](docs/adr/0004-sqlite-as-datastore.md)）。
 4. **人が入れ替わっても回る** — ドキュメント・ADR・CODEOWNERS・CONTRIBUTING.mdで属人化を防ぐ。
 5. **公開データの節度ある取り扱い** — 対象は公務としての公表情報に限定し、目的外利用・過剰な個人情報付与を行わない（[ADR-0008](docs/adr/0008-data-ethics-policy.md)）。
+6. **中核パイプラインは固定し、変化はデータで吸収する** — Document Analyzer → Layout Detector → Section Parser → Field Extractor → Normalizer → Validator の6段階を変更禁止とし、新様式・新表記への対応は `layouts/` / `knowledge/` の追加のみで行う（[ADR-0011](docs/adr/0011-fixed-core-pipeline.md)）。
+7. **例外処理より先にデータ追加を検討する** — 未知パターンへの対応は Knowledge Base追加 > Layout追加 > 例外処理、の優先順位で行う（[ADR-0012](docs/adr/0012-error-handling-priority-order.md)）。
+8. **誤りは学習資産として蓄積する** — 修正情報は単なるログではなく、システム改善に還元できるLearning Datasetとして設計する（[ADR-0013](docs/adr/0013-learning-dataset-not-correction-log.md)）。
+9. **実装速度より設計品質を優先する** — 1PR1責務、大きな関数の禁止など、開発規律を明文化し機械的に強制する（[ADR-0014](docs/adr/0014-development-discipline.md)）。
 
 ## リポジトリ構成
 

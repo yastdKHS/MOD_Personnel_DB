@@ -26,3 +26,8 @@ Accepted
 
 - `knowledge/` のデータ品質がシステム全体の正確性を左右するため、変更管理（レビュー・出典明記）を軽視できない。運用コストは増えるが、正規化ロジックの複雑化を防ぐメリットの方が大きいと判断した。
 - 正規化前の生データ（`raw_text` 等）を常に保持する設計（[データモデル](../data_model.md)参照）と組み合わせることで、`knowledge/` の誤りが発覚した場合も再正規化により修正可能にする。
+
+## 関連ADR
+
+- [ADR-0012](0012-error-handling-priority-order.md): 未知パターンに遭遇した際、正規表現の追加より`knowledge/`へのデータ追加を最優先とする運用ルールを定める。
+- [ADR-0013](0013-learning-dataset-not-correction-log.md): `knowledge/`の一部として`knowledge/learning_dataset/`を新設し、誤り修正情報を本ADRの正規化戦略にフィードバックする仕組みを定める。

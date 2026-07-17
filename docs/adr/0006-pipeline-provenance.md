@@ -22,3 +22,8 @@ Accepted
 
 - ステージ分割・来歴管理の分だけ初期実装コストは増える。
 - 一方で、後年「このデータはなぜこの値になっているのか」を追跡できることは、公的データを扱うプロジェクトの信頼性に直結するため、必須要件として扱う。
+
+## 関連ADR
+
+- [ADR-0011](0011-fixed-core-pipeline.md): 本ADRが定めたステージ分割の方針を発展させ、中核パイプラインの段階名・構成を「Document Analyzer → Layout Detector → Section Parser → Field Extractor → Normalizer → Validator」の6段階に固定する。取得（Fetch）・格納（Store）・公開（Publish）は中核パイプラインの外側の段階として位置づけ直す。
+- [ADR-0013](0013-learning-dataset-not-correction-log.md): 本ADRが定めた「要確認キュー」を、単なる修正ログではなくLearning Datasetとして設計する方針を定める。
