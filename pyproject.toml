@@ -1,0 +1,101 @@
+# pyproject.toml
+#
+# 本プロジェクトの Python 設定の唯一の情報源（Single Source of Truth）。
+# ビルド・依存関係・lint・型チェック・テストの設定はすべてここに集約し、
+# setup.cfg / setup.py / requirements*.txt / tox.ini 等への分散を避ける。
+#
+# 技術選定の理由は docs/adr/0001-python-packaging.md を参照。
+#
+# NOTE: 本ファイルはリポジトリの「骨格」として先行整備するものであり、
+#       src/ 配下の実装はまだ存在しない。依存関係は実装着手時に確定させる。
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mod-personnel-db"
+version = "0.0.0"
+description = "防衛省人事発令PDFから構造化人事データベースを生成・公開する長期運用プロジェクト"
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "TBD" }
+authors = [
+    { name = "MOD Personnel DB Maintainers" },
+]
+classifiers = [
+    "Private :: Do Not Upload",
+    "Programming Language :: Python :: 3.12",
+]
+# 実装着手時に確定させる想定の依存関係（例）。
+# 恒久的な「枯れた技術を選ぶ」方針（ADR-0001）に基づき、依存は最小限に保つ。
+dependencies = []
+
+[project.optional-dependencies]
+dev = [
+    "ruff",
+    "mypy",
+    "pytest",
+    "pytest-cov",
+    "pre-commit",
+    "pip-tools",
+]
+
+# 実装着手時に有効化する CLI エントリポイントの想定例（未実装のためコメントアウト）
+# [project.scripts]
+# mod-personnel-db = "mod_personnel_db.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+# --- Lint / Format: ruff ---
+# 理由: docs/adr/0002-lint-format-typecheck-tooling.md
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["src", "tests", "scripts"]
+
+[tool.ruff.lint]
+# C90 / PLR091x: 「大きな関数の禁止」(docs/adr/0014-development-discipline.md) を
+# 機械的に強制するためのルール群。閾値は同ADRの数値と一致させる。
+# PLR0911: return文が多すぎる / PLR0912: 分岐が多すぎる
+# PLR0913: 引数が多すぎる / PLR0915: 文が多すぎる
+select = ["E", "F", "W", "I", "UP", "B", "SIM", "N", "C90", "PLR0911", "PLR0912", "PLR0913", "PLR0915"]
+ignore = []
+
+[tool.ruff.lint.mccabe]
+# 最大循環的複雑度 = 8（docs/adr/0014-development-discipline.md）
+max-complexity = 8
+
+[tool.ruff.lint.pylint]
+# 以下の閾値は docs/adr/0014-development-discipline.md の数値と一致させること。
+# 変更する場合はADR本文ではなく本ファイルの調整のみでよいが、
+# 閾値を大幅に緩める場合は理由をコミットメッセージに明記する。
+max-statements = 30   # 1関数あたり最大30文
+max-branches = 8       # 1関数あたり最大分岐数8
+max-args = 5            # 1関数あたり最大引数5
+max-returns = 6         # 1関数あたり最大return文数
+
+[tool.ruff.lint.isort]
+known-first-party = ["mod_personnel_db"]
+
+[tool.ruff.format]
+quote-style = "double"
+
+# --- 型チェック: mypy ---
+[tool.mypy]
+python_version = "3.12"
+strict = true
+files = ["src", "tests", "scripts"]
+# src/ が空の段階では対象ファイルが存在しないため、CI側で存在チェックを行う
+# （.github/workflows/ci.yml を参照）。
+
+# --- テスト: pytest ---
+[tool.pytest.ini_options]
+minversion = "7.0"
+testpaths = ["tests"]
+addopts = "-ra"
+
+[tool.coverage.run]
+source = ["src"]
+branch = true
