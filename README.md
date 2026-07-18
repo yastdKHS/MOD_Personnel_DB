@@ -1,6 +1,6 @@
 # MOD Personnel DB（防衛省人事発令データベース）
 
-> ステータス: **設計フェーズ（実装未着手）**。本リポジトリは現在、10年以上の運用に耐える設計を固めるための骨格（ディレクトリ構成・規約・ADR）のみが存在します。実装コードは含まれていません。
+> ステータス: **設計完了（Design Freeze）・実装未着手**。10年以上の運用に耐える設計corpus（ディレクトリ構成・規約・29本のADR・`docs/`配下の全設計文書）が[`docs/design-freeze.md`](docs/design-freeze.md)のレビューを経て確定しました。実装コードはまだ含まれていません。次のマイルストーンは実装フェーズの開始です。
 
 ## これは何か
 
@@ -53,6 +53,7 @@
 ## ドキュメント目次
 
 - [`docs/constitution.md`](docs/constitution.md) — **Project Constitution**（プロジェクト憲法）。ADR・Architecture Contractを含む全設計文書の最上位に位置する統治文書
+- [`docs/design-freeze.md`](docs/design-freeze.md) — **Design Freeze Review**。全設計領域の横断レビューと設計完了宣言。実装フェーズへ進む前に最初に読むべき全体像
 - [`docs/architecture.md`](docs/architecture.md) — システム全体のパイプライン設計
 - [`docs/configuration.md`](docs/configuration.md) — Configuration Architecture（Environment/Pydantic Settings/Secret管理/Validation Rule/設定Version/Migration/Hot Reload可否）
 - [`docs/security.md`](docs/security.md) — Security Architecture（Threat Model/Secret/Supply Chain/GitHub Actions/Dependency/JSON改ざん/FTP/Checksum・Hash・署名/Audit Log/最小権限/Security Review）

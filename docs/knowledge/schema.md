@@ -588,7 +588,7 @@ version:
   updated_at: "2026-07-18"
 ```
 
-`constraint` の内部形状は `rule_type` ごとに以下の慣例とする（JSON Schemaでは `rule_type` ごとの厳密な条件分岐までは強制せず、レビューで担保する。理由は[Validation Ruleの項](#validation-1)を参照）。
+`constraint` の内部形状は `rule_type` ごとに以下の慣例とする（JSON Schemaでは `rule_type` ごとの厳密な条件分岐までは強制せず、レビューで担保する。理由は[Validation Ruleの項](#validation)を参照）。
 
 | `rule_type` | `constraint` の慣例的な形状 |
 |---|---|
