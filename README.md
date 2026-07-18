@@ -52,6 +52,7 @@
 
 ## ドキュメント目次
 
+- [`docs/constitution.md`](docs/constitution.md) — **Project Constitution**（プロジェクト憲法）。ADR・Architecture Contractを含む全設計文書の最上位に位置する統治文書
 - [`docs/architecture.md`](docs/architecture.md) — システム全体のパイプライン設計
 - [`docs/architecture/learning_dataset.md`](docs/architecture/learning_dataset.md) — Learning Dataset設計（フィールド仕様・ライフサイクル）
 - [`docs/architecture/architecture-contract.md`](docs/architecture/architecture-contract.md) — Architecture Contract（コンポーネント間の分離保証）

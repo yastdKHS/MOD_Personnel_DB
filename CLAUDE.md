@@ -2,6 +2,8 @@
 
 このファイルは Claude Code（本リポジトリで作業するAIコーディングエージェント）が読む、リポジトリ固有の運用ルールです。人間向けの一般的な開発ガイドは `CONTRIBUTING.md`、全AIエージェント共通の規約は `AGENTS.md` を参照してください。本ファイルは `AGENTS.md` を上書きしません。両方に従ってください。
 
+本ファイルおよび `AGENTS.md` は、[`docs/constitution.md`](docs/constitution.md)（Project Constitution）に定める「4. AI Principles」（AIは提案者、人間は承認者、AIはGoldを書き換えない、AIはKnowledgeを直接変更しない）に従属します。本ファイルの記述とConstitutionが矛盾する場合はConstitutionが優先されます。
+
 ## プロジェクトの本質
 
 これは「PDFをパースするスクリプト」ではなく、「10年以上、複数の担当者・複数のAIセッションをまたいで保守され続けるデータ基盤」です。以下を常に優先してください。
@@ -58,6 +60,7 @@ Document Analyzer → Layout Detector → Section Parser → Field Extractor →
 
 ## 関連ドキュメント
 
+- [`docs/constitution.md`](docs/constitution.md) — Project Constitution（最高位の統治文書。本ファイルより上位）
 - [`AGENTS.md`](AGENTS.md) — 全AIエージェント共通の運用規約（本ファイルより広い読者を想定）
 - [`CONTRIBUTING.md`](CONTRIBUTING.md) — 人間の開発者向けガイド
 - [`docs/architecture.md`](docs/architecture.md) — システム設計の全体像

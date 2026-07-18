@@ -1,5 +1,7 @@
 # Architecture Decision Records（ADR）
 
+> ADR体系全体は[`docs/constitution.md`](../constitution.md)（Project Constitution）に従属する。Constitutionはこのディレクトリの一覧・依存関係図には含めない — ADRより上位の統治文書であり、ADRを覆す通常のSupersede手続きの対象ではないため。ADRとConstitutionが矛盾する場合は常にConstitutionが優先される。
+
 ## ADRとは何か
 
 後から「なぜこの設計にしたのか」を問われたときに答えられるようにするための記録。10年以上保守するプロジェクトでは、コードやコミット履歴だけでは「なぜ」が失われる。ADRはそれを防ぐ。

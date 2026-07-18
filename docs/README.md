@@ -8,6 +8,7 @@
 
 | パス | 内容 |
 |---|---|
+| [`constitution.md`](constitution.md) | **Project Constitution**（プロジェクト憲法）。ADR・Architecture Contractを含む本ディレクトリ配下のすべての設計文書より上位に位置する統治文書。変更にはプロジェクトオーナーの明示的承認を要する |
 | [`architecture.md`](architecture.md) | システム全体のパイプライン設計・コンポーネント間の責務分担 |
 | [`architecture/`](architecture/) | Learning Dataset設計、Architecture Contract（分離保証）等の詳細設計 |
 | [`data_model.md`](data_model.md) | データモデル（概念設計・ER図相当） |

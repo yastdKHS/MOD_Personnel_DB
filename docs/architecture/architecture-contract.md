@@ -1,5 +1,7 @@
 # Architecture Contract
 
+> 本ドキュメントは[`docs/constitution.md`](../constitution.md)（Project Constitution）に従属する。両者が矛盾する場合はConstitutionが優先される。
+>
 > 本ドキュメントは、Interface & Package設計（[`docs/api/`](../api/)）全体が満たすべき9つの分離保証を定義する。個々の保証は[`package-design.md`](../api/package-design.md)（依存関係）・[`dependency-rule.md`](../api/dependency-rule.md)（禁止/許可パターン）・[`pipeline.md`](../api/pipeline.md)（`run()`のみの公開）・[`docs/review/`](../review/)（Review Domain）の設計によって、**構造的に**（レビューや申し合わせだけでなく、依存グラフ上の事実として）実現される。曖昧な保証は解釈を明記し、将来の実装者が異なる解釈をしないようにする。
 >
 > **本ドキュメントに実装はない。**
