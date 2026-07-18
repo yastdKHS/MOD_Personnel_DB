@@ -28,6 +28,8 @@
 
 Feature Storeは機械学習における特徴量の管理基盤（学習・推論間での特徴量の一貫性担保、オンライン/オフライン特徴量ストアの同期等）を指す概念である。本プロジェクトの中核パイプライン（[ADR-0011](0011-fixed-core-pipeline.md)）は決定的（deterministic）なルールベース処理であり、機械学習モデルの学習・推論を行わない（[ADR-0003](0003-layout-definition-strategy.md)の「PDFレイアウトを都度LLMに解釈させる」代替案を明示的に見送った判断とも整合する）。Learning Dataset（[ADR-0013](0013-learning-dataset-not-correction-log.md)）は名称にDatasetを含むが、これは「人間が改善のために参照する構造化データ」であり、機械学習の特徴量管理とは異なる。将来、抽出精度向上のために機械学習的手法を導入する場合は、その時点で新規ADRとして技術選定から検討すべきであり、現時点でFeature Store関連のADRを先回りして作ることは過剰設計と判断した。
 
+**追記（Interface & Package Design、[`docs/api/interfaces.md`](../api/interfaces.md)）**: 後続のインターフェース設計タスクで、`features/`パッケージ・`FeatureStore`インターフェース・`FeatureVector`モデルを設計した。これは本判定を覆すものではない。ここでの`FeatureStore`は機械学習モデルの学習・推論基盤ではなく、Validatorの[Confidence算出](../database/json_schema.md#confidenceの算出ルール)を補助する**決定的な特徴量計算ユーティリティ**（OCR品質シグナル・レイアウト判定信頼度・過去の誤り発生率等）であり、永続ストレージも持たない（[`docs/api/package-design.md`](../api/package-design.md)の`features/`節参照）。「機械学習の学習・推論基盤としてのFeature Store」を導入したい場合は、引き続き本判定のとおり新規ADRを要する。
+
 ### Workflow Engine
 
 **判定: 欠落 → [ADR-0019](0019-workflow-orchestration.md) を追加**
