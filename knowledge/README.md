@@ -6,14 +6,25 @@
 
 「これはコードか、データか」の判断基準: **時間とともに項目が増える／出典に基づいて正誤が判断できる**ものは `knowledge/`、**入力に対して常に同じ処理をする手続き**は `src/`。
 
-## 構成（想定）
+## 構成
+
+ドメイン知識は8カテゴリに分離する。各カテゴリのYAML構造・バージョン管理・検証ルール・更新ルールの詳細な定義は [`docs/knowledge/schema.md`](../docs/knowledge/schema.md) を参照（[ADR-0005](../docs/adr/0005-knowledge-base-normalization.md)）。
+
+| ディレクトリ | `category` | 内容 |
+|---|---|---|
+| `organizations/` | `organization` | 部隊・機関名の名称期間エンティティ |
+| `positions/` | `position` | 官職・補職名の名称期間エンティティ |
+| `ranks/` | `rank` | 階級呼称の名称期間エンティティ＋序列 |
+| `aliases/` | `alias` | 氏名の異体字・旧字体等、個人に紐づく表記対応 |
+| `historical/` | `historical` | 組織改称・制度改正等の変更イベント（`organization`/`position`/`rank`の経緯・根拠） |
+| `typography/` | `typography` | 全角/半角・旧字体/新字体等、値に依存しない機械的な文字正規化ルール |
+| `layout_notes/` | `layout` | 特定レイアウト（`era_id`）固有の既知の例外・補足知識（トップレベル`layouts/`を補足） |
+| `validation/` | `validation` | Validatorが参照する許容値・制約ルール |
+
+上記8カテゴリとは別の関心事として、以下も `knowledge/` 配下に置く。
 
 | ディレクトリ | 内容 |
 |---|---|
-| `organizations/` | 部隊・機関名とその改称・改編履歴 |
-| `ranks/` | 階級呼称とその表記ゆれ・時代による変更 |
-| `aliases/` | 氏名の異体字・旧字体等の対応表 |
-| `known_issues/` | 既知のPDF記載の癖・例外パターンとその扱い方針 |
 | `learning_dataset/` | 検証NG・誤り修正の構造化データセット（Correction Logではなく学習資産として設計、[ADR-0013](../docs/adr/0013-learning-dataset-not-correction-log.md)） |
 
 各サブディレクトリの詳細は、それぞれの `README.md` を参照。

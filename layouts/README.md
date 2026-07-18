@@ -29,3 +29,7 @@ layouts/
 
 - 既存の `era_id` の定義を安易に上書きしない。過去のPDFの再現性に影響するため、変更が必要な場合はその影響範囲（過去データへの再処理要否）を確認した上で行う。
 - レイアウト定義フォーマット自体（`manifest.yaml` のスキーマ）を変更する場合は、`AGENTS.md` の規定によりADRの起票を検討する。
+
+## `knowledge/layout_notes/` との違い
+
+本ディレクトリは様式の**構造定義**（列位置・見出しパターン等）を保持する正データである。構造定義だけでは表現しきれない、特定 `era_id` 内で発生する既知の例外・補足知識（誤記、代替日付表記等）は [`knowledge/layout_notes/`](../knowledge/layout_notes/README.md)（`category: layout`、[`docs/knowledge/schema.md`](../docs/knowledge/schema.md#layout)）に記録する。構造そのものを変える場合は本ディレクトリを、構造は変えず例外的な扱いを追記する場合は `knowledge/layout_notes/` を更新する。
