@@ -1,5 +1,7 @@
 # 0026. セキュリティポリシー
 
+> 本ADRの決定を脅威モデルとして構造化し、各対策領域を具体化した設計は[`docs/security.md`](../security.md)（Security Architecture）を参照。署名・GitHub Actionsハードニング・監査ログの追加決定は[ADR-0029](0029-export-integrity-and-audit-log-policy.md)を参照（本ADRの内容は変更しない）。
+
 ## ステータス
 Accepted
 

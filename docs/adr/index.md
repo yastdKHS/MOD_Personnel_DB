@@ -44,6 +44,7 @@
 |---|---|---|---|---|---|---|
 | [0027](0027-review-domain-elevation.md) | Review Domainの中核化 | Accepted | 2026-07-18 | 2026-07-18 | 0010, 0021 | docs/review/, api/review.md, architecture/architecture-contract.md |
 | [0028](0028-pydantic-settings-for-configuration.md) | 設定管理へのPydantic Settings採用 | Accepted | 2026-07-18 | 2026-07-18 | 0001, 0002, 0026 | configuration.md, api/python-contract.md, api/package-design.md |
+| [0029](0029-export-integrity-and-audit-log-policy.md) | 公開成果物の完全性保証と監査ログ方針 | Accepted | 2026-07-18 | 2026-07-18 | 0006, 0014, 0019, 0022, 0026 | security.md |
 
 ## 検討したが採用しなかった候補
 

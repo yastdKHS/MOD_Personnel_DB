@@ -55,6 +55,7 @@
 - [`docs/constitution.md`](docs/constitution.md) — **Project Constitution**（プロジェクト憲法）。ADR・Architecture Contractを含む全設計文書の最上位に位置する統治文書
 - [`docs/architecture.md`](docs/architecture.md) — システム全体のパイプライン設計
 - [`docs/configuration.md`](docs/configuration.md) — Configuration Architecture（Environment/Pydantic Settings/Secret管理/Validation Rule/設定Version/Migration/Hot Reload可否）
+- [`docs/security.md`](docs/security.md) — Security Architecture（Threat Model/Secret/Supply Chain/GitHub Actions/Dependency/JSON改ざん/FTP/Checksum・Hash・署名/Audit Log/最小権限/Security Review）
 - [`docs/architecture/learning_dataset.md`](docs/architecture/learning_dataset.md) — Learning Dataset設計（フィールド仕様・ライフサイクル）
 - [`docs/architecture/architecture-contract.md`](docs/architecture/architecture-contract.md) — Architecture Contract（コンポーネント間の分離保証）
 - [`docs/data_model.md`](docs/data_model.md) — データモデル（概念設計）
