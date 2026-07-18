@@ -542,7 +542,7 @@ CREATE INDEX idx_parser_versions_released_at ON parser_versions (released_at);
 
 ### 11. `exports`
 
-**目的**: 公開用データのエクスポート実行記録（[ADR-0010](../adr/0010-ci-cd-and-publish-strategy.md)）。
+**目的**: 公開用データのエクスポート実行記録（[ADR-0010](../adr/0010-ci-cd-and-publish-strategy.md)）。`format='json'` の生成物が満たすべき詳細な契約（フィールド定義・バージョン管理）は [`json_schema.md`](json_schema.md) を参照（[ADR-0016](../adr/0016-public-json-format.md)）。
 
 **責務**: いつ・どの形式で・`gold_records` のどの時点のスナップショット（`as_of`）を公開したかを追跡する。
 
@@ -752,3 +752,4 @@ CREATE TABLE schema_migrations (
 - [ADR-0012](../adr/0012-error-handling-priority-order.md): 未知パターンへの対応優先順位（`learning_dataset.error_category` の分類根拠）
 - [ADR-0013](../adr/0013-learning-dataset-not-correction-log.md): Learning Dataset設計方針（`learning_dataset` テーブルの設計根拠）
 - [ADR-0015](../adr/0015-sqlite-schema-finalization.md): 本ドキュメントを正式なスキーマ決定として承認
+- [ADR-0016](../adr/0016-public-json-format.md): `exports`（`format='json'`）の詳細契約（[`json_schema.md`](json_schema.md)）
