@@ -2,15 +2,17 @@
 
 ## 責務
 
-`src/` の実装を検証するテストスイート。設計フェーズの現時点ではテストコードは存在しない。
+`src/` の実装を検証するテストスイート。Phase2 Task1（Repository Skeleton）より`tests/unit/`にテストコードが存在する。テスト種別ごとの方針は[`docs/testing/test-policy.md`](../docs/testing/test-policy.md)を正とする。
 
-## 想定する構成
+## 構成
 
 ```
 tests/
-  unit/          # 個々の関数・クラス単位のテスト
-  integration/   # 複数ステージを跨いだ結合テスト（例: extract→parse→normalize）
-  golden/        # sample_pdfs/ と sample_outputs/ を用いたゴールデンファイルテスト（ADR-0007）
+  unit/
+    models/         # ドメインモデルのValidation Rule検証
+    repositories/    # Repository Protocol実装（SQLite）の検証
+  integration/       # 複数ステージを跨いだ結合テスト（未整備）
+  golden/             # sample_pdfs/ と sample_outputs/ を用いたゴールデンファイルテスト（ADR-0007、未整備）
 ```
 
 ## 方針

@@ -1,6 +1,6 @@
 # MOD Personnel DB（防衛省人事発令データベース）
 
-> ステータス: **設計完了（Design Freeze）・実装未着手**。10年以上の運用に耐える設計corpus（ディレクトリ構成・規約・29本のADR・`docs/`配下の全設計文書）が[`docs/design-freeze.md`](docs/design-freeze.md)のレビューを経て確定しました。実装コードはまだ含まれていません。次のマイルストーンは実装フェーズの開始です。
+> ステータス: **実装フェーズ（進行中）**。10年以上の運用に耐える設計corpus（ディレクトリ構成・規約・29本のADR・`docs/`配下の全設計文書）が[`docs/design-freeze.md`](docs/design-freeze.md)のレビューを経て確定し、[`docs/implementation.md`](docs/implementation.md)以下のImplementation Standardsに従って実装に着手しています。現時点では`repositories/`（Repository層、SQLite実装）が実装済みです。中核パイプライン等は未実装です。
 
 ## これは何か
 
@@ -82,7 +82,17 @@
 
 ## クイックスタート
 
-実装が存在しないため、現時点では実行手順はありません。実装開始後、本セクションにセットアップ手順（`pip install -e .[dev]`、`pre-commit install`、`pytest` 等）を追記します。
+本プロジェクトはPython 3.14を対象とする（[`pyproject.toml`](pyproject.toml)）。[uv](https://docs.astral.sh/uv/)（開発体験向上のための任意選択、[ADR-0001](docs/adr/0001-python-packaging.md)）を用いた手順例:
+
+```bash
+uv venv --python 3.14
+uv pip install -e ".[dev]"
+uv run pytest tests/unit --cov=mod_personnel_db
+uv run mypy
+uv run ruff check .
+```
+
+標準の`pip`でも同様に利用できる（`pip install -e ".[dev]"`）。`pre-commit install`の実行を推奨する。
 
 ## データの出典と利用方針
 
