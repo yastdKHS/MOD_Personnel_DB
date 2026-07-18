@@ -17,6 +17,7 @@
 | [`database/`](database/) | SQLite物理スキーマ・公開JSON仕様 |
 | [`knowledge/`](knowledge/) | Knowledge Baseスキーマ |
 | [`review/`](review/) | Review Domain（ライフサイクル・ドメインモデル・ポリシー・キュー・メトリクス） |
+| [`workflow/`](workflow/) | Workflow State Machine（Queued〜Archivedのライフサイクル、Timeout/Retry/Rollback/Checkpoint） |
 | [`operations/`](operations/) | 運用手順書（Runbook） |
 
 ## 方針
