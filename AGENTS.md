@@ -4,6 +4,8 @@
 
 本ファイルはADR群を含むすべての設計文書と同様に [`docs/constitution.md`](docs/constitution.md)（Project Constitution）に従属します。特に本ファイルの規約は、Constitutionの「4. AI Principles」（AIは提案者であり承認者ではない、AIはGoldを書き換えない、AIはKnowledgeを直接変更しない）を具体化したものです。本ファイルとConstitutionが矛盾する場合はConstitutionが優先されます。
 
+設計フェーズは[`docs/design-freeze.md`](docs/design-freeze.md)をもって完了しています。実装フェーズにおける詳細な実装規約（コーディングスタイル・テスト方針・Parser開発規約等）は[`docs/implementation.md`](docs/implementation.md)（Implementation Guide）以下の各文書を正とし、本ファイルはツールを問わない最小限のガードレールのみを記載します。
+
 ## このリポジトリの性質
 
 - 10年以上の運用を前提とした、公的機関が公表する人事情報を扱うデータ基盤である。
@@ -61,6 +63,13 @@
 ## 関連ドキュメント
 
 - [`docs/constitution.md`](docs/constitution.md) — Project Constitution（最高位の統治文書。本ファイルより上位）
+- [`docs/design-freeze.md`](docs/design-freeze.md) — Design Freeze Review（設計完了宣言）
+- [`docs/implementation.md`](docs/implementation.md) — Implementation Guide（実装フェーズの最上位ガイドライン）
+- [`docs/coding-style.md`](docs/coding-style.md) — Coding Style Guide
+- [`docs/testing/test-policy.md`](docs/testing/test-policy.md) — Test Policy
+- [`docs/parser-guidelines.md`](docs/parser-guidelines.md) — Parser Development Guidelines
+- [`docs/implementation-checklist.md`](docs/implementation-checklist.md) — Implementation Checklist
+- [`docs/developer-workflow.md`](docs/developer-workflow.md) — Developer Workflow
 - [`CLAUDE.md`](CLAUDE.md) — Claude Code固有の追加規約
 - [`CONTRIBUTING.md`](CONTRIBUTING.md) — 人間の開発者向けガイド
 - [`docs/adr/`](docs/adr/) — 設計判断の記録（本ファイルの運用ルールの根拠は [ADR-0009](docs/adr/0009-ai-agent-operating-policy.md)）
