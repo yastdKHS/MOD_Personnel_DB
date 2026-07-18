@@ -66,6 +66,7 @@
 - [`docs/review/`](docs/review/) — Review Domain（ライフサイクル・ドメインモデル・ポリシー・キュー・メトリクス）
 - [`docs/workflow/`](docs/workflow/) — Workflow State Machine（Queued〜Archivedのライフサイクル）
 - [`docs/operations/observability.md`](docs/operations/observability.md) — Observability設計（Logging/Metrics/Tracing/Health Check/Alert/Dashboard/SLO/SLI/Error Budget/OpenTelemetry対応方針）
+- [`docs/operations/release.md`](docs/operations/release.md) — 運用設計（Release Flow/Rollback/Parser Upgrade/Knowledge Upgrade/Migration/Backfill/Recovery/Backup/Disaster Recovery/Maintenance Window）
 - [`docs/glossary.md`](docs/glossary.md) — ドメイン用語集
 - [`docs/adr/`](docs/adr/) — Architecture Decision Records
 - [`docs/operations/`](docs/operations/) — 運用手順書（Runbook）

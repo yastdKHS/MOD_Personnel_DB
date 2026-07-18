@@ -21,7 +21,7 @@
 | [`knowledge/`](knowledge/) | Knowledge Baseスキーマ |
 | [`review/`](review/) | Review Domain（ライフサイクル・ドメインモデル・ポリシー・キュー・メトリクス） |
 | [`workflow/`](workflow/) | Workflow State Machine（Queued〜Archivedのライフサイクル、Timeout/Retry/Rollback/Checkpoint） |
-| [`operations/`](operations/) | 運用手順書（Runbook）、Observability設計 |
+| [`operations/`](operations/) | 運用手順書（Runbook）、Observability設計、Release/Rollback/Backup/Disaster Recovery設計 |
 
 ## 方針
 

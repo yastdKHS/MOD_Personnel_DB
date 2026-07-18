@@ -1,5 +1,7 @@
 # 0024. Knowledgeバージョニング・再処理（Backfill）方針
 
+> 本ADRが「詳細は`docs/operations/`に別途まとめる」としていたBackfillの判断基準・実行手順は[`docs/operations/release.md`](../operations/release.md#backfill)で確定した。
+
 ## ステータス
 Accepted
 
