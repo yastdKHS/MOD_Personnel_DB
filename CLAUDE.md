@@ -61,4 +61,4 @@ Document Analyzer → Layout Detector → Section Parser → Field Extractor →
 - [`AGENTS.md`](AGENTS.md) — 全AIエージェント共通の運用規約（本ファイルより広い読者を想定）
 - [`CONTRIBUTING.md`](CONTRIBUTING.md) — 人間の開発者向けガイド
 - [`docs/architecture.md`](docs/architecture.md) — システム設計の全体像
-- [`docs/adr/`](docs/adr/) — 設計判断の記録
+- [`docs/adr/`](docs/adr/) — 設計判断の記録（本ファイルの運用ルールの根拠は [ADR-0009](docs/adr/0009-ai-agent-operating-policy.md)）

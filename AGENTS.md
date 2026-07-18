@@ -60,4 +60,4 @@
 
 - [`CLAUDE.md`](CLAUDE.md) — Claude Code固有の追加規約
 - [`CONTRIBUTING.md`](CONTRIBUTING.md) — 人間の開発者向けガイド
-- [`docs/adr/`](docs/adr/) — 設計判断の記録
+- [`docs/adr/`](docs/adr/) — 設計判断の記録（本ファイルの運用ルールの根拠は [ADR-0009](docs/adr/0009-ai-agent-operating-policy.md)）
