@@ -1,10 +1,23 @@
 # Architecture Decision Records（ADR）
 
-## これは何か
+## ADRとは何か
 
 後から「なぜこの設計にしたのか」を問われたときに答えられるようにするための記録。10年以上保守するプロジェクトでは、コードやコミット履歴だけでは「なぜ」が失われる。ADRはそれを防ぐ。
 
-## いつADRを書くか
+本ディレクトリの構成:
+
+| ファイル | 役割 |
+|---|---|
+| `README.md`（本ファイル） | ADRの書き方・運用ルール |
+| [`index.md`](index.md) | 全ADRのメタデータ台帳（ステータス・作成日・関連ADR・関連ドキュメント） |
+| [`dependency-map.md`](dependency-map.md) | ADR間の依存関係のMermaid可視化 |
+| [`gap-analysis.md`](gap-analysis.md) | 不足しているADRトピックの分析記録 |
+| [`quality-check.md`](quality-check.md) | 重複・矛盾・孤立・参照切れ・Supersede候補の点検結果 |
+| `NNNN-短い説明.md` | 個々のADR本体 |
+
+## いつADRを書くか（作成ルール）
+
+以下に該当する変更は、実装に着手する前にADRを起票する。
 
 - データモデルの決定・変更
 - 技術選定（言語・ライブラリ・データストア・ビルドツール等）
@@ -12,11 +25,16 @@
 - 運用・公開ポリシー、データ倫理に関わる方針
 - 既存ADRを覆す決定
 
-小さなバグ修正や、既存方針の範囲内の実装詳細にはADRは不要。
+小さなバグ修正や、既存方針の範囲内の実装詳細にはADRは不要。判断に迷う場合は、`CLAUDE.md` / `AGENTS.md` の規定に従いユーザーに確認する。
 
-## フォーマット
+## 命名規則
 
-ファイル名: `NNNN-短い説明.md`（4桁連番、既存の最大値+1）
+- ファイル名: `NNNN-短い説明.md`
+- `NNNN`: 4桁の連番。**既存ADRの最大値+1を用いる。欠番・番号の再利用・並べ替えは行わない**（既存ADRのリネーム・番号変更は禁止）。
+- 短い説明: 英語のkebab-case（例: `fixed-core-pipeline`）。日本語ファイル名は使わない。
+- タイトル（ファイル1行目の見出し）は `# NNNN. 日本語タイトル` とする。
+
+## フォーマット（テンプレート）
 
 ```markdown
 # NNNN. タイトル
@@ -37,28 +55,55 @@ Proposed / Accepted / Superseded by ADR-XXXX / Deprecated
 この決定によって得られるもの・失うもの・将来への影響。
 ```
 
-## 既存ADRを変更する場合
+`関連ADR`セクションは任意（既存の決定を参照・補強する場合に追加する）。
 
-ADRは基本的に不変（immutable）として扱う。決定を覆す場合は、既存ADRのステータスを `Superseded by ADR-XXXX` に更新し、新しいADRを追加する。過去のADRを書き換えて履歴を消さない。
+## ステータス遷移
 
-## 一覧
+```mermaid
+stateDiagram-v2
+    [*] --> Proposed: 起票（レビュー前）
+    Proposed --> Accepted: レビューで承認
+    Proposed --> Deprecated: 採用されず却下
+    Accepted --> Superseded: 後継ADRにより置き換え
+    Accepted --> Deprecated: 決定自体が不要になった（後継なし）
+    Superseded --> [*]
+    Deprecated --> [*]
+```
 
-| # | タイトル | ステータス |
-|---|---|---|
-| [0001](0001-python-packaging.md) | Pythonパッケージング・ビルドバックエンドの選定 | Accepted |
-| [0002](0002-lint-format-typecheck-tooling.md) | Lint / Format / 型チェックツールの選定 | Accepted |
-| [0003](0003-layout-definition-strategy.md) | PDFレイアウトの外部データ定義化 | Accepted |
-| [0004](0004-sqlite-as-datastore.md) | データストアとしてのSQLite採用 | Accepted |
-| [0005](0005-knowledge-base-normalization.md) | ドメイン知識ベースによる名寄せ・正規化戦略 | Accepted |
-| [0006](0006-pipeline-provenance.md) | パイプライン段階分割と来歴（Provenance）管理 | Accepted |
-| [0007](0007-golden-file-testing.md) | ゴールデンファイルテスト戦略 | Accepted |
-| [0008](0008-data-ethics-policy.md) | 個人情報・データ倫理方針 | Accepted |
-| [0009](0009-ai-agent-operating-policy.md) | AIコーディングエージェント運用方針 | Accepted |
-| [0010](0010-ci-cd-and-publish-strategy.md) | CI/CDと公開戦略 | Accepted |
-| [0011](0011-fixed-core-pipeline.md) | 中核処理パイプラインの固定化 | Accepted（変更には高いハードル） |
-| [0012](0012-error-handling-priority-order.md) | 未知パターンへの対応優先順位（Knowledge Base > Layout > 例外処理） | Accepted |
-| [0013](0013-learning-dataset-not-correction-log.md) | 誤り修正情報をLearning Datasetとして設計する | Accepted |
-| [0014](0014-development-discipline.md) | 開発規律（設計品質優先・1PR1責務・関数サイズ制限） | Accepted |
-| [0015](0015-sqlite-schema-finalization.md) | SQLiteスキーマの確定 | Accepted |
-| [0016](0016-public-json-format.md) | 公開JSON形式（JSON Schema Draft 2020-12）の確定 | Accepted |
-| [0017](0017-learning-dataset-field-expansion.md) | Learning Datasetのフィールド拡張・ライフサイクル定義 | Accepted |
+- **Proposed**: 起票されたがまだレビューを経ていない状態。本リポジトリでは現時点で全ADRが `Accepted` から開始しているが、今後は議論を要する提案について `Proposed` として起票してよい。
+- **Accepted**: 正式決定。以後の実装・他ADR・他ドキュメントはこの決定を前提にしてよい。
+- **Superseded**: 別のADR（後継）によって決定内容が置き換えられた状態。ステータス行に `Superseded by ADR-XXXX` の形式で後継ADRを明記する。
+- **Deprecated**: 決定自体が不要になった（後継ADRなしに無効化された）状態。理由をステータス行に付記する。
+
+一部のADR（例: [ADR-0011](0011-fixed-core-pipeline.md)）は、通常の`Accepted`より変更のハードルを意図的に高く設定している（Supersedeにプロジェクトオーナーの明示的承認を要する等）。該当ADRのステータス行にその旨が明記されている。
+
+## 更新ルール
+
+- **ADRは基本的に不変（immutable）として扱う。** 決定を覆す場合は、既存ADRの内容を書き換えるのではなく、既存ADRのステータスを `Superseded by ADR-XXXX` に更新した上で、新しいADRを追加する。
+- 既存ADRへの追記が許容されるのは、以下のような**決定内容を変えない**変更に限る。
+  - `## 関連ADR` セクションの追加・更新（後から追加されたADRへの参照を補うため）
+  - 誤字脱字の修正
+  - リンク切れの修正
+- 上記以外（コンテキスト・決定・代替案・結果の実質的な書き換え）は禁止。決定を変えたい場合は必ず新規ADR＋Supersedeで対応する。
+
+## 廃止ルール
+
+- ADRを廃止する場合も、ファイルの削除は行わない（削除すると「なぜかつてそう決めたか」という履歴が失われるため、`CLAUDE.md` の「削除せず追記する」思想と整合させる）。
+- ステータスを `Deprecated`（後継なし）または `Superseded by ADR-XXXX`（後継あり）に変更し、廃止理由を追記する。
+- 廃止されたADRへの既存の参照（他ドキュメントからのリンク）は、後継ADRがあれば張り替える。後継がない場合はリンクを残しつつ「廃止済み」である旨が読み手に伝わるよう文脈を調整する。
+
+## レビュー手順
+
+1. ADR本体を作成し、[命名規則](#命名規則)・[フォーマット](#フォーマットテンプレート)に従う。
+2. 既存ADRとの矛盾がないか確認する。矛盾する場合は、対象の既存ADRをSupersedeする（[更新ルール](#更新ルール)）。
+3. 新規ADR・変更したADRについて、[`index.md`](index.md)（メタデータ台帳）・[`dependency-map.md`](dependency-map.md)（依存関係図）を更新する。新規ADRが既存ADRを参照する場合は依存関係図にエッジを追加する。
+4. `CODEOWNERS` の `/docs/adr/` 指定に基づくレビュー担当者の承認を得る（`CONTRIBUTING.md`のPRプロセス）。
+5. マージ後、`README.md`（本ファイル）自体の更新が必要な場合（プロセス変更等）は別PRとする（[ADR-0014](0014-development-discipline.md)の1PR1責務）。
+
+新規ADRの追加が既存の複数ドキュメント（`docs/architecture.md`, `docs/database/schema.md`等）に影響する場合、それらのドキュメント側の更新も同一PRに含めてよい（ADR自体の追加と、それを反映したドキュメント更新は不可分な一つの責務とみなす）。
+
+## 全ADRの一覧
+
+詳細なメタデータ（ステータス・作成日・最終更新日・関連ADR・関連ドキュメント）は [`index.md`](index.md) を参照。依存関係の全体像は [`dependency-map.md`](dependency-map.md) を参照。
+
+現在のADR数: 27（0001〜0027）。うち0001〜0017は初期設計時に、0018〜0026は [Gap Analysis](gap-analysis.md) に基づき、0027はReview Domainの中核化に伴い追加された。

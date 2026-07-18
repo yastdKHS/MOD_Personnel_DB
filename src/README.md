@@ -6,27 +6,26 @@
 
 > 現時点では設計フェーズのため、実装コードは存在しない。以下は今後の実装の指針であり、確定した設計ではない。
 
-## 想定するモジュール構成
+## 想定するパッケージ構成
 
-`docs/architecture.md` の中核パイプライン（[ADR-0011](../docs/adr/0011-fixed-core-pipeline.md) で固定）に1対1で対応させる。中核パイプラインの6モジュールは、統合・分割・順序変更を行わない。
+詳細なパッケージ構成（各パッケージの目的・責務・依存先・依存禁止）は [`docs/api/package-design.md`](../docs/api/package-design.md) を正とする。本セクションは概要のみを示す。
 
 ```
 src/mod_personnel_db/
-  fetch/              # 中核パイプラインの外側。PDF取得（取得元・取得日時・ハッシュの記録を含む）
-  document_analyzer/  # 中核 1/6: PDFを解析可能な内部表現に変換する
-  layout_detector/    # 中核 2/6: layouts/ を参照し、該当する様式（era_id）を判定する
-  section_parser/     # 中核 3/6: レイアウト定義に従い対象セクションを切り出す
-  field_extractor/    # 中核 4/6: レイアウト定義に従いフィールドを抽出する（正規化前）
-  normalizer/         # 中核 5/6: knowledge/ の定義を用いた正規化・名寄せ
-  validator/          # 中核 6/6: ドメイン制約に基づく検証。検証NGは knowledge/learning_dataset/ へ
-  store/              # 中核パイプラインの外側。SQLiteへの永続化（ADR-0004）
-  publish/            # 中核パイプラインの外側。公開用データのエクスポート
-  cli/                # コマンドラインエントリポイント
+  config/       utils/       models/               # 基盤
+  repositories/ (+ sqlite/)                          # 永続化（SQLite非依存、docs/api/repositories.md）
+  document/     layout/      sections/               # 中核パイプライン 1〜3/6
+  extractors/   normalizers/ validators/             # 中核パイプライン 4〜6/6
+  knowledge/    learning/    features/                # 横断サービス
+  review/       export/      ftp/    fetch/           # 中核パイプライン外側
+  pipeline/     services/    cli/                     # オーケストレーション
 ```
+
+中核パイプライン6段階（`document/` 〜 `validators/`）は、統合・分割・順序変更を行わない（[ADR-0011](../docs/adr/0011-fixed-core-pipeline.md)）。各段階は`run()`のみを公開する（[`docs/api/pipeline.md`](../docs/api/pipeline.md)）。パッケージ間の依存関係の許可/禁止ルールは [`docs/api/dependency-rule.md`](../docs/api/dependency-rule.md)、公開APIの型シグネチャは [`docs/api/interfaces.md`](../docs/api/interfaces.md)、8段階の分離保証（例: 「Field ExtractorはDBを知らない」）は [`docs/architecture/architecture-contract.md`](../docs/architecture/architecture-contract.md) を参照。
 
 ## 設計原則
 
-- 中核パイプライン（`document_analyzer/` 〜 `validator/`）の段階構成・順序を変更しない（[ADR-0011](../docs/adr/0011-fixed-core-pipeline.md)）。
+- 中核パイプライン（`document/` 〜 `validators/`）の段階構成・順序を変更しない（[ADR-0011](../docs/adr/0011-fixed-core-pipeline.md)）。各段階は`repositories/`にすら依存しない純粋な変換として実装する（[`docs/architecture/architecture-contract.md`](../docs/architecture/architecture-contract.md)）。
 - レイアウト依存の情報（PDFの座標・見出し文字列等）をハードコードしない。`layouts/` を参照する（[ADR-0003](../docs/adr/0003-layout-definition-strategy.md)）。
 - ドメイン知識（階級名・組織名の表記ゆれ等）をハードコードしない。`knowledge/` を参照する（[ADR-0005](../docs/adr/0005-knowledge-base-normalization.md)）。
 - 未知パターンへの対応は、Knowledge Base追加 > Layout追加 > 例外処理、の優先順位に従う。安易に `try/except` や正規表現の特殊対応を追加しない（[ADR-0012](../docs/adr/0012-error-handling-priority-order.md)）。

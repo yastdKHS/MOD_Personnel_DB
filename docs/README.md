@@ -9,9 +9,14 @@
 | パス | 内容 |
 |---|---|
 | [`architecture.md`](architecture.md) | システム全体のパイプライン設計・コンポーネント間の責務分担 |
+| [`architecture/`](architecture/) | Learning Dataset設計、Architecture Contract（分離保証）等の詳細設計 |
 | [`data_model.md`](data_model.md) | データモデル（概念設計・ER図相当） |
 | [`glossary.md`](glossary.md) | ドメイン用語集（発令・辞令・階級 等） |
 | [`adr/`](adr/) | Architecture Decision Record（設計判断の記録） |
+| [`api/`](api/) | Interface & Package設計（パッケージ構成・公開API・Repository Pattern・モデル・Pipeline Interface） |
+| [`database/`](database/) | SQLite物理スキーマ・公開JSON仕様 |
+| [`knowledge/`](knowledge/) | Knowledge Baseスキーマ |
+| [`review/`](review/) | Review Domain（ライフサイクル・ドメインモデル・ポリシー・キュー・メトリクス） |
 | [`operations/`](operations/) | 運用手順書（Runbook） |
 
 ## 方針
