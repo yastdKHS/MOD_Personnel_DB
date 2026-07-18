@@ -16,6 +16,7 @@
 | [`api/`](api/) | Interface & Package設計（パッケージ構成・公開API・Repository Pattern・モデル・Pipeline Interface） |
 | [`database/`](database/) | SQLite物理スキーマ・公開JSON仕様 |
 | [`knowledge/`](knowledge/) | Knowledge Baseスキーマ |
+| [`review/`](review/) | Review Domain（ライフサイクル・ドメインモデル・ポリシー・キュー・メトリクス） |
 | [`operations/`](operations/) | 運用手順書（Runbook） |
 
 ## 方針

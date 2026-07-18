@@ -60,6 +60,7 @@
 - [`docs/database/json_schema.md`](docs/database/json_schema.md) — 公開JSON仕様（JSON Schema Draft 2020-12）
 - [`docs/knowledge/schema.md`](docs/knowledge/schema.md) — Knowledge Baseスキーマ（8カテゴリのYAML定義）
 - [`docs/api/`](docs/api/) — Interface & Package設計（パッケージ構成・公開API・Repository Pattern・モデル・Pipeline Interface・依存ルール・コーディング規約）
+- [`docs/review/`](docs/review/) — Review Domain（ライフサイクル・ドメインモデル・ポリシー・キュー・メトリクス）
 - [`docs/glossary.md`](docs/glossary.md) — ドメイン用語集
 - [`docs/adr/`](docs/adr/) — Architecture Decision Records
 - [`docs/operations/`](docs/operations/) — 運用手順書（Runbook）

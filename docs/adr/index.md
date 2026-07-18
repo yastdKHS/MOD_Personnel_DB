@@ -38,6 +38,12 @@
 | [0025](0025-deployment-strategy.md) | デプロイメント戦略 | Accepted | 2026-07-18 | 2026-07-18 | 0004, 0010, 0019 | — |
 | [0026](0026-security-policy.md) | セキュリティポリシー | Accepted | 2026-07-18 | 2026-07-18 | 0008, 0025 | — |
 
+## Review Domainの中核化に伴い追加したADR
+
+| # | タイトル | ステータス | 作成日 | 最終更新日 | 関連ADR | 関連ドキュメント |
+|---|---|---|---|---|---|---|
+| [0027](0027-review-domain-elevation.md) | Review Domainの中核化 | Accepted | 2026-07-18 | 2026-07-18 | 0010, 0021 | docs/review/, api/review.md, architecture/architecture-contract.md |
+
 ## 検討したが採用しなかった候補
 
 `Feature Store` は本プロジェクトの性質（決定的なPDF解析パイプラインであり、機械学習の特徴量管理を必要としない）と合致しないため、ADRを起票しなかった。判断理由の詳細は [`gap-analysis.md`](gap-analysis.md#feature-store) を参照。

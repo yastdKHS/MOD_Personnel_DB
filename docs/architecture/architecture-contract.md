@@ -1,6 +1,6 @@
 # Architecture Contract
 
-> 本ドキュメントは、Interface & Package設計（[`docs/api/`](../api/)）全体が満たすべき8つの分離保証を定義する。個々の保証は[`package-design.md`](../api/package-design.md)（依存関係）・[`dependency-rule.md`](../api/dependency-rule.md)（禁止/許可パターン）・[`pipeline.md`](../api/pipeline.md)（`run()`のみの公開）の設計によって、**構造的に**（レビューや申し合わせだけでなく、依存グラフ上の事実として）実現される。曖昧な保証は解釈を明記し、将来の実装者が異なる解釈をしないようにする。
+> 本ドキュメントは、Interface & Package設計（[`docs/api/`](../api/)）全体が満たすべき9つの分離保証を定義する。個々の保証は[`package-design.md`](../api/package-design.md)（依存関係）・[`dependency-rule.md`](../api/dependency-rule.md)（禁止/許可パターン）・[`pipeline.md`](../api/pipeline.md)（`run()`のみの公開）・[`docs/review/`](../review/)（Review Domain）の設計によって、**構造的に**（レビューや申し合わせだけでなく、依存グラフ上の事実として）実現される。曖昧な保証は解釈を明記し、将来の実装者が異なる解釈をしないようにする。
 >
 > **本ドキュメントに実装はない。**
 
@@ -16,8 +16,9 @@
 | 6 | Validatorは修正しない | `Validator.run()`の戻り値に修正後の値を含めない |
 | 7 | RepositoryはSQLiteを隠蔽する | `repositories/`（抽象）⊥ `sqlite3` |
 | 8 | Reviewはgold_recordsだけ更新できる | `GoldRepository`への書き込み経路を`review/`に一本化 |
+| 9 | Reviewだけがgold_records（Gold Database）を書き換えられる | `review/`以外のいかなるパッケージも`GoldRepository`の書き込みメソッドを呼ばない |
 
-（`⊥`は「依存しない」を表す）
+（`⊥`は「依存しない」を表す。保証8と9は同じ設計判断を異なる向きから述べたものであり、[9節](#9-reviewだけがgold_recordsgold-databaseを書き換えられる)で統合的に扱う）
 
 ---
 
@@ -85,11 +86,26 @@
 
 **実現方法**: [`package-design.md`](../api/package-design.md)の`review/`節・依存先サマリ表で、`GoldRepository`への書き込みメソッド（`add_version`, `supersede`、[`repositories.md`](../api/repositories.md#goldrepository)）を実際に呼び出すのは`review/`パッケージの`ReviewService.promote_to_gold()`（[`interfaces.md`](../api/interfaces.md#reviewservice)）のみとする設計上の取り決めとする。`pipeline/`は`GoldRepository`に依存しない（[`package-design.md`](../api/package-design.md)の`pipeline/`節の依存先一覧に`GoldRepository`は含まれない）。
 
+## 9. Reviewだけがgold_records（Gold Database）を書き換えられる
+
+**保証の内容**: 保証8が「`review/`はGoldRepository以外を書き換えない」という**`review/`側の制約**を述べたのに対し、本保証は「`GoldRepository`は`review/`以外から書き換えられない」という**`GoldRepository`側の排他性**を述べる。両者は同一の設計（`GoldRepository`への書き込み経路を`review/`に一本化する）の裏表であり、Human Reviewを「システムの中核」（[`docs/review/`](../review/)）として設計する上で、最も基本的な不変条件として独立に明記する。
+
+> **`gold_records`（Gold Database）への書き込みは、`review/`パッケージの`ReviewService.promote_to_gold()`を経由した場合に限り発生する。これ以外の経路——`pipeline/`・`validators/`・`knowledge/`・`export/`はもちろん、`review/`パッケージ内であっても`promote_to_gold()`以外のメソッド——からの直接書き込みは存在しない。**
+
+**理由**: [`docs/review/policy.md`](../review/policy.md#gold更新条件)が定めるGold更新条件（承認済みの`ReviewDecision`が存在すること、Confidence基準を満たすこと等）は、書き込み経路が`promote_to_gold()`一つに絞られていて初めて、機械的に「必ず適用される」と保証できる。書き込み経路が複数存在すると、どこかの経路がポリシーチェックをバイパスするリスクを排除できない。
+
+**実現方法**:
+1. **パッケージ境界**（構造的な保証）: [`dependency-rule.md`](../api/dependency-rule.md)の全体依存グラフ・[`import-graph.md`](../api/import-graph.md)の検証済みグラフにおいて、`GoldRepository`（`repositories/`が定義する抽象、[`repositories.md`](../api/repositories.md#goldrepository)）への依存を持つのは`review/`のみである。`pipeline/`・`validators/`・`knowledge/`・`export/`はいずれも`GoldRepository`に依存しない（[`package-design.md`](../api/package-design.md)の依存先サマリ表）。
+2. **メソッド粒度の保証**（`review/`パッケージ内部）: `review/`パッケージ内でも、`GoldRepository.add_version()` / `supersede()`（[`repositories.md`](../api/repositories.md#goldrepository)）を呼び出すのは`ReviewService.promote_to_gold()`（[`docs/api/review.md`](../api/review.md#reviewservice)）のみとする。`ReviewService`の他のメソッド（`submit_field_change()`, `decide()`, `add_comment()`等）はいずれも`GoldRepository`を呼び出さない。
+3. **ライフサイクル上の保証**: [`docs/review/domain.md`](../review/domain.md#review-lifecycle状態遷移図)の状態遷移図において、`GoldDatabase`状態に到達する経路は`Approved --> GoldDatabase`の1本のみであり、`Approved`は`ReviewDecision.decision == "approve"`が確定した場合にのみ到達する。
+
+**この保証が破られていないことの確認**: 実装着手後、`grep -r "GoldRepository" src/`のような単純な静的検索で、`repositories/sqlite/`の実装クラス自体を除けば`review/`パッケージ内にしか出現しないことを確認できる。将来的には[`dependency-rule.md`](../api/dependency-rule.md#機械的な検証将来の推奨事項)が推奨する`import-linter`の契約に、「`GoldRepository`への依存は`review/`のみ許可」というルールを追加することで、この確認を自動化する。
+
 ---
 
 ## この契約の検証方法
 
-本ドキュメントの8保証はいずれも「特定パッケージが特定パッケージに依存しない」という形に還元できる（[`dependency-rule.md`](../api/dependency-rule.md)の全体依存グラフ）。したがって、実装着手後にこの契約が破られていないかは、以下の方法で検証可能である。
+本ドキュメントの9保証はいずれも「特定パッケージが特定パッケージに依存しない」という形に還元できる（[`dependency-rule.md`](../api/dependency-rule.md)の全体依存グラフ）。したがって、実装着手後にこの契約が破られていないかは、以下の方法で検証可能である。
 
 1. **静的解析**: `import-linter`等によるパッケージ間import制約の機械的検証（[`dependency-rule.md`](../api/dependency-rule.md#機械的な検証将来の推奨事項)）。
 2. **型検査**: `Validator.run()`の戻り値型に修正後の値が含まれないこと等は、`mypy --strict`（[`python-contract.md`](../api/python-contract.md)）による型シグネチャの検証で担保される。
@@ -105,6 +121,13 @@
 - [`docs/api/models.md`](../api/models.md) — ドメインモデル
 - [`docs/api/pipeline.md`](../api/pipeline.md) — Pipeline Interface
 - [`docs/api/dependency-rule.md`](../api/dependency-rule.md) — 依存関係ルール
+- [`docs/api/import-graph.md`](../api/import-graph.md) — Importグラフ・循環参照の検証
 - [`docs/api/python-contract.md`](../api/python-contract.md) — Pythonコーディング規約
+- [`docs/api/review.md`](../api/review.md) — Review API（保証8・9の実装契約）
+- [`docs/review/domain.md`](../review/domain.md) — Review Domainモデル・ライフサイクル
+- [`docs/review/policy.md`](../review/policy.md) — Review Policy（Gold更新条件等）
+- [`docs/review/queue.md`](../review/queue.md) — Review Queueの優先順位
+- [`docs/review/metrics.md`](../review/metrics.md) — Review Metrics
 - [ADR-0011](../adr/0011-fixed-core-pipeline.md) — 中核処理パイプラインの固定化
 - [ADR-0012](../adr/0012-error-handling-priority-order.md) — 未知パターンへの対応優先順位
+- [ADR-0021](../adr/0021-review-ui-strategy.md) — レビュー用インターフェース戦略

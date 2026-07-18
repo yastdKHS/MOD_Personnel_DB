@@ -96,6 +96,8 @@ class Repository(Protocol[TEntity, TId]):
 
 ## `ReviewService`
 
+> **本節は簡略版である。** Review Domain（[`docs/review/`](../review/)）の設計に伴い、`ReviewService`の完全な契約（キュー・割当・差戻し・再レビュー等を含む）は [`docs/api/review.md`](review.md#reviewservice) を正とする。以下は最小限のコア操作のみを示す。
+
 ```python
 from typing import Protocol
 from mod_personnel_db.models import ReviewItem, GoldRecordId, CandidateId, ReviewSessionId

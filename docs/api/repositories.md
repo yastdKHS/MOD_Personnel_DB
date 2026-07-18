@@ -183,6 +183,8 @@ class ExportRepository(Protocol):
 
 ## `ReviewRepository`
 
+> **本節は簡略版である。** Review Domain（[`docs/review/`](../review/)）の設計に伴い、`ReviewAssignment` / `ReviewDecision` / `ReviewComment`を扱う拡張版は [`docs/api/review.md`](review.md#reviewrepository) を正とする。
+
 ```python
 from typing import Protocol
 from mod_personnel_db.models import ReviewItem, ReviewItemId, ReviewSessionId
