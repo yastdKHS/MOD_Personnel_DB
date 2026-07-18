@@ -9,6 +9,7 @@
 | パス | 内容 |
 |---|---|
 | [`constitution.md`](constitution.md) | **Project Constitution**（プロジェクト憲法）。ADR・Architecture Contractを含む本ディレクトリ配下のすべての設計文書より上位に位置する統治文書。変更にはプロジェクトオーナーの明示的承認を要する |
+| [`design-freeze.md`](design-freeze.md) | **Design Freeze Review**。全設計領域（Architecture/ADR/Review/Workflow/Knowledge/Repository/Interface/Security/Observability/Configuration/Release）の横断レビュー、不足点・改善点・リスク・TODO一覧、設計完了宣言 |
 | [`architecture.md`](architecture.md) | システム全体のパイプライン設計・コンポーネント間の責務分担 |
 | [`configuration.md`](configuration.md) | Configuration Architecture（Environment・Pydantic Settings・Secret管理・Validation Rule・設定Version・Migration・Hot Reload可否） |
 | [`security.md`](security.md) | Security Architecture（Threat Model・Secret・Supply Chain・GitHub Actions・Dependency・JSON改ざん・FTP・Checksum/Hash・署名・Audit Log・最小権限・Security Review） |

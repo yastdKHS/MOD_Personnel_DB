@@ -266,4 +266,4 @@ class JobRunner(Protocol):
 
 - 引数・戻り値の型はすべて[`models.md`](models.md)で定義するモデル、または本ドキュメントで補助的に使う軽量なID型（`CandidateId`, `GoldRecordId`, `JobId`等、`models.md`の「補助的な値オブジェクト」節に定義）である。
 - 全メソッドが型ヒント必須（[`python-contract.md`](python-contract.md)）。
-- `Protocol`を用いる理由（`ABC`ではなく）は[`python-contract.md`](python-contract.md#protocol-利用方針)を参照。
+- `Protocol`を用いる理由（`ABC`ではなく）は[`python-contract.md`](python-contract.md#protocol利用方針)を参照。

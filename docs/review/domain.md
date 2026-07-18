@@ -120,7 +120,7 @@ stateDiagram-v2
 | `decided_at` | `datetime` | |
 
 - **不変条件**: `decision == "approve"`のとき、対応する`CandidateRecord.validation_status`が`"failed"`のままでは承認できない（[`policy.md`](policy.md#誰が承認できるか)の前提条件）——ただし`confidence_override`を伴う承認は例外として`policy.md`に別途条件を定める。`decision == "return"`のとき`reason`は空文字列不可。
-- **`ReviewDecision`が`Approved`状態を作る唯一の手段である**（[`docs/architecture/architecture-contract.md`](../architecture/architecture-contract.md)の保証、[Task 7](../architecture/architecture-contract.md#9-reviewだけがgold-databaseを書き換えられる)）。
+- **`ReviewDecision`が`Approved`状態を作る唯一の手段である**（[`docs/architecture/architecture-contract.md`](../architecture/architecture-contract.md)の保証、[Task 7](../architecture/architecture-contract.md#9-reviewだけがgold_recordsgold-databaseを書き換えられる)）。
 
 ### `ReviewComment`
 
