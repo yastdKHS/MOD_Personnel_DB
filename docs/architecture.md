@@ -54,7 +54,7 @@ flowchart LR
 
 すべてのレコードは、どのPDF（取得日時・ハッシュ）のどの記載から、中核パイプラインのどの段階を経て生成されたかを追跡できなければならない。これは、後から誤りが発覚した際に「どこまで遡って直すべきか」を判断可能にするための必須要件である（[ADR-0006](adr/0006-pipeline-provenance.md)）。
 
-Validatorでの検証NG、および事後的に判明した誤りは、単なる修正ログではなく、`knowledge/learning_dataset/` に構造化データとして蓄積し、`layouts/` / `knowledge/` の改善に還元する（[ADR-0013](adr/0013-learning-dataset-not-correction-log.md)）。
+Validatorでの検証NG、および事後的に判明した誤りは、単なる修正ログではなく、`knowledge/learning_dataset/`（実データは `learning_dataset` テーブル）に構造化データとして蓄積し、`layouts/` / `knowledge/` の改善に還元する（[ADR-0013](adr/0013-learning-dataset-not-correction-log.md)）。保持するフィールド・ライフサイクル（`open` → `in_review` → `reflected` → `verified`）の詳細は [`docs/architecture/learning_dataset.md`](architecture/learning_dataset.md)（[ADR-0017](adr/0017-learning-dataset-field-expansion.md)）を参照。
 
 ## ディレクトリとステージの対応
 

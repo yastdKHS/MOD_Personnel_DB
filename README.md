@@ -53,6 +53,7 @@
 ## ドキュメント目次
 
 - [`docs/architecture.md`](docs/architecture.md) — システム全体のパイプライン設計
+- [`docs/architecture/learning_dataset.md`](docs/architecture/learning_dataset.md) — Learning Dataset設計（フィールド仕様・ライフサイクル）
 - [`docs/data_model.md`](docs/data_model.md) — データモデル（概念設計）
 - [`docs/database/schema.md`](docs/database/schema.md) — SQLite物理スキーマ（ER図・テーブル定義・Migration方針）
 - [`docs/database/json_schema.md`](docs/database/json_schema.md) — 公開JSON仕様（JSON Schema Draft 2020-12）
