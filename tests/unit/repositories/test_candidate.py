@@ -3,6 +3,7 @@ from datetime import UTC, datetime
 
 from mod_personnel_db.models import (
     CandidateId,
+    ConfidenceBand,
     LayoutId,
     NormalizedRecord,
     NormalizedValue,
@@ -121,7 +122,7 @@ def test_update_validation(
         subject_ref=normalized,
         status="passed",
         violations=(),
-        confidence=Confidence(score=0.9, band="high"),
+        confidence=Confidence(score=0.9, band=ConfidenceBand.HIGH),
         validated_at=datetime(2026, 1, 1, tzinfo=UTC),
     )
 
@@ -186,7 +187,7 @@ def test_list_pending_and_failed_validation(
         violations=(
             ValidationViolation(rule_id="rank_known", severity="error", message="未知の階級"),
         ),
-        confidence=Confidence(score=0.2, band="low"),
+        confidence=Confidence(score=0.2, band=ConfidenceBand.LOW),
         validated_at=datetime(2026, 1, 1, tzinfo=UTC),
     )
     repo.update_validation(failed_id, failed_result)

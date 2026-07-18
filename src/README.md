@@ -4,7 +4,7 @@
 
 本体実装（Pythonパッケージ）を置く場所。`src/` レイアウト（[ADR-0001](../docs/adr/0001-python-packaging.md)）を採用しており、パッケージ本体は `src/mod_personnel_db/` に配置する。
 
-> Phase2 Task1（Repository Skeleton）より実装着手。`utils/`, `models/`, `repositories/`（Protocol）, `repositories/sqlite/`（SQLite実装、CandidateRepository/GoldRepository/KnowledgeRepository/PDFRepository/JobRepository/ExportRepository/ReviewRepositoryの7種）が実装済み。`config/`、中核パイプライン（`document/` 〜 `validators/`）、`learning/`, `features/`, `review/`（Domain Service）, `export/`, `ftp/`, `fetch/`, `pipeline/`, `services/`, `cli/` は未実装。
+> Phase2 Task1（Repository Skeleton）・Task2（Domain Model Implementation）より実装着手。`utils/`, `models/`（[`docs/api/models.md`](../docs/api/models.md)の13モデル全種）, `repositories/`（Protocol）, `repositories/sqlite/`（SQLite実装、CandidateRepository/GoldRepository/KnowledgeRepository/PDFRepository/JobRepository/ExportRepository/ReviewRepositoryの7種）が実装済み。`config/`、中核パイプライン（`document/` 〜 `validators/`）、`learning/`, `features/`, `review/`（Domain Service）, `export/`, `ftp/`, `fetch/`, `pipeline/`, `services/`, `cli/` は未実装。
 
 ## 想定するパッケージ構成
 

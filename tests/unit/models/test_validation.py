@@ -4,6 +4,7 @@ import pytest
 
 from mod_personnel_db.models import (
     CandidateId,
+    ConfidenceBand,
     ExportRecord,
     Job,
     KnowledgeItem,
@@ -24,12 +25,12 @@ from mod_personnel_db.models.values import Confidence, ModelValidationError
 
 def test_confidence_rejects_out_of_range_score() -> None:
     with pytest.raises(ModelValidationError):
-        Confidence(score=1.5, band="high")
+        Confidence(score=1.5, band=ConfidenceBand.HIGH)
 
 
 def test_confidence_accepts_boundary_scores() -> None:
-    assert Confidence(score=0.0, band="low").score == 0.0
-    assert Confidence(score=1.0, band="verified").score == 1.0
+    assert Confidence(score=0.0, band=ConfidenceBand.LOW).score == 0.0
+    assert Confidence(score=1.0, band=ConfidenceBand.VERIFIED).score == 1.0
 
 
 def test_raw_record_rejects_empty_fields() -> None:
