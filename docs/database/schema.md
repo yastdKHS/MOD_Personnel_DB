@@ -156,7 +156,7 @@ erDiagram
 | 6 | `review_sessions` | 人手レビューの実施単位 | `id` | — |
 | 7 | `review_changes` | レビュー中の個々のフィールド変更 | `id` | `review_session_id` |
 | 8 | `knowledge_items` | `knowledge/` の内容をDB化した正規化用知識 | `id` | — |
-| 9 | `learning_dataset` | 誤り修正のLearning Dataset（ADR-0013） | `id` | `source_candidate_record_id`, `source_review_change_id`, `reflected_in_knowledge_item_id`, `reflected_in_layout_id` |
+| 9 | `learning_dataset` | 誤り修正のLearning Dataset（ADR-0013, ADR-0017） | `id` | `source_candidate_record_id`, `source_review_change_id`, `parser_version_id`, `layout_id`, `reflected_in_knowledge_item_id`, `reflected_in_layout_id` |
 | 10 | `parser_versions` | コード・レイアウト・知識ベースの実行時バージョン | `id` | — |
 | 11 | `exports` | 公開エクスポートの実行記録 | `id` | — |
 | 12 | `jobs` | パイプライン実行（バッチ）の記録 | `id` | `pdf_id`, `parser_version_id` |
@@ -469,13 +469,13 @@ CREATE INDEX idx_knowledge_items_source_file ON knowledge_items (source_file);
 
 ### 9. `learning_dataset`
 
-**目的**: Validatorでの検証NG、および人手修正の情報を、Correction Log（単なる修正ログ）ではなくシステム改善のための構造化データセットとして保持する（[ADR-0013](../adr/0013-learning-dataset-not-correction-log.md)）。
+**目的**: Validatorでの検証NG、および人手修正の情報を、Correction Log（単なる修正ログ）ではなくシステム改善のための構造化データセットとして保持する（[ADR-0013](../adr/0013-learning-dataset-not-correction-log.md)）。フィールド仕様・ライフサイクル・分析用途の詳細設計は [`docs/architecture/learning_dataset.md`](../architecture/learning_dataset.md) を参照（[ADR-0017](../adr/0017-learning-dataset-field-expansion.md)）。
 
-**責務**: 由来（`source_candidate_record_id` / `source_review_change_id`）、誤りが発生した中核パイプライン段階、誤りの分類（[ADR-0012](../adr/0012-error-handling-priority-order.md) の優先順位分類に対応）、そして修正が `knowledge_items` / `layouts` への反映につながったかを記録する。
+**責務**: 由来（`source_candidate_record_id` / `source_review_change_id`）、誤りが発生した中核パイプライン段階、誤りの分類（[ADR-0012](../adr/0012-error-handling-priority-order.md) の優先順位分類に対応）、修正内容・Reviewerコメント・信頼度・改善候補、そして修正が `knowledge_items` / `layouts` への反映（コミット・Pull Request）とリグレッション検証につながったかを記録する。
 
 **保持期間**: 永久保持。傾向分析（どの分類の誤りが多いか等）には長期的なデータ蓄積が必要。
 
-**更新方法**: Validator検出時、または `review_changes` 確定時に `INSERT`（`status='open'`）。人手確認・`knowledge/` または `layouts/` への反映が完了した時点で、`status` / `reflected_in_*` / `resolved_at` を1度だけ `UPDATE`。
+**更新方法**: Validator検出時、または `review_changes` 確定時に `INSERT`（`status='open'`）。以降、[`docs/architecture/learning_dataset.md`](../architecture/learning_dataset.md#ライフサイクル)が定めるライフサイクル（`open` → `in_review` → `reflected` → `verified`、または `wontfix`）に沿って該当フィールドを段階的に `UPDATE` する。
 
 ```sql
 CREATE TABLE learning_dataset (
@@ -494,12 +494,26 @@ CREATE TABLE learning_dataset (
                                            'knowledge_gap', 'layout_gap', 'true_exception'
                                        )
                                    ),
+    field_name                      TEXT,
     wrong_value                     TEXT NOT NULL,
-    correct_value                   TEXT NOT NULL,
+    correct_value                   TEXT,
+    correction_summary              TEXT,
+    reviewer_comment                TEXT,
+    parser_version_id               INTEGER REFERENCES parser_versions (id),
+    layout_id                       INTEGER REFERENCES layouts (id),
+    confidence_score                REAL CHECK (confidence_score IS NULL OR (confidence_score >= 0 AND confidence_score <= 1)),
+    confidence_band                 TEXT CHECK (confidence_band IS NULL OR confidence_band IN ('verified', 'high', 'medium', 'low')),
     status                          TEXT NOT NULL DEFAULT 'open'
-                                       CHECK (status IN ('open', 'reflected', 'wontfix')),
+                                       CHECK (status IN ('open', 'in_review', 'reflected', 'verified', 'wontfix')),
     reflected_in_knowledge_item_id  INTEGER REFERENCES knowledge_items (id),
     reflected_in_layout_id          INTEGER REFERENCES layouts (id),
+    git_commit_hash                 TEXT,
+    pull_request_url                TEXT,
+    regression_status               TEXT NOT NULL DEFAULT 'not_run'
+                                       CHECK (regression_status IN ('not_run', 'passed', 'failed')),
+    regression_run_at               TEXT,
+    regression_details              TEXT,
+    improvement_candidate           TEXT,
     created_at                      TEXT NOT NULL DEFAULT (STRFTIME('%Y-%m-%dT%H:%M:%SZ', 'now')),
     resolved_at                     TEXT
 );
@@ -508,11 +522,16 @@ CREATE INDEX idx_learning_dataset_status ON learning_dataset (status);
 CREATE INDEX idx_learning_dataset_error_category ON learning_dataset (error_category);
 CREATE INDEX idx_learning_dataset_pipeline_stage ON learning_dataset (pipeline_stage);
 CREATE INDEX idx_learning_dataset_source_candidate_record_id ON learning_dataset (source_candidate_record_id);
+CREATE INDEX idx_learning_dataset_parser_version_id ON learning_dataset (parser_version_id);
+CREATE INDEX idx_learning_dataset_layout_id ON learning_dataset (layout_id);
+CREATE INDEX idx_learning_dataset_regression_status ON learning_dataset (regression_status);
 ```
 
 - **主キー**: `id`
-- **外部キー**: `source_candidate_record_id → candidate_records.id`, `source_review_change_id → review_changes.id`, `reflected_in_knowledge_item_id → knowledge_items.id`, `reflected_in_layout_id → layouts.id`
-- **インデックス**: `status`（未反映エントリの抽出）、`error_category`（傾向分析）、`pipeline_stage`、`source_candidate_record_id`
+- **外部キー**: `source_candidate_record_id → candidate_records.id`, `source_review_change_id → review_changes.id`, `parser_version_id → parser_versions.id`, `layout_id → layouts.id`, `reflected_in_knowledge_item_id → knowledge_items.id`, `reflected_in_layout_id → layouts.id`
+- **インデックス**: `status`（未反映エントリの抽出）、`error_category`（傾向分析）、`pipeline_stage`、`source_candidate_record_id`、`parser_version_id`、`layout_id`、`regression_status`
+
+**設計メモ（`layout_id` と `reflected_in_layout_id` の違い）**: `layout_id` はこの誤りが発生した時点の様式（発生コンテキスト）、`reflected_in_layout_id` は修正がどの様式定義への変更として反映されたか（対応結果）を表す。多くの場合一致するが、判定漏れの原因が別様式にあったケース等では異なり得るため、意図的に別カラムとしている（詳細は [`docs/architecture/learning_dataset.md`](../architecture/learning_dataset.md#layout-フィールドについてlayout_id-と-reflected_in_layout_id-の違い)）。
 
 ---
 
@@ -649,6 +668,9 @@ CREATE INDEX idx_jobs_pdf_id ON jobs (pdf_id);
 | `learning_dataset` | `idx_learning_dataset_error_category` | `error_category` | 誤り傾向の分析 |
 | `learning_dataset` | `idx_learning_dataset_pipeline_stage` | `pipeline_stage` | 段階別の傾向分析 |
 | `learning_dataset` | `idx_learning_dataset_source_candidate_record_id` | `source_candidate_record_id` | 由来レコードからの逆引き |
+| `learning_dataset` | `idx_learning_dataset_parser_version_id` | `parser_version_id` | Parser Version別の傾向分析 |
+| `learning_dataset` | `idx_learning_dataset_layout_id` | `layout_id` | 様式別の傾向分析 |
+| `learning_dataset` | `idx_learning_dataset_regression_status` | `regression_status` | 未検証エントリの抽出 |
 | `parser_versions` | `idx_parser_versions_released_at` | `released_at` | 時系列検索 |
 | `exports` | `idx_exports_as_of` | `as_of` | スナップショット時点の検索 |
 | `exports` | `idx_exports_status` | `status` | 失敗エクスポートの抽出 |
@@ -700,7 +722,7 @@ CREATE TABLE schema_migrations (
 8. knowledge_items
 9. review_sessions
 10. review_changes      (FK: review_sessions)
-11. learning_dataset    (FK: candidate_records, review_changes, knowledge_items, layouts)
+11. learning_dataset    (FK: candidate_records, review_changes, knowledge_items, layouts, parser_versions)
 12. exports
 13. jobs                (FK: pdfs, parser_versions)
 ```
@@ -760,3 +782,4 @@ CREATE TABLE schema_migrations (
 - [ADR-0013](../adr/0013-learning-dataset-not-correction-log.md): Learning Dataset設計方針（`learning_dataset` テーブルの設計根拠）
 - [ADR-0015](../adr/0015-sqlite-schema-finalization.md): 本ドキュメントを正式なスキーマ決定として承認
 - [ADR-0016](../adr/0016-public-json-format.md): `exports`（`format='json'`）の詳細契約（[`json_schema.md`](json_schema.md)）
+- [ADR-0017](../adr/0017-learning-dataset-field-expansion.md): `learning_dataset` のフィールド拡張・ライフサイクル定義（[`architecture/learning_dataset.md`](../architecture/learning_dataset.md)）
