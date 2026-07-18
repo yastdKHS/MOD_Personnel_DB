@@ -56,7 +56,7 @@ src/mod_personnel_db/
 ### `config/`
 
 - **目的**: 実行環境ごとの設定（DB接続情報、ストレージパス、外部サービス認証情報の参照先）を一箇所に集約する。
-- **責務**: 環境変数・設定ファイルの読み込みと、型付き設定オブジェクト（`Settings`のような値のみのdataclass）への変換。どのRepository実装（SQLite/将来のPostgreSQL）を使うかは、`config/`は文字列・enum等の**値**として提供するに留まり、実際にその実装クラスを`import`して組み立てる**配線**は行わない（配線は`cli/`が合成ルートとして担う、下記および[`dependency-rule.md`](dependency-rule.md#合成ルートcomposition-root)参照）。
+- **責務**: 環境変数・設定ファイルの読み込みと、型付き設定オブジェクト（`Settings`。実装はPydantic Settings、[ADR-0028](../adr/0028-pydantic-settings-for-configuration.md)、詳細は[`docs/configuration.md`](../configuration.md)）への変換。どのRepository実装（SQLite/将来のPostgreSQL）を使うかは、`config/`は文字列・enum等の**値**として提供するに留まり、実際にその実装クラスを`import`して組み立てる**配線**は行わない（配線は`cli/`が合成ルートとして担う、下記および[`dependency-rule.md`](dependency-rule.md#合成ルートcomposition-root)参照）。
 - **依存先**: `utils/`のみ。**例外なし。**
 - **依存禁止**: `utils/`以外の全パッケージ（`models/`を含む）。`config/`は誰からも依存されるが、他のいかなるパッケージにも依存しない、依存関係グラフの絶対的な末端である。`repositories/sqlite/`への依存は持たない——これを`config/`に許すと`repositories/sqlite/ → config/ → repositories/sqlite/`という循環（[`import-graph.md`](import-graph.md)で検出・修正済み）を生むため、合成ルートの役割は`cli/`に一本化する。
 

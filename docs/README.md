@@ -8,7 +8,10 @@
 
 | パス | 内容 |
 |---|---|
+| [`constitution.md`](constitution.md) | **Project Constitution**（プロジェクト憲法）。ADR・Architecture Contractを含む本ディレクトリ配下のすべての設計文書より上位に位置する統治文書。変更にはプロジェクトオーナーの明示的承認を要する |
 | [`architecture.md`](architecture.md) | システム全体のパイプライン設計・コンポーネント間の責務分担 |
+| [`configuration.md`](configuration.md) | Configuration Architecture（Environment・Pydantic Settings・Secret管理・Validation Rule・設定Version・Migration・Hot Reload可否） |
+| [`security.md`](security.md) | Security Architecture（Threat Model・Secret・Supply Chain・GitHub Actions・Dependency・JSON改ざん・FTP・Checksum/Hash・署名・Audit Log・最小権限・Security Review） |
 | [`architecture/`](architecture/) | Learning Dataset設計、Architecture Contract（分離保証）等の詳細設計 |
 | [`data_model.md`](data_model.md) | データモデル（概念設計・ER図相当） |
 | [`glossary.md`](glossary.md) | ドメイン用語集（発令・辞令・階級 等） |
@@ -17,7 +20,8 @@
 | [`database/`](database/) | SQLite物理スキーマ・公開JSON仕様 |
 | [`knowledge/`](knowledge/) | Knowledge Baseスキーマ |
 | [`review/`](review/) | Review Domain（ライフサイクル・ドメインモデル・ポリシー・キュー・メトリクス） |
-| [`operations/`](operations/) | 運用手順書（Runbook） |
+| [`workflow/`](workflow/) | Workflow State Machine（Queued〜Archivedのライフサイクル、Timeout/Retry/Rollback/Checkpoint） |
+| [`operations/`](operations/) | 運用手順書（Runbook）、Observability設計、Release/Rollback/Backup/Disaster Recovery設計 |
 
 ## 方針
 

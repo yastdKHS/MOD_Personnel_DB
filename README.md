@@ -52,7 +52,10 @@
 
 ## ドキュメント目次
 
+- [`docs/constitution.md`](docs/constitution.md) — **Project Constitution**（プロジェクト憲法）。ADR・Architecture Contractを含む全設計文書の最上位に位置する統治文書
 - [`docs/architecture.md`](docs/architecture.md) — システム全体のパイプライン設計
+- [`docs/configuration.md`](docs/configuration.md) — Configuration Architecture（Environment/Pydantic Settings/Secret管理/Validation Rule/設定Version/Migration/Hot Reload可否）
+- [`docs/security.md`](docs/security.md) — Security Architecture（Threat Model/Secret/Supply Chain/GitHub Actions/Dependency/JSON改ざん/FTP/Checksum・Hash・署名/Audit Log/最小権限/Security Review）
 - [`docs/architecture/learning_dataset.md`](docs/architecture/learning_dataset.md) — Learning Dataset設計（フィールド仕様・ライフサイクル）
 - [`docs/architecture/architecture-contract.md`](docs/architecture/architecture-contract.md) — Architecture Contract（コンポーネント間の分離保証）
 - [`docs/data_model.md`](docs/data_model.md) — データモデル（概念設計）
@@ -61,6 +64,9 @@
 - [`docs/knowledge/schema.md`](docs/knowledge/schema.md) — Knowledge Baseスキーマ（8カテゴリのYAML定義）
 - [`docs/api/`](docs/api/) — Interface & Package設計（パッケージ構成・公開API・Repository Pattern・モデル・Pipeline Interface・依存ルール・コーディング規約）
 - [`docs/review/`](docs/review/) — Review Domain（ライフサイクル・ドメインモデル・ポリシー・キュー・メトリクス）
+- [`docs/workflow/`](docs/workflow/) — Workflow State Machine（Queued〜Archivedのライフサイクル）
+- [`docs/operations/observability.md`](docs/operations/observability.md) — Observability設計（Logging/Metrics/Tracing/Health Check/Alert/Dashboard/SLO/SLI/Error Budget/OpenTelemetry対応方針）
+- [`docs/operations/release.md`](docs/operations/release.md) — 運用設計（Release Flow/Rollback/Parser Upgrade/Knowledge Upgrade/Migration/Backfill/Recovery/Backup/Disaster Recovery/Maintenance Window）
 - [`docs/glossary.md`](docs/glossary.md) — ドメイン用語集
 - [`docs/adr/`](docs/adr/) — Architecture Decision Records
 - [`docs/operations/`](docs/operations/) — 運用手順書（Runbook）

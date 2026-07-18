@@ -12,3 +12,8 @@
 - `incident_response.md`: 抽出失敗・検証NG急増時の対応手順
 - `new_layout_rollout.md`: 新しいPDF様式に対応する際の詳細手順（`CONTRIBUTING.md` の概要版を実務レベルに具体化したもの）
 - `data_correction.md`: 公開後に誤りが判明した場合の訂正・再公開フロー
+
+## 既存ドキュメント
+
+- [`observability.md`](observability.md): Observability設計（Logging / Metrics / Tracing / Health Check / Alert / Dashboard / SLO / SLI / Error Budget / OpenTelemetry対応方針）。上記runbook群がまだ存在しない現時点でも、「何を観測し、何を異常とみなすか」の設計はここで先に固定する。
+- [`release.md`](release.md): 運用設計（Release Flow / Rollback / Parser Upgrade / Knowledge Upgrade / Migration / Backfill / Recovery / Backup / Disaster Recovery / Maintenance Window）。[ADR-0024](../adr/0024-knowledge-versioning-and-backfill.md)が本ディレクトリに委ねていたBackfill実行手順を含む。

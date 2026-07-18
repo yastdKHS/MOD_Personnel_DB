@@ -37,6 +37,8 @@
 
 **外部境界（`knowledge/`のYAMLロード、公開JSONの生成）では、既存方針どおり`jsonschema`ライブラリを使い続ける**（Pydanticではなく）。将来、実装を進める中でPydanticが真に必要な理由（例: 高性能な大量データのシリアライズ）が生じた場合は、新規ADRとして再検討する。
 
+**例外（`config/`パッケージ境界）**: [ADR-0028](../adr/0028-pydantic-settings-for-configuration.md)により、`config/`パッケージの設定オブジェクト（環境変数・`.env`ファイルという外部入力の受け口）に限り、Pydantic Settingsの採用を決定している。これは本節の決定（`models/`へのPydantic不採用）を覆すものではなく、適用範囲を`config/`境界に限定した別決定である。詳細は[`docs/configuration.md`](../configuration.md)を参照。
+
 ## Enum利用方針
 
 - DBの`CHECK`制約（[`docs/database/schema.md`](../database/schema.md)）で表現された閉じた値集合（`pipeline_stage`, `error_category`, `status`系, `category`, `service_branch`等）は、Pythonコード上で`enum.Enum`（値の集合が将来的に文字列としてシリアライズされる必要があるものは`str, Enum`の多重継承、[`models.md`](models.md)の`LearningStatus`参照）として表現する。
