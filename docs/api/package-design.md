@@ -56,9 +56,9 @@ src/mod_personnel_db/
 ### `config/`
 
 - **目的**: 実行環境ごとの設定（DB接続情報、ストレージパス、外部サービス認証情報の参照先）を一箇所に集約する。
-- **責務**: 環境変数・設定ファイルの読み込みと、型付き設定オブジェクトへの変換。どのRepository実装（SQLite/将来のPostgreSQL）を使うかの選択（[ADR-0023](../adr/0023-parser-versioning-policy.md)のような具体的な技術選定を反映する、実行時の合成の起点）。
-- **依存先**: `utils/`のみ。
-- **依存禁止**: ビジネスロジックを持つ全パッケージ（`document/`〜`validators/`, `knowledge/`, `learning/`, `features/`, `review/`, `export/`, `ftp/`, `pipeline/`, `services/`）。`config/`は誰からも依存されるが、他の意味のあるパッケージには依存しない（依存関係の末端）。ただし合成（どの`repositories/sqlite/`実装を使うか等の配線）を行う場合に限り、例外的に`repositories/`の具象実装を参照してよい（[`dependency-rule.md`](dependency-rule.md)の「合成ルート」参照）。
+- **責務**: 環境変数・設定ファイルの読み込みと、型付き設定オブジェクト（`Settings`のような値のみのdataclass）への変換。どのRepository実装（SQLite/将来のPostgreSQL）を使うかは、`config/`は文字列・enum等の**値**として提供するに留まり、実際にその実装クラスを`import`して組み立てる**配線**は行わない（配線は`cli/`が合成ルートとして担う、下記および[`dependency-rule.md`](dependency-rule.md#合成ルートcomposition-root)参照）。
+- **依存先**: `utils/`のみ。**例外なし。**
+- **依存禁止**: `utils/`以外の全パッケージ（`models/`を含む）。`config/`は誰からも依存されるが、他のいかなるパッケージにも依存しない、依存関係グラフの絶対的な末端である。`repositories/sqlite/`への依存は持たない——これを`config/`に許すと`repositories/sqlite/ → config/ → repositories/sqlite/`という循環（[`import-graph.md`](import-graph.md)で検出・修正済み）を生むため、合成ルートの役割は`cli/`に一本化する。
 
 ### `utils/`
 
@@ -196,10 +196,10 @@ src/mod_personnel_db/
 
 ### `cli/`
 
-- **目的**: 人間が操作するコマンドラインエントリポイント（[ADR-0021](../adr/0021-review-ui-strategy.md)のレビューCLI等）。
-- **責務**: コマンドライン引数の解析と、`services/`・`review/`・`export/`等のAPI呼び出し。
-- **依存先**: `services/`, `review/`, `export/`, `pipeline/`, `config/`, `models/`。
-- **依存禁止**: `repositories/sqlite/`（具象）, `document/`〜`validators/`（直接は呼ばない、`pipeline/`経由）。
+- **目的**: 人間が操作するコマンドラインエントリポイント（[ADR-0021](../adr/0021-review-ui-strategy.md)のレビューCLI等）であり、かつ**アプリケーション全体の合成ルート（Composition Root）**を担う。
+- **責務**: コマンドライン引数の解析、`services/`・`review/`・`export/`等のAPI呼び出しに加え、起動時に`config/`から設定値を読み込み、それに基づいて`repositories/sqlite/`（将来は`repositories/postgres/`も）の具象実装を構築し、`UnitOfWork`として`pipeline/`・`services/`・`review/`・`export/`に注入する。
+- **依存先**: `services/`, `review/`, `export/`, `pipeline/`, `config/`, `models/`, **`repositories/sqlite/`（合成ルートとしての唯一の例外、[`dependency-rule.md`](dependency-rule.md#合成ルートcomposition-root)）**。
+- **依存禁止**: `document/`〜`validators/`（直接は呼ばない、`pipeline/`経由）。`repositories/sqlite/`への依存は`cli/`にのみ許される例外であり、他のいかなるパッケージにも拡大しない。
 
 ---
 
@@ -207,7 +207,7 @@ src/mod_personnel_db/
 
 | パッケージ | 依存してよい | 依存してはならない（代表例） |
 |---|---|---|
-| `config/` | `utils/` | ビジネスロジック全般 |
+| `config/` | `utils/` | ビジネスロジック全般、`repositories/sqlite/`（合成の配線は`cli/`が担う。`config/`自身が担うと循環参照を生むため） |
 | `utils/` | （なし） | プロジェクト内の全パッケージ |
 | `models/` | `utils/` | ビジネスロジック全般、`repositories/` |
 | `repositories/` | `models/` | `sqlite3`等の具体DBドライバ、`config/` |
@@ -222,6 +222,6 @@ src/mod_personnel_db/
 | `fetch/` | `models/`, `repositories/`（抽象）, `ftp/`, `utils/` | 中核パイプライン6段階 |
 | `pipeline/` | `models/`, `repositories/`（抽象）, 中核パイプライン6段階, `knowledge/`, `learning/`, `utils/` | `repositories/sqlite/`, `review/`, `export/`, `ftp/` |
 | `services/` | `pipeline/`, `review/`, `export/`, `models/`, `utils/` | `repositories/sqlite/`, 中核パイプライン6段階（直接） |
-| `cli/` | `services/`, `review/`, `export/`, `pipeline/`, `config/`, `models/` | `repositories/sqlite/`, 中核パイプライン6段階（直接） |
+| `cli/` | `services/`, `review/`, `export/`, `pipeline/`, `config/`, `models/`, `repositories/sqlite/`（合成ルートとしての例外） | 中核パイプライン6段階（直接） |
 
 完全な依存グラフ（Mermaid）は[`dependency-rule.md`](dependency-rule.md)を参照。

@@ -162,7 +162,7 @@ flowchart TB
 | 5 | `sections/` → `knowledge/` | 同上 | 「Section Parserはknowledgeを知らない」 |
 | 6 | `normalizers/` → `knowledge/` | `pipeline/`が`knowledge/`から`KnowledgeSnapshot`を取得し、`Normalizer.run()`の引数として渡す | Normalizerはknowledgeサービスそのものを知らず、値オブジェクトのみを受け取る |
 | 7 | `repositories/` → `repositories/sqlite/` | （逆方向、常に許可） `repositories/sqlite/` → `repositories/` | 抽象は具象を知らない（依存性逆転の原則） |
-| 8 | `knowledge/` / `learning/` 等サービス層 → `repositories/sqlite/`（具象を直接import） | サービス層 → `repositories/`（抽象）。具象の選択は`config/`（合成ルート）が行う | PostgreSQL移行時にサービス層のコード変更を不要にするため（[`repositories.md`](repositories.md)） |
+| 8 | `knowledge/` / `learning/` 等サービス層 → `repositories/sqlite/`（具象を直接import） | サービス層 → `repositories/`（抽象）。具象の選択は`cli/`（合成ルート）が行う | PostgreSQL移行時にサービス層のコード変更を不要にするため（[`repositories.md`](repositories.md)） |
 | 9 | `pipeline/` → `review/` または `pipeline/` → `export/` | `services/`が`pipeline/`・`review/`・`export/`を束ねる | 中核パイプラインの実行と、レビュー・公開は独立した関心事（[`package-design.md`](package-design.md)） |
 | 10 | 任意のパッケージ → `utils/`以外への依存を`utils/`自身が持つ | `utils/`は常に依存グラフの葉 | `utils/`はドメイン知識を持たない汎用ヘルパーの集合であるため |
 
@@ -170,16 +170,19 @@ flowchart TB
 
 ## 合成ルート（Composition Root）
 
-「誰も`repositories/sqlite/`を直接importしない」という原則には、唯一の例外として**合成ルート**が必要である。実行時にどの`Repository`実装（SQLite/将来のPostgreSQL）を使うかを決定し、`UnitOfWork`を組み立てて`pipeline/`・`services/`・`cli/`に渡す箇所は、`config/`が担う。
+「誰も`repositories/sqlite/`を直接importしない」という原則には、唯一の例外として**合成ルート**が必要である。実行時にどの`Repository`実装（SQLite/将来のPostgreSQL）を使うかを決定し、`UnitOfWork`を組み立てて`pipeline/`・`services/`・`review/`・`export/`に渡す箇所は、**`cli/`**が担う。
+
+> **設計変更の経緯**: 当初`config/`を合成ルートとする案を検討したが、[`import-graph.md`](import-graph.md)の循環参照検証により、`repositories/sqlite/ → config/`（接続情報取得のため）と`config/ → repositories/sqlite/`（合成のため）が同時に成立し**循環参照になる**ことが判明した。`config/`は「設定値を提供するだけの末端パッケージ」のままとし、合成（具象実装のimportと組み立て）は依存グラフの最上位に位置する`cli/`に一本化することで循環を解消した。詳細な検証手順は[`import-graph.md`](import-graph.md#循環参照がないことの検証)を参照。
 
 ```mermaid
 flowchart LR
-    config["config/ (合成ルート)"] -.実行時にのみ.-> repositories_sqlite["repositories/sqlite/"]
-    config -->|UnitOfWorkとして注入| cli["cli/"]
-    cli --> services["services/"]
+    cli["cli/ (合成ルート)"] -->|Settingsを取得| config["config/ (設定値の提供のみ)"]
+    cli -->|具象実装をimport・構築| repositories_sqlite["repositories/sqlite/"]
+    cli -->|UnitOfWorkとして注入| pipeline["pipeline/"]
+    cli -->|UnitOfWorkとして注入| services["services/"]
 ```
 
-この例外は、`config/`が「どの具象実装を選ぶか」という配線の責務を持つことの直接の帰結であり、`config/`以外のいかなるパッケージにもこの例外を拡大しない。
+この例外は、`cli/`が「どの具象実装を選ぶか」という配線の責務を持つことの直接の帰結であり、`cli/`以外のいかなるパッケージにもこの例外を拡大しない。`config/`は`utils/`以外に一切依存せず、`repositories/sqlite/`を含むいかなる具象実装も参照しない。
 
 ---
 
