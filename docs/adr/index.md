@@ -43,6 +43,7 @@
 | # | タイトル | ステータス | 作成日 | 最終更新日 | 関連ADR | 関連ドキュメント |
 |---|---|---|---|---|---|---|
 | [0027](0027-review-domain-elevation.md) | Review Domainの中核化 | Accepted | 2026-07-18 | 2026-07-18 | 0010, 0021 | docs/review/, api/review.md, architecture/architecture-contract.md |
+| [0028](0028-pydantic-settings-for-configuration.md) | 設定管理へのPydantic Settings採用 | Accepted | 2026-07-18 | 2026-07-18 | 0001, 0002, 0026 | configuration.md, api/python-contract.md, api/package-design.md |
 
 ## 検討したが採用しなかった候補
 
