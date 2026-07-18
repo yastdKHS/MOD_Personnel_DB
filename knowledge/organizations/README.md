@@ -1,16 +1,17 @@
 # knowledge/organizations/
 
+> `category: organization`（[`docs/knowledge/schema.md`](../../docs/knowledge/schema.md#organization)）に対応するディレクトリ。
+
 ## 責務
 
-部隊・機関などの組織名と、その改称・改編（新設・廃止・統合・分割・名称変更）の履歴を保持する。
+部隊・機関などの組織名の名称期間エンティティを保持する。改称・改編の経緯・根拠は `knowledge/historical/` に分離して記録する（[`docs/knowledge/schema.md`](../../docs/knowledge/schema.md#8カテゴリの分離方針)の役割分担）。
 
-## 想定する情報
+## スキーマ
 
-- 組織の正式名称・略称・過去の名称のバリエーション
-- 改称・改編が発生した日付とその根拠（公表資料の出典）
-- 上位組織との関係（実装時にデータ形式を確定）
+エントリの形式は [`docs/knowledge/schema.md`](../../docs/knowledge/schema.md#organization) の `OrganizationEntry` 定義（JSON Schema Draft 2020-12）に従う。ファイル名は `<id>.yaml`（例: `org-jgsdf-1st-division-1962.yaml`）とする。
 
 ## 方針
 
-- 「現在の名称」だけでなく「いつからいつまでどの名称だったか」を時系列で保持し、過去のPDFに記載された旧称も正しく現組織（または当時の組織実体）に紐づけられるようにする。
-- 具体的なファイル形式・スキーマは実装着手時に確定し、必要であれば `docs/adr/` に追記する。
+- 「現在の名称」だけでなく「いつからいつまでどの名称だったか」を `effective_from` / `effective_to` で時系列に保持し、過去のPDFに記載された旧称も正しく当時の組織実体に紐づけられるようにする。
+- 改称時は既存エントリを書き換えず、新しいエンティティ（新しい `id`）を追加し `predecessor_id` / `successor_id` で連結する。
+- 更新ルールの詳細は [`docs/knowledge/schema.md`](../../docs/knowledge/schema.md#organization) を参照。

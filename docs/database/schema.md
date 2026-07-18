@@ -427,7 +427,7 @@ CREATE INDEX idx_review_changes_target ON review_changes (target_table, target_i
 
 ### 8. `knowledge_items`
 
-**目的**: `knowledge/` 配下のドメイン知識（[ADR-0005](../adr/0005-knowledge-base-normalization.md)）をDB上でクエリ可能にした、Normalizerが実行時に参照する正規化用の知識エントリ。
+**目的**: `knowledge/` 配下のドメイン知識（[ADR-0005](../adr/0005-knowledge-base-normalization.md)）をDB上でクエリ可能にした、Normalizerが実行時に参照する正規化用の知識エントリ。`knowledge/` の8カテゴリの詳細なYAML構造は [`docs/knowledge/schema.md`](../knowledge/schema.md) を参照。
 
 **責務**: 表記ゆれ・別名・改称履歴等の「原表記 → 正規化値」マッピングを検索可能な形で保持し、`candidate_records.normalization_applied` からの参照により、どのレコードの正規化にどの知識項目が使われたかを追跡可能にする。`knowledge/` のファイルが正（source of truth）であり、本テーブルはそれをロード・インデックスしたものという位置づけ。
 
@@ -438,7 +438,12 @@ CREATE INDEX idx_review_changes_target ON review_changes (target_table, target_i
 ```sql
 CREATE TABLE knowledge_items (
     id              INTEGER PRIMARY KEY,
-    category        TEXT NOT NULL CHECK (category IN ('organization', 'rank', 'alias', 'known_issue')),
+    category        TEXT NOT NULL CHECK (
+                        category IN (
+                            'organization', 'position', 'rank', 'alias',
+                            'historical', 'typography', 'layout', 'validation'
+                        )
+                    ),
     source_file     TEXT NOT NULL,
     item_key        TEXT NOT NULL,
     canonical_value TEXT NOT NULL,
@@ -457,6 +462,8 @@ CREATE INDEX idx_knowledge_items_source_file ON knowledge_items (source_file);
 - **一意制約**: `(category, item_key, effective_from)`
 - **外部キー**: なし
 - **インデックス**: `(category, item_key)`（Normalizerの主要な検索経路）、`source_file`
+
+**設計メモ（`item_key` / `canonical_value` の解釈について）**: `organization` / `position` / `rank` / `alias` の4カテゴリでは、`item_key` に原表記、`canonical_value` に正規化後の値をそのまま格納する単純な「原表記→正規化値」マッピングとして使う。一方 `historical` / `typography` / `layout` / `validation` の4カテゴリは、[`docs/knowledge/schema.md`](../knowledge/schema.md) が定めるとおりイベントログ・変換規則・制約ルールという単純なマッピングでは表現しきれない構造を持つため、`item_key` にはエントリの `id`、`canonical_value` には代表値（例: `validation` なら `target_field` の値）を格納し、構造化された全内容は `source_file` が指すYAMLファイル自体を正とする。本テーブルはあくまで検索・監査用の軽量インデックスであり、詳細な構造の読み取りは常にファイルを参照する。
 
 ---
 
