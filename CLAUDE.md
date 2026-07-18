@@ -4,6 +4,8 @@
 
 本ファイルおよび `AGENTS.md` は、[`docs/constitution.md`](docs/constitution.md)（Project Constitution）に定める「4. AI Principles」（AIは提案者、人間は承認者、AIはGoldを書き換えない、AIはKnowledgeを直接変更しない）に従属します。本ファイルの記述とConstitutionが矛盾する場合はConstitutionが優先されます。
 
+設計フェーズは[`docs/design-freeze.md`](docs/design-freeze.md)をもって完了しています。実装フェーズにおけるコーディング規約・実装哲学の詳細は[`docs/implementation.md`](docs/implementation.md)（Implementation Guide、Constitution → ADR → Architecture Contract → Implementation Guideの順で従う）を正とし、本ファイルはその要点と、Claude Code固有の運用ルールのみを記載します。
+
 ## プロジェクトの本質
 
 これは「PDFをパースするスクリプト」ではなく、「10年以上、複数の担当者・複数のAIセッションをまたいで保守され続けるデータ基盤」です。以下を常に優先してください。
@@ -61,6 +63,13 @@ Document Analyzer → Layout Detector → Section Parser → Field Extractor →
 ## 関連ドキュメント
 
 - [`docs/constitution.md`](docs/constitution.md) — Project Constitution（最高位の統治文書。本ファイルより上位）
+- [`docs/design-freeze.md`](docs/design-freeze.md) — Design Freeze Review（設計完了宣言）
+- [`docs/implementation.md`](docs/implementation.md) — Implementation Guide（実装フェーズの最上位ガイドライン）
+- [`docs/coding-style.md`](docs/coding-style.md) — Coding Style Guide（命名規則・構文選択等の詳細）
+- [`docs/testing/test-policy.md`](docs/testing/test-policy.md) — Test Policy（テスト種別ごとの方針）
+- [`docs/parser-guidelines.md`](docs/parser-guidelines.md) — Parser Development Guidelines
+- [`docs/implementation-checklist.md`](docs/implementation-checklist.md) — Implementation Checklist
+- [`docs/developer-workflow.md`](docs/developer-workflow.md) — Developer Workflow
 - [`AGENTS.md`](AGENTS.md) — 全AIエージェント共通の運用規約（本ファイルより広い読者を想定）
 - [`CONTRIBUTING.md`](CONTRIBUTING.md) — 人間の開発者向けガイド
 - [`docs/architecture.md`](docs/architecture.md) — システム設計の全体像
