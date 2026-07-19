@@ -3,7 +3,6 @@ from datetime import UTC, date, datetime
 
 from mod_personnel_db.models import (
     CandidateId,
-    LayoutId,
     NormalizedRecord,
     NormalizedValue,
     ParserVersionId,
@@ -16,13 +15,13 @@ from mod_personnel_db.repositories.sqlite.gold import SqliteGoldRepository
 
 
 def _make_candidate(
-    conn: sqlite3.Connection, pdf_id: PdfId, layout_id: LayoutId, parser_version_id: ParserVersionId
+    conn: sqlite3.Connection, pdf_id: PdfId, layout_era_id: str, parser_version_id: ParserVersionId
 ) -> tuple[CandidateId, NormalizedRecord]:
     candidate_repo = SqliteCandidateRepository(conn, parser_version_id)
     section_id = candidate_repo.add_section(
         PersonnelSection(
             document_ref=pdf_id,
-            layout_id=layout_id,
+            layout_id=layout_era_id,
             section_index=0,
             section_label=None,
             page_range=(1, 1),
@@ -46,9 +45,9 @@ def _make_candidate(
 
 
 def test_add_version_and_get_current(
-    conn: sqlite3.Connection, pdf_id: PdfId, layout_id: LayoutId, parser_version_id: ParserVersionId
+    conn: sqlite3.Connection, pdf_id: PdfId, layout_era_id: str, parser_version_id: ParserVersionId
 ) -> None:
-    candidate_id, normalized = _make_candidate(conn, pdf_id, layout_id, parser_version_id)
+    candidate_id, normalized = _make_candidate(conn, pdf_id, layout_era_id, parser_version_id)
     repo = SqliteGoldRepository(conn)
 
     gold_id = repo.add_version(
@@ -74,9 +73,9 @@ def test_get_current_missing_returns_none(conn: sqlite3.Connection) -> None:
 
 
 def test_supersede_creates_scd_type_2_history(
-    conn: sqlite3.Connection, pdf_id: PdfId, layout_id: LayoutId, parser_version_id: ParserVersionId
+    conn: sqlite3.Connection, pdf_id: PdfId, layout_era_id: str, parser_version_id: ParserVersionId
 ) -> None:
-    candidate_id, normalized = _make_candidate(conn, pdf_id, layout_id, parser_version_id)
+    candidate_id, normalized = _make_candidate(conn, pdf_id, layout_era_id, parser_version_id)
     repo = SqliteGoldRepository(conn)
     old_id = repo.add_version(candidate_id, normalized, "yamada-taro", date(2026, 4, 1), "補職")
     corrected = NormalizedRecord(
@@ -113,9 +112,9 @@ def test_supersede_missing_old_id_raises(conn: sqlite3.Connection) -> None:
 
 
 def test_list_current(
-    conn: sqlite3.Connection, pdf_id: PdfId, layout_id: LayoutId, parser_version_id: ParserVersionId
+    conn: sqlite3.Connection, pdf_id: PdfId, layout_era_id: str, parser_version_id: ParserVersionId
 ) -> None:
-    candidate_id, normalized = _make_candidate(conn, pdf_id, layout_id, parser_version_id)
+    candidate_id, normalized = _make_candidate(conn, pdf_id, layout_era_id, parser_version_id)
     repo = SqliteGoldRepository(conn)
     repo.add_version(candidate_id, normalized, "yamada-taro", date(2026, 4, 1), "補職")
 
@@ -126,10 +125,10 @@ def test_list_current(
 
 
 def test_list_current_as_of_uses_valid_from_window(
-    conn: sqlite3.Connection, pdf_id: PdfId, layout_id: LayoutId, parser_version_id: ParserVersionId
+    conn: sqlite3.Connection, pdf_id: PdfId, layout_era_id: str, parser_version_id: ParserVersionId
 ) -> None:
     # valid_fromはINSERT時刻(実時刻)であり、effective_date(業務上の発令日)とは別物。
-    candidate_id, normalized = _make_candidate(conn, pdf_id, layout_id, parser_version_id)
+    candidate_id, normalized = _make_candidate(conn, pdf_id, layout_era_id, parser_version_id)
     repo = SqliteGoldRepository(conn)
     repo.add_version(candidate_id, normalized, "yamada-taro", date(2026, 4, 1), "補職")
 

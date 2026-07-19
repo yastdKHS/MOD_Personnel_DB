@@ -31,6 +31,10 @@ Document Analyzer → Layout Detector → Section Parser → Field Extractor →
 
 検証NGや事後的な誤り修正は、単なる修正ログではなく `knowledge/learning_dataset/` にLearning Datasetとして記録する。「いつ・誰が・何を直したか」だけでなく、「どの段階で・なぜ誤ったか・Knowledge Base/Layoutへの反映につながったか」を残す（[ADR-0013](docs/adr/0013-learning-dataset-not-correction-log.md)）。
 
+## Architecture Notes
+
+- **`Document.file_path`を安易に削除・移動・Repository化してはならない**。`Document`（Document Identity、[ADR-0032](docs/adr/0032-redefine-document-analyzer-responsibility.md)）が保持する`file_path`は、Layout Detectorが`repositories/`に依存せず元PDFへ再アクセスするためのReferenceとして、Version 2.0では意図的に設計された妥当な状態である（[ADR-0035](docs/adr/0035-layout-detector-owns-pdf-content-access.md)）。「Document Identityなのにファイルパスを持つのは不整合では」という直感から`DocumentReference`分離・Repository経由の解決等へ自発的にリファクタリングしない。将来の改善候補は[ADR-0035の「Future Improvements」](docs/adr/0035-layout-detector-owns-pdf-content-access.md#future-improvements)・[`docs/roadmap.md`](docs/roadmap.md)に記録済みであり、着手する場合は新規ADR起票が前提となる。
+
 ## コードの粒度
 
 - **大きな関数を禁止する**。目安は1関数あたり最大30文・最大分岐数8・最大循環的複雑度8・最大引数5。`pyproject.toml` のruff設定（`C90`, `PLR09xx`）で機械的に検出されるが、閾値内でも複数責務を持つ関数は分割する（[ADR-0014](docs/adr/0014-development-discipline.md)）。

@@ -8,7 +8,6 @@ from typing import Literal
 from mod_personnel_db.models.ids import (
     CandidateId,
     KnowledgeItemId,
-    LayoutId,
     PdfId,
     PersonnelSectionId,
 )
@@ -17,8 +16,16 @@ from mod_personnel_db.models.values import Confidence, ModelValidationError
 
 @dataclass(frozen=True, slots=True)
 class PersonnelSection:
+    """Section Parserの出力（ADR-0037）。
+
+    `layout_id`は`Layout`（`layouts`テーブル）のDB主キーではなく、`era_id`
+    （`LayoutDetectionResult.layout_id`と同じ値域の`str`）である。Section Parser
+    はRepositoryにアクセスしないため、DB主キーへの解決は永続化時にRepository層
+    （`SqliteCandidateRepository.add_section`）が担う。
+    """
+
     document_ref: PdfId
-    layout_id: LayoutId
+    layout_id: str
     section_index: int
     section_label: str | None
     page_range: tuple[int, int]

@@ -232,6 +232,21 @@ flowchart TB
 
 上記いずれも、「凍結の対象」（中核パイプラインの6段階構成・Architecture Principles・Human Review Firstの構造的保証）には抵触しない範囲の変更である。ADR-0032はDocument Analyzerという1段階の**詳細責務**を変更したものであり、6段階の数・順序・名称（ADR-0011の凍結対象）は変更していない。
 
+## Deferred Decisions
+
+設計完了宣言の対象ではあるが、実装フェーズで判明した「現時点では変更しないが、将来のメジャーバージョンで再評価すべき」設計判断をここに記録する。[`docs/adr/README.md`](adr/README.md)が定めるADR起票の要否とは別に、実装変更を伴わない**設計上のTODO**として扱う。
+
+### `Document.file_path`保持方式（Version 3設計開始時に再評価）
+
+- **現状（Version 2、採用済み）**: `Document`（Document Identity、[ADR-0032](adr/0032-redefine-document-analyzer-responsibility.md)）は、Layout Detectorが`repositories/`に依存せずPDFへ再アクセスするための`file_path: str`を保持する（[ADR-0035](adr/0035-layout-detector-owns-pdf-content-access.md)）。Version 2.0時点では実装上合理的な判断であり、現行の禁止事項（Repository参照禁止）とも整合する。
+- **再評価が必要な理由**: `file_path`は「Document Identity」という概念上は参照解決の詳細（Reference）であり、`Document`の純粋性という観点では将来的な分離の余地がある（詳細は[ADR-0035「Future Improvements」](adr/0035-layout-detector-owns-pdf-content-access.md#future-improvements)参照）。
+- **再評価項目**（Version 3設計開始時、または実装状況により早期着手する場合は新規ADR起票時に検討する）:
+  - `DocumentReference`導入（`Document`本体から`file_path`を分離した値オブジェクト）
+  - `Artifact Locator`導入（PDF所在解決の抽象化）
+  - Repository経由解決（`source_pdf_id`から`PdfRepository`等を介した解決）
+  - Storage Abstraction（外部ストレージ製品への移行、[TODO一覧](#todo一覧)の「PDF本体の外部ストレージ製品の選定」と関連）
+- **現時点での判断**: 上記のいずれも**実装しない**。優先度・対象バージョンは[`docs/roadmap.md`](roadmap.md)を参照。
+
 ## 関連ドキュメント
 
 本ドキュメントは`docs/`配下の全設計文書を対象とするため、個別のADR・設計文書への網羅的なリンクは各節に埋め込み済みである。特に以下は本ドキュメントの構成上の基点となる。

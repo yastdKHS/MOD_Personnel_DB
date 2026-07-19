@@ -5,12 +5,17 @@ Version 2.0（ADR-0035, ADR-0036）: Layout Detectorの出力（`LayoutDetection
 （`layouts`テーブル）のDB主キー`LayoutId`ではなく、`LayoutDefinition.era_id`と
 同じ値域の`str`である（ADR-0035の補足を参照。Layout Detectorは`repositories/`
 に依存しないため、`era_id`からDB主キーへの解決は行わない）。
+
+ADR-0037: `LayoutArtifact`は`LayoutDetector.run()`の戻り値であり、`LayoutDetectionResult`
+（`.detection`として格納）に加え、Section Parserに渡す唯一のPDF本文（ページテキスト）を
+保持する。
 """
 
 from dataclasses import dataclass
 from enum import StrEnum
 
 from mod_personnel_db.models.enums import ConfidenceBand
+from mod_personnel_db.models.ids import PdfId
 from mod_personnel_db.models.values import ModelValidationError
 
 _SCORE_RANGE = (0.0, 1.0)
@@ -166,3 +171,34 @@ class LayoutDefinition:
         rule_ids = [rule.rule_id for rule in self.rules]
         if len(rule_ids) != len(set(rule_ids)):
             raise ModelValidationError("rule_id must be unique within a LayoutDefinition")
+
+
+@dataclass(frozen=True, slots=True)
+class LayoutArtifactPage:
+    """`LayoutArtifact.pages`の1ページ分（ADR-0037）。"""
+
+    index: int
+    text: str
+
+    def __post_init__(self) -> None:
+        if self.index < 0:
+            raise ModelValidationError("index must be >= 0")
+
+
+@dataclass(frozen=True, slots=True)
+class LayoutArtifact:
+    """`LayoutDetector.run()`の戻り値（ADR-0037）。
+
+    Section ParserがPDF本文を得る唯一の経路。`detection`はADR-0035が確定した
+    `LayoutDetectionResult`（形状は無変更）をそのまま保持する。
+    """
+
+    source_pdf_id: PdfId
+    detection: LayoutDetectionResult
+    pages: tuple[LayoutArtifactPage, ...]
+
+    def __post_init__(self) -> None:
+        expected_indices = tuple(range(len(self.pages)))
+        actual_indices = tuple(page.index for page in self.pages)
+        if actual_indices != expected_indices:
+            raise ModelValidationError("pages indices must be a contiguous 0-based sequence")

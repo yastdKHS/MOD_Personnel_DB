@@ -4,6 +4,10 @@ PersonnelSection.add_section()呼び出し時に必要なparser_version_idは、
 docs/api/repositories.mdの設計メモが「呼び出し文脈から付与される」とする
 値であり、Protocolの引数には現れない。pipeline/（PipelineContext）が
 未実装の現時点では、Repositoryインスタンスの生成時に束縛する。
+
+PersonnelSection.layout_id（str、era_id）とpersonnel_sections.layout_id
+（INTEGER、layouts.idへのFK）の解決はADR-0037により本Repositoryが担う
+（Section ParserはRepositoryにアクセスしないため、era_idのみを保持する）。
 """
 
 import json
@@ -13,7 +17,6 @@ from mod_personnel_db.models import (
     CandidateId,
     CandidateRecord,
     KnowledgeItemId,
-    LayoutId,
     NormalizedRecord,
     ParserVersionId,
     PdfId,
@@ -30,18 +33,33 @@ from mod_personnel_db.repositories.sqlite._serialization import (
     raw_fields_to_json,
     str_to_dt,
 )
+from mod_personnel_db.utils.exceptions import RepositoryError
 
 
 def _row_to_section(row: sqlite3.Row) -> PersonnelSection:
     start, end = json.loads(row["page_range"])
     return PersonnelSection(
         document_ref=PdfId(row["pdf_id"]),
-        layout_id=LayoutId(row["layout_id"]),
+        layout_id=row["era_id"],
         section_index=row["section_index"],
         section_label=row["section_label"],
         page_range=(start, end),
         section_text=row["section_text"],
     )
+
+
+def _resolve_layout_id(conn: sqlite3.Connection, era_id: str) -> int:
+    row = conn.execute(
+        """
+        SELECT id FROM layouts
+        WHERE era_id = ? AND status = 'active'
+        ORDER BY version DESC LIMIT 1
+        """,
+        (era_id,),
+    ).fetchone()
+    if row is None:
+        raise RepositoryError(f"no active layout found for era_id={era_id!r}")
+    return int(row["id"])
 
 
 def _row_to_candidate(row: sqlite3.Row) -> CandidateRecord:
@@ -77,6 +95,7 @@ class SqliteCandidateRepository(SqliteRepositoryBase):
         self._parser_version_id = parser_version_id
 
     def add_section(self, section: PersonnelSection) -> PersonnelSectionId:
+        layout_id = _resolve_layout_id(self.conn, section.layout_id)
         cursor = self.conn.execute(
             """
             INSERT INTO personnel_sections
@@ -86,7 +105,7 @@ class SqliteCandidateRepository(SqliteRepositoryBase):
             """,
             (
                 section.document_ref,
-                section.layout_id,
+                layout_id,
                 self._parser_version_id,
                 section.section_index,
                 section.section_label,
@@ -99,7 +118,13 @@ class SqliteCandidateRepository(SqliteRepositoryBase):
 
     def get_section(self, section_id: PersonnelSectionId) -> PersonnelSection | None:
         row = self.conn.execute(
-            "SELECT * FROM personnel_sections WHERE id = ?", (section_id,)
+            """
+            SELECT ps.*, l.era_id AS era_id
+            FROM personnel_sections ps
+            JOIN layouts l ON l.id = ps.layout_id
+            WHERE ps.id = ?
+            """,
+            (section_id,),
         ).fetchone()
         return None if row is None else _row_to_section(row)
 

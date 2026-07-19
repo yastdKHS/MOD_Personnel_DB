@@ -1,10 +1,11 @@
 import sqlite3
 from datetime import UTC, datetime
 
+import pytest
+
 from mod_personnel_db.models import (
     CandidateId,
     ConfidenceBand,
-    LayoutId,
     NormalizedRecord,
     NormalizedValue,
     ParserVersionId,
@@ -17,12 +18,13 @@ from mod_personnel_db.models import (
 )
 from mod_personnel_db.models.values import Confidence
 from mod_personnel_db.repositories.sqlite.candidate import SqliteCandidateRepository
+from mod_personnel_db.utils.exceptions import RepositoryError
 
 
-def _make_section(pdf_id: PdfId, layout_id: LayoutId) -> PersonnelSection:
+def _make_section(pdf_id: PdfId, layout_era_id: str) -> PersonnelSection:
     return PersonnelSection(
         document_ref=pdf_id,
-        layout_id=layout_id,
+        layout_id=layout_era_id,
         section_index=0,
         section_label="発令一覧",
         page_range=(1, 3),
@@ -31,11 +33,11 @@ def _make_section(pdf_id: PdfId, layout_id: LayoutId) -> PersonnelSection:
 
 
 def test_add_and_get_section(
-    conn: sqlite3.Connection, pdf_id: PdfId, layout_id: LayoutId, parser_version_id: ParserVersionId
+    conn: sqlite3.Connection, pdf_id: PdfId, layout_era_id: str, parser_version_id: ParserVersionId
 ) -> None:
     repo = SqliteCandidateRepository(conn, parser_version_id)
 
-    section_id = repo.add_section(_make_section(pdf_id, layout_id))
+    section_id = repo.add_section(_make_section(pdf_id, layout_era_id))
     fetched = repo.get_section(section_id)
 
     assert fetched is not None
@@ -51,11 +53,21 @@ def test_get_section_missing_returns_none(
     assert repo.get_section(PersonnelSectionId(999)) is None
 
 
-def test_add_raw_and_get(
-    conn: sqlite3.Connection, pdf_id: PdfId, layout_id: LayoutId, parser_version_id: ParserVersionId
+def test_add_section_rejects_unknown_era_id(
+    conn: sqlite3.Connection, pdf_id: PdfId, parser_version_id: ParserVersionId
 ) -> None:
     repo = SqliteCandidateRepository(conn, parser_version_id)
-    section_id = repo.add_section(_make_section(pdf_id, layout_id))
+    section = _make_section(pdf_id, "no_such_era")
+
+    with pytest.raises(RepositoryError):
+        repo.add_section(section)
+
+
+def test_add_raw_and_get(
+    conn: sqlite3.Connection, pdf_id: PdfId, layout_era_id: str, parser_version_id: ParserVersionId
+) -> None:
+    repo = SqliteCandidateRepository(conn, parser_version_id)
+    section_id = repo.add_section(_make_section(pdf_id, layout_era_id))
     raw = RawRecord(
         section_ref=None,
         record_index=0,
@@ -74,10 +86,10 @@ def test_add_raw_and_get(
 
 
 def test_attach_normalized(
-    conn: sqlite3.Connection, pdf_id: PdfId, layout_id: LayoutId, parser_version_id: ParserVersionId
+    conn: sqlite3.Connection, pdf_id: PdfId, layout_era_id: str, parser_version_id: ParserVersionId
 ) -> None:
     repo = SqliteCandidateRepository(conn, parser_version_id)
-    section_id = repo.add_section(_make_section(pdf_id, layout_id))
+    section_id = repo.add_section(_make_section(pdf_id, layout_era_id))
     raw = RawRecord(
         section_ref=None,
         record_index=0,
@@ -101,10 +113,10 @@ def test_attach_normalized(
 
 
 def test_update_validation(
-    conn: sqlite3.Connection, pdf_id: PdfId, layout_id: LayoutId, parser_version_id: ParserVersionId
+    conn: sqlite3.Connection, pdf_id: PdfId, layout_era_id: str, parser_version_id: ParserVersionId
 ) -> None:
     repo = SqliteCandidateRepository(conn, parser_version_id)
-    section_id = repo.add_section(_make_section(pdf_id, layout_id))
+    section_id = repo.add_section(_make_section(pdf_id, layout_era_id))
     raw = RawRecord(
         section_ref=None,
         record_index=0,
@@ -134,10 +146,10 @@ def test_update_validation(
 
 
 def test_list_by_section_orders_by_record_index(
-    conn: sqlite3.Connection, pdf_id: PdfId, layout_id: LayoutId, parser_version_id: ParserVersionId
+    conn: sqlite3.Connection, pdf_id: PdfId, layout_era_id: str, parser_version_id: ParserVersionId
 ) -> None:
     repo = SqliteCandidateRepository(conn, parser_version_id)
-    section_id = repo.add_section(_make_section(pdf_id, layout_id))
+    section_id = repo.add_section(_make_section(pdf_id, layout_era_id))
     for index in (1, 0):
         repo.add_raw(
             section_id,
@@ -155,10 +167,10 @@ def test_list_by_section_orders_by_record_index(
 
 
 def test_list_pending_and_failed_validation(
-    conn: sqlite3.Connection, pdf_id: PdfId, layout_id: LayoutId, parser_version_id: ParserVersionId
+    conn: sqlite3.Connection, pdf_id: PdfId, layout_era_id: str, parser_version_id: ParserVersionId
 ) -> None:
     repo = SqliteCandidateRepository(conn, parser_version_id)
-    section_id = repo.add_section(_make_section(pdf_id, layout_id))
+    section_id = repo.add_section(_make_section(pdf_id, layout_era_id))
     raw = RawRecord(
         section_ref=None,
         record_index=0,

@@ -3,6 +3,8 @@ import pytest
 from mod_personnel_db.models import (
     BoundingBoxStatistics,
     ConfidenceBand,
+    LayoutArtifact,
+    LayoutArtifactPage,
     LayoutCandidate,
     LayoutConfidence,
     LayoutDefinition,
@@ -13,6 +15,7 @@ from mod_personnel_db.models import (
     LayoutRuleKind,
     LayoutWarning,
     PageStatistics,
+    PdfId,
     RotationStatistics,
 )
 from mod_personnel_db.models.values import ModelValidationError
@@ -175,3 +178,51 @@ def test_layout_warning_enum_members(warning: LayoutWarning) -> None:
 @pytest.mark.parametrize("kind", list(LayoutRuleKind))
 def test_layout_rule_kind_enum_members(kind: LayoutRuleKind) -> None:
     assert isinstance(kind.value, str)
+
+
+def _detection(
+    *, layout_id: str | None = None, layout_version: int | None = None
+) -> LayoutDetectionResult:
+    warnings = () if layout_id is not None else (LayoutWarning.NO_MATCH,)
+    return LayoutDetectionResult(
+        layout_id=layout_id,
+        layout_version=layout_version,
+        confidence=LayoutConfidence(score=0.0, band=ConfidenceBand.LOW),
+        candidate_layouts=(),
+        evidence=_evidence(),
+        warnings=warnings,
+    )
+
+
+def test_layout_artifact_page_normal_construction() -> None:
+    page = LayoutArtifactPage(index=0, text="hello")
+    assert page.text == "hello"
+
+
+def test_layout_artifact_page_rejects_negative_index() -> None:
+    with pytest.raises(ModelValidationError):
+        LayoutArtifactPage(index=-1, text="")
+
+
+def test_layout_artifact_normal_construction() -> None:
+    artifact = LayoutArtifact(
+        source_pdf_id=PdfId(1),
+        detection=_detection(),
+        pages=(LayoutArtifactPage(index=0, text="a"), LayoutArtifactPage(index=1, text="b")),
+    )
+    assert artifact.detection.layout_id is None
+    assert [page.index for page in artifact.pages] == [0, 1]
+
+
+def test_layout_artifact_allows_empty_pages() -> None:
+    artifact = LayoutArtifact(source_pdf_id=PdfId(1), detection=_detection(), pages=())
+    assert artifact.pages == ()
+
+
+def test_layout_artifact_rejects_non_contiguous_page_indices() -> None:
+    with pytest.raises(ModelValidationError):
+        LayoutArtifact(
+            source_pdf_id=PdfId(1),
+            detection=_detection(),
+            pages=(LayoutArtifactPage(index=0, text="a"), LayoutArtifactPage(index=2, text="b")),
+        )

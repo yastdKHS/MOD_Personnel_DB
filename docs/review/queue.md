@@ -59,7 +59,7 @@ def priority_score(reason: str, now: datetime, created_at: datetime, confidence_
 
 | `priority_reason` | 判定条件 | 由来 |
 |---|---|---|
-| `layout_unknown` | `LayoutDetector.run()`の`LayoutDetectionResult.confidence`が閾値未満、または既知の`era_id`に一致しない | [`docs/api/interfaces.md`](../api/interfaces.md#中核パイプライン6段階) |
+| `layout_unknown` | `LayoutDetector.run()`の戻り値`LayoutArtifact`の`.detection.confidence`が閾値未満、または既知の`era_id`に一致しない（[ADR-0037](../adr/0037-layout-detector-produces-layout-artifact.md)、値の意味・算出方法は無変更） | [`docs/api/interfaces.md`](../api/interfaces.md#中核パイプライン6段階) |
 | `parser_error` | `PipelineException`（[`docs/api/pipeline.md`](../api/pipeline.md#pipelineexception)）が`document/`〜`validators/`のいずれかの段階で送出された | [`docs/api/pipeline.md`](../api/pipeline.md) |
 | `confidence` | `ValidationResult.confidence.band`が`low`または`medium` | [`docs/database/json_schema.md`](../database/json_schema.md#confidenceの算出ルール) |
 | `knowledge_missing` | `LearningRecord.error_category`が`unknown_alias`または`knowledge_gap` | [ADR-0012](../adr/0012-error-handling-priority-order.md) |

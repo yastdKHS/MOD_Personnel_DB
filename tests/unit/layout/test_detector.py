@@ -38,10 +38,10 @@ def test_detector_matches_known_layout(
 
     result = detector.run(context, document)
 
-    assert result.layout_id == "format_a"
-    assert result.layout_version == 1
-    assert result.confidence.score == pytest.approx(1.0)
-    assert LayoutWarning.NO_MATCH not in result.warnings
+    assert result.detection.layout_id == "format_a"
+    assert result.detection.layout_version == 1
+    assert result.detection.confidence.score == pytest.approx(1.0)
+    assert LayoutWarning.NO_MATCH not in result.detection.warnings
 
 
 # --- 未知Layout ---
@@ -58,10 +58,10 @@ def test_detector_no_definitions_produces_no_match(
 
     result = detector.run(context, document)
 
-    assert result.layout_id is None
-    assert result.layout_version is None
-    assert result.candidate_layouts == ()
-    assert LayoutWarning.NO_MATCH in result.warnings
+    assert result.detection.layout_id is None
+    assert result.detection.layout_version is None
+    assert result.detection.candidate_layouts == ()
+    assert LayoutWarning.NO_MATCH in result.detection.warnings
 
 
 def test_detector_unmatched_layout_produces_no_match_warning(
@@ -75,9 +75,9 @@ def test_detector_unmatched_layout_produces_no_match_warning(
 
     result = detector.run(context, document)
 
-    assert result.layout_id is None
-    assert LayoutWarning.NO_MATCH in result.warnings
-    assert len(result.candidate_layouts) == 1
+    assert result.detection.layout_id is None
+    assert LayoutWarning.NO_MATCH in result.detection.warnings
+    assert len(result.detection.candidate_layouts) == 1
 
 
 # --- Confidence境界 ---
@@ -97,10 +97,10 @@ def test_detector_score_just_below_threshold_is_low_confidence_not_no_match(
 
     result = detector.run(context, document)
 
-    assert result.layout_id is None
-    assert result.confidence.score == pytest.approx(0.3)
-    assert LayoutWarning.LOW_CONFIDENCE in result.warnings
-    assert LayoutWarning.NO_MATCH not in result.warnings
+    assert result.detection.layout_id is None
+    assert result.detection.confidence.score == pytest.approx(0.3)
+    assert LayoutWarning.LOW_CONFIDENCE in result.detection.warnings
+    assert LayoutWarning.NO_MATCH not in result.detection.warnings
 
 
 def test_detector_score_below_low_confidence_threshold_is_no_match(
@@ -116,9 +116,9 @@ def test_detector_score_below_low_confidence_threshold_is_no_match(
 
     result = detector.run(context, document)
 
-    assert result.layout_id is None
-    assert LayoutWarning.NO_MATCH in result.warnings
-    assert LayoutWarning.LOW_CONFIDENCE not in result.warnings
+    assert result.detection.layout_id is None
+    assert LayoutWarning.NO_MATCH in result.detection.warnings
+    assert LayoutWarning.LOW_CONFIDENCE not in result.detection.warnings
 
 
 def test_detector_custom_confidence_threshold_is_respected(
@@ -132,7 +132,7 @@ def test_detector_custom_confidence_threshold_is_respected(
 
     result = detector.run(context, document)
 
-    assert result.layout_id == "format_a"
+    assert result.detection.layout_id == "format_a"
 
 
 # --- 複数候補 ---
@@ -149,11 +149,12 @@ def test_detector_returns_all_candidates_sorted_by_score(
 
     result = detector.run(context, document)
 
-    assert [candidate.layout_id for candidate in result.candidate_layouts] == [
+    assert [candidate.layout_id for candidate in result.detection.candidate_layouts] == [
         "format_a",
         "format_b",
     ]
-    assert result.candidate_layouts[0].score >= result.candidate_layouts[1].score
+    candidates = result.detection.candidate_layouts
+    assert candidates[0].score >= candidates[1].score
 
 
 def test_detector_ambiguous_candidates_warning(
@@ -169,7 +170,7 @@ def test_detector_ambiguous_candidates_warning(
 
     result = detector.run(context, document)
 
-    assert LayoutWarning.AMBIGUOUS_CANDIDATES in result.warnings
+    assert LayoutWarning.AMBIGUOUS_CANDIDATES in result.detection.warnings
 
 
 # --- Evidence生成 ---
@@ -186,13 +187,13 @@ def test_detector_evidence_reflects_page_and_font_statistics(
 
     result = detector.run(context, document)
 
-    assert result.evidence.page_statistics.page_count == 3
-    assert result.evidence.page_statistics.average_char_count > 0
-    assert "Helvetica" in result.evidence.font_statistics
-    assert result.evidence.header_signature == "MOD PERSONNEL ORDER FORMAT A"
-    assert result.evidence.footer_signature == "END OF DOCUMENT"
-    assert result.evidence.bbox_statistics.average_width == pytest.approx(210.0)
-    assert result.evidence.bbox_statistics.average_height == pytest.approx(297.0)
+    assert result.detection.evidence.page_statistics.page_count == 3
+    assert result.detection.evidence.page_statistics.average_char_count > 0
+    assert "Helvetica" in result.detection.evidence.font_statistics
+    assert result.detection.evidence.header_signature == "MOD PERSONNEL ORDER FORMAT A"
+    assert result.detection.evidence.footer_signature == "END OF DOCUMENT"
+    assert result.detection.evidence.bbox_statistics.average_width == pytest.approx(210.0)
+    assert result.detection.evidence.bbox_statistics.average_height == pytest.approx(297.0)
 
 
 def test_detector_evidence_rotation_statistics(
@@ -206,8 +207,8 @@ def test_detector_evidence_rotation_statistics(
 
     result = detector.run(context, document)
 
-    assert result.evidence.rotation_statistics.rotated_page_count == 1
-    assert result.evidence.rotation_statistics.dominant_rotation == 90
+    assert result.detection.evidence.rotation_statistics.rotated_page_count == 1
+    assert result.detection.evidence.rotation_statistics.dominant_rotation == 90
 
 
 def test_detector_evidence_on_empty_pdf_has_zero_statistics(
@@ -221,9 +222,56 @@ def test_detector_evidence_on_empty_pdf_has_zero_statistics(
 
     result = detector.run(context, document)
 
-    assert result.evidence.page_statistics.page_count == 0
-    assert result.evidence.header_signature is None
-    assert result.evidence.footer_signature is None
+    assert result.detection.evidence.page_statistics.page_count == 0
+    assert result.detection.evidence.header_signature is None
+    assert result.detection.evidence.footer_signature is None
+
+
+# --- LayoutArtifact生成（ADR-0037） ---
+
+
+def test_detector_artifact_carries_source_pdf_id(
+    context: PipelineContext,
+    write_pdf: Callable[[str, bytes], Path],
+    make_document: Callable[[Path], Document],
+) -> None:
+    path = write_pdf("format_a.pdf", text_pdf_bytes())
+    document = make_document(path)
+    detector = LayoutDetector(layout_definitions=())
+
+    result = detector.run(context, document)
+
+    assert result.source_pdf_id == document.source_pdf_id
+
+
+def test_detector_artifact_pages_carry_extracted_text(
+    context: PipelineContext,
+    write_pdf: Callable[[str, bytes], Path],
+    make_document: Callable[[Path], Document],
+) -> None:
+    path = write_pdf("format_a.pdf", text_pdf_bytes(page_count=3))
+    document = make_document(path)
+    detector = LayoutDetector(layout_definitions=())
+
+    result = detector.run(context, document)
+
+    assert [page.index for page in result.pages] == [0, 1, 2]
+    assert "MOD PERSONNEL ORDER FORMAT A" in result.pages[0].text
+    assert "END OF DOCUMENT" in result.pages[0].text
+
+
+def test_detector_artifact_pages_empty_for_empty_pdf(
+    context: PipelineContext,
+    write_pdf: Callable[[str, bytes], Path],
+    make_document: Callable[[Path], Document],
+) -> None:
+    path = write_pdf("empty.pdf", blank_pdf_bytes(page_count=0))
+    document = make_document(path)
+    detector = LayoutDetector(layout_definitions=())
+
+    result = detector.run(context, document)
+
+    assert result.pages == ()
 
 
 # --- PDF再読込 ---
@@ -243,7 +291,7 @@ def test_detector_rereads_pdf_independently_of_document_analysis(
 
     result = detector.run(context, document)
 
-    assert result.evidence.page_statistics.page_count == 5
+    assert result.detection.evidence.page_statistics.page_count == 5
 
 
 def test_detector_rejects_missing_file(
@@ -287,7 +335,7 @@ def test_detector_wraps_pypdf_extract_text_error(
     with patch.object(PageObject, "extract_text", side_effect=PdfReadError("simulated")):
         result = detector.run(context, document)
 
-    assert result.evidence.header_signature is None
+    assert result.detection.evidence.header_signature is None
 
 
 def test_detector_wraps_unicode_error_on_extract_text(
@@ -304,7 +352,7 @@ def test_detector_wraps_unicode_error_on_extract_text(
     ):
         result = detector.run(context, document)
 
-    assert result.evidence.header_signature is None
+    assert result.detection.evidence.header_signature is None
 
 
 # --- ルール種別ごとの評価 ---
@@ -333,7 +381,7 @@ def test_detector_footer_pattern_rule_matches(
 
     result = detector.run(context, document)
 
-    assert result.layout_id == "footer_only"
+    assert result.detection.layout_id == "footer_only"
 
 
 def test_detector_font_name_contains_rule_matches(
@@ -359,7 +407,7 @@ def test_detector_font_name_contains_rule_matches(
 
     result = detector.run(context, document)
 
-    assert result.layout_id == "font_only"
+    assert result.detection.layout_id == "font_only"
 
 
 def test_detector_min_page_count_rule_with_invalid_value_fails_gracefully(
@@ -385,8 +433,8 @@ def test_detector_min_page_count_rule_with_invalid_value_fails_gracefully(
 
     result = detector.run(context, document)
 
-    assert result.candidate_layouts[0].score == 0.0
-    detail = result.candidate_layouts[0].failed_rules[0].detail
+    assert result.detection.candidate_layouts[0].score == 0.0
+    detail = result.detection.candidate_layouts[0].failed_rules[0].detail
     assert detail == "invalid MIN_PAGE_COUNT value: 'not-a-number'"
 
 
@@ -431,4 +479,4 @@ def test_detector_confidence_band_reflects_score(
 
     result = detector.run(context, document)
 
-    assert result.confidence.band.value == expected_band
+    assert result.detection.confidence.band.value == expected_band

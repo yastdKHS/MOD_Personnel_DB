@@ -63,3 +63,11 @@ def layout_id(conn: sqlite3.Connection) -> LayoutId:
     )
     conn.commit()
     return LayoutId(last_id(cursor))
+
+
+@pytest.fixture
+def layout_era_id(layout_id: LayoutId) -> str:
+    # PersonnelSection.layout_id（ADR-0037）はera_id（str）を保持する。
+    # layout_idフィクスチャがINSERTしたlayoutsの行と対応するera_idを返す。
+    del layout_id
+    return "reiwa"
