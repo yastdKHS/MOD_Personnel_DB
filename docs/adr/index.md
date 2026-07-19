@@ -48,6 +48,8 @@
 | [0030](0030-strenum-adoption.md) | Enum実装方針をenum.StrEnumに統一する | Accepted | 2026-07-18 | 2026-07-18 | 0002, 0014, 0028 | api/python-contract.md, api/models.md |
 | [0031](0031-pipeline-metrics-field-finalization.md) | PipelineMetricsのフィールド構成を確定する | Accepted | 2026-07-19 | 2026-07-19 | 0006, 0011, 0014, 0019 | api/pipeline.md, operations/observability.md, CHANGELOG.md |
 | [0032](0032-redefine-document-analyzer-responsibility.md) | Redefine Document Analyzer Responsibility | Accepted | 2026-07-19 | 2026-07-19 | 0006, 0011, 0012, 0023, 0030 | api/interfaces.md, api/models.md, architecture.md, architecture/architecture-contract.md, architecture-review-package.md, design-freeze.md |
+| [0033](0033-document-analyzer-output-field-composition.md) | Document Analyzer出力型のフィールド構成を確定する | Accepted | 2026-07-19 | 2026-07-19 | 0031, 0032 | api/models.md |
+| [0034](0034-pypdf-for-document-analyzer.md) | Document Analyzerの実装にpypdfを採用する | Accepted | 2026-07-19 | 2026-07-19 | 0001, 0026, 0032 | pyproject.toml, api/package-design.md |
 
 ## 検討したが採用しなかった候補
 

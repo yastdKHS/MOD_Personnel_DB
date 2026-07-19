@@ -9,7 +9,15 @@ from mod_personnel_db.models.candidate import (
     ValidationResult,
     ValidationViolation,
 )
-from mod_personnel_db.models.document import Document, Page
+from mod_personnel_db.models.document import (
+    Document,
+    DocumentAnalysisResult,
+    DocumentMetadata,
+    DocumentStatistics,
+    DocumentV1,
+    DocumentWarning,
+    PageV1,
+)
 from mod_personnel_db.models.enums import (
     ConfidenceBand,
     ErrorCategory,
@@ -22,6 +30,7 @@ from mod_personnel_db.models.feature import FeatureVector
 from mod_personnel_db.models.gold import GoldRecord
 from mod_personnel_db.models.ids import (
     CandidateId,
+    DocumentId,
     ExportId,
     GoldRecordId,
     JobId,
@@ -47,6 +56,12 @@ __all__ = [
     "Confidence",
     "ConfidenceBand",
     "Document",
+    "DocumentAnalysisResult",
+    "DocumentId",
+    "DocumentMetadata",
+    "DocumentStatistics",
+    "DocumentV1",
+    "DocumentWarning",
     "ErrorCategory",
     "ExportId",
     "ExportRecord",
@@ -64,7 +79,7 @@ __all__ = [
     "LearningStatus",
     "NormalizedRecord",
     "NormalizedValue",
-    "Page",
+    "PageV1",
     "ParserVersion",
     "ParserVersionId",
     "PdfId",

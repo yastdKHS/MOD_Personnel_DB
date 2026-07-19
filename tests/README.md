@@ -12,6 +12,7 @@ tests/
     models/         # ドメインモデルのValidation Rule検証
     repositories/    # Repository Protocol実装（SQLite）の検証
     pipeline/         # Pipeline Framework骨格（Stub Stageのみ）の検証
+    document/         # Document Analyzer本実装の検証（合成PDFフィクスチャ、実在PDFは使用しない）
   integration/       # 複数ステージを跨いだ結合テスト（未整備）
   golden/             # sample_pdfs/ と sample_outputs/ を用いたゴールデンファイルテスト（ADR-0007、未整備）
 ```

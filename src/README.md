@@ -4,7 +4,7 @@
 
 本体実装（Pythonパッケージ）を置く場所。`src/` レイアウト（[ADR-0001](../docs/adr/0001-python-packaging.md)）を採用しており、パッケージ本体は `src/mod_personnel_db/` に配置する。
 
-> Phase2 Task1（Repository Skeleton）・Task2（Domain Model Implementation）・Task3（Pipeline Skeleton Implementation）より実装着手。`utils/`, `models/`（[`docs/api/models.md`](../docs/api/models.md)の13モデル全種）, `repositories/`（Protocol）, `repositories/sqlite/`（SQLite実装、CandidateRepository/GoldRepository/KnowledgeRepository/PDFRepository/JobRepository/ExportRepository/ReviewRepositoryの7種）, `pipeline/`（Pipeline Framework骨格のみ。PipelineContext/PipelineStage/PipelineEvent/PipelineException/PipelineFrameworkError/PipelineMetrics/PipelineResult/PipelineRunner/PipelineBuilder/PipelineFactory。中核パイプライン6段階の実装＝`document/`〜`validators/`は未実装のまま）が実装済み。`config/`、中核パイプライン（`document/` 〜 `validators/`）、`learning/`, `features/`, `review/`（Domain Service）, `export/`, `ftp/`, `fetch/`, `services/`, `cli/` は未実装。
+> Phase2 Task1（Repository Skeleton）・Task2（Domain Model Implementation）・Task3（Pipeline Skeleton Implementation）・Task4（Document Analyzer Implementation）より実装着手。`utils/`, `models/`（[`docs/api/models.md`](../docs/api/models.md)の13モデル全種。`Document`はVersion 2.0（[ADR-0032](../docs/adr/0032-redefine-document-analyzer-responsibility.md)）、Version 1は`DocumentV1`/`PageV1`として引き続き提供）, `repositories/`（Protocol）, `repositories/sqlite/`（SQLite実装、7種）, `pipeline/`（Pipeline Framework骨格）, `document/`（Document Analyzer本実装。DocumentAnalyzer/DocumentAnalyzerError、PDF解析ライブラリは`pypdf`（[ADR-0034](../docs/adr/0034-pypdf-for-document-analyzer.md)）。中核パイプライン段階2以降＝`layout/`〜`validators/`は未実装のまま）が実装済み。`config/`、`layout/`〜`validators/`（中核パイプライン段階2〜6）, `learning/`, `features/`, `review/`（Domain Service）, `export/`, `ftp/`, `fetch/`, `services/`, `cli/` は未実装。
 
 ## 想定するパッケージ構成
 
