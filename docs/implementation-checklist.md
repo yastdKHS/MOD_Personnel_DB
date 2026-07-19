@@ -102,6 +102,12 @@
 - [ ] 1つのPRが1つの責務のみを変更しているか（[ADR-0014](adr/0014-development-discipline.md)）。
 - [ ] コミットメッセージがConventional Commits（[`CONTRIBUTING.md`](../CONTRIBUTING.md)）に従っているか。
 
+## Future Refactoring
+
+実装変更を伴わない、将来の設計改善候補に関わる注意事項。詳細は[`docs/roadmap.md`](roadmap.md)・各ADRの「Future Improvements」節を参照。
+
+- [ ] `Document.file_path`を利用するコードを新規追加する場合は、[ADR-0035](adr/0035-layout-detector-owns-pdf-content-access.md)（特に「Future Improvements」節）を参照すること。`file_path`はLayout Detectorが元PDFへ再アクセスするためのReferenceであり、新しい責務（例: 別パッケージからの直接読み込み、Repository経由の解決の代替実装等）を安易に増やさないこと。改善が必要と判断した場合は、実装を先行させず新規ADRを起票する。
+
 ## 関連ドキュメント
 
 - [`docs/implementation.md`](implementation.md) — Implementation Guide（本チェックリストが分解する上位文書）
@@ -110,3 +116,4 @@
 - [`docs/parser-guidelines.md`](parser-guidelines.md) — Parser Development Guidelines
 - [`docs/developer-workflow.md`](developer-workflow.md) — Developer Workflow
 - [`docs/design-freeze.md`](design-freeze.md) — Design Freeze Review
+- [`docs/roadmap.md`](roadmap.md) — 将来の設計改善候補（Deferred Decisions）

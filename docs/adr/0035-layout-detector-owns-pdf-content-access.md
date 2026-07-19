@@ -118,6 +118,20 @@ class LayoutDetectionResult:
 > **保証11: Layout DetectorだけがPDF本文にアクセスできる。**
 > `document/`パッケージ（Document Analyzer）は、メタデータ・健全性・統計取得のためにPDFファイルを開くが、本文テキスト・Font・Bounding Box・Drawing・Rotation・画像・Annotationのいずれも`Document`の出力に含めない（[ADR-0032](0032-redefine-document-analyzer-responsibility.md)）。`layout/`パッケージ（Layout Detector）のみが、`document.file_path`を用いてPDFファイルを再読込し、上記の情報を（`layout/`パッケージ内部の処理としてのみ）扱う。`layout/`より後続の段階（`sections/`以降）は、PDFファイルを直接読み込まず、`LayoutDetectionResult`（および将来のSection Parser設計で確定する追加の出力）のみを入力として受け取る。
 
+## Future Improvements
+
+本節は、Phase2 Task5.1（Architecture Documentation Synchronization）で記録する**将来の設計改善候補**である。現時点では実装変更を行わない（後述「現時点での判断」参照）。
+
+**背景**: `Document`は[ADR-0032](0032-redefine-document-analyzer-responsibility.md)により「Document Identity」（軽量な識別子・メタデータの束、ページ内容を保持しない）として再定義された。しかし本ADRが追加した`file_path: str`フィールドにより、`Document`は依然として「元PDFファイルの所在」という、Identityというより**Reference（参照）に近い情報**を保持している。これはLayout Detectorが`repositories/`に依存せずPDFへ再アクセスするための、Version 2.0時点での実装上合理的な判断である（本ADRの「決定」節参照）が、`Document`の概念的な純粋性（「Identityであり、参照解決の詳細を含まない」）という観点では、将来的に見直しの余地がある。
+
+**改善候補（Version 2.x〜3.0で検討し得る設計）**:
+
+- **`DocumentReference`の導入**: `Document`本体から`file_path`を分離し、「PDFの所在を解決するための値オブジェクト」として独立させる。`Document`は純粋なIdentity（`id`, `source_pdf_id`, `analysis`, `analyzed_at`, `analyzer_version`）のみを持ち、`file_path`の解決は別の型・別のAPIを経由する。
+- **Repository Lookup（Repository経由の解決）**: `file_path`をLayout Detectorに直接持たせず、`source_pdf_id`（`PdfId`）から`PdfRepository`等を介して解決する。ただし、これは現行のTask5禁止事項（Layout Detectorの`repositories/`依存禁止）およびADR-0011の中核パイプライン各段階の純粋変換という設計原則との整合を、別途ADRで慎重に検討する必要がある。
+- **Artifact Locator（アーティファクト所在解決の抽象化）**: PDFファイルの物理的な格納場所（ローカルファイルシステム・オブジェクトストレージ等）を抽象化する専用の値オブジェクト・サービスを導入し、`file_path`という文字列型の直接依存を解消する。将来的なStorage Abstraction（外部ストレージへの移行、[`docs/design-freeze.md`](../design-freeze.md)のTODO「PDF本体の外部ストレージ製品の選定」参照）とも関連する。
+
+**現時点での判断**: 上記はいずれも**設計変更しない**。`Document.file_path`は、Version 2.0のPipeline Stage間で元PDFへアクセスするためのReferenceとして妥当であり、現行の禁止事項（Repository参照禁止）とも整合する。改善候補は、Version 3.0設計着手時（またはStorage Abstractionの必要性が実際に顕在化した時点）に、新規ADRの起票を通じて再評価する（[`docs/design-freeze.md`](../design-freeze.md)のDeferred Decisions、[`docs/roadmap.md`](../roadmap.md)参照）。
+
 ## 関連ADR
 - [ADR-0006](0006-pipeline-provenance.md) — パイプライン段階分割と来歴管理。
 - [ADR-0011](0011-fixed-core-pipeline.md) — 中核パイプラインの固定化。段階の数・順序・名称は本ADRでも変更しない。

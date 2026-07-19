@@ -29,6 +29,10 @@
 - 依存ライブラリ・ビルドツール・CI構成の変更
 - 中核パイプラインの段階構成（Document Analyzer / Layout Detector / Section Parser / Field Extractor / Normalizer / Validator）の変更。これは通常のADR提案では足りず、必ずユーザーの明示的な承認を要する（[ADR-0011](docs/adr/0011-fixed-core-pipeline.md)）
 
+### Architecture Guard Rails（個別の設計判断）
+
+- `Document.file_path`（[ADR-0035](docs/adr/0035-layout-detector-owns-pdf-content-access.md)）はVersion 2では設計済みであり、現状維持が既定である。`DocumentReference`分離・Repository経由の解決等の改善は、ADR-0035の「Future Improvements」節・[`docs/roadmap.md`](docs/roadmap.md)に記録済みの再評価候補として扱い、**ADR追加後のみ**実施する。既存ADRの決定を「より良い設計に見えるから」という理由だけで無断リファクタリングしない。
+
 ## 未知パターンへの対応順位
 
 新しい表記ゆれ・組織名・様式・PDFの例外に遭遇した場合、次の優先順位で対応する（[ADR-0012](docs/adr/0012-error-handling-priority-order.md)）。正規表現や `try/except` によるコード側の特殊対応を安易に追加しない。
