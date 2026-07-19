@@ -2,7 +2,7 @@ from mod_personnel_db.models import (
     ConfidenceBand,
     ErrorCategory,
     LearningStatus,
-    PipelineStage,
+    PipelineStageName,
     RegressionStatus,
 )
 
@@ -17,7 +17,7 @@ def test_confidence_band_is_str_subclass() -> None:
 
 
 def test_pipeline_stage_values_match_schema_check_constraint() -> None:
-    assert {s.value for s in PipelineStage} == {
+    assert {s.value for s in PipelineStageName} == {
         "layout_detector",
         "section_parser",
         "field_extractor",

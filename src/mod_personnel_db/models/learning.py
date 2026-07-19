@@ -12,7 +12,7 @@ from datetime import datetime
 from mod_personnel_db.models.enums import (
     ErrorCategory,
     LearningStatus,
-    PipelineStage,
+    PipelineStageName,
     RegressionStatus,
 )
 from mod_personnel_db.models.ids import (
@@ -31,7 +31,7 @@ class LearningRecord:
     id: LearningRecordId | None
     source_candidate_id: CandidateId | None
     source_review_item_id: ReviewItemId | None
-    pipeline_stage: PipelineStage
+    pipeline_stage: PipelineStageName
     error_category: ErrorCategory
     field_name: str | None
     wrong_value: str

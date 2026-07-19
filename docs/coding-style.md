@@ -47,10 +47,10 @@ Python標準の命名規則（PEP 8）を基本とし、`ruff`の`N`ルール（
 
 - Enumクラス名は`PascalCase`（例: `LearningStatus`）。
 - メンバー名（Python識別子）は`UPPER_SNAKE_CASE`。
-- メンバー値（`str, Enum`の場合の文字列値）は、対応するDBの`CHECK`制約の値と1対1で一致する小文字`snake_case`とする。
+- メンバー値（`enum.StrEnum`の場合の文字列値、[ADR-0030](adr/0030-strenum-adoption.md)）は、対応するDBの`CHECK`制約の値と1対1で一致する小文字`snake_case`とする。
 
   ```python
-  class LearningStatus(str, Enum):
+  class LearningStatus(StrEnum):
       OPEN = "open"
       IN_REVIEW = "in_review"
       REFLECTED = "reflected"

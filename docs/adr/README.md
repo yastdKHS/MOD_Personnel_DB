@@ -108,4 +108,4 @@ stateDiagram-v2
 
 詳細なメタデータ（ステータス・作成日・最終更新日・関連ADR・関連ドキュメント）は [`index.md`](index.md) を参照。依存関係の全体像は [`dependency-map.md`](dependency-map.md) を参照。
 
-現在のADR数: 29（0001〜0029）。うち0001〜0017は初期設計時に、0018〜0026は [Gap Analysis](gap-analysis.md) に基づき、0027はReview Domainの中核化に伴い、0028はConfiguration Architecture（[`docs/configuration.md`](../configuration.md)）設計時のPydantic Settings採用に伴い、0029はSecurity Architecture（[`docs/security.md`](../security.md)）設計時の署名・GitHub Actionsハードニング・監査ログ方針の決定に伴い追加された。
+現在のADR数: 30（0001〜0030）。うち0001〜0017は初期設計時に、0018〜0026は [Gap Analysis](gap-analysis.md) に基づき、0027はReview Domainの中核化に伴い、0028はConfiguration Architecture（[`docs/configuration.md`](../configuration.md)）設計時のPydantic Settings採用に伴い、0029はSecurity Architecture（[`docs/security.md`](../security.md)）設計時の署名・GitHub Actionsハードニング・監査ログ方針の決定に伴い、0030はPhase2 Task2の実装で判明した`str, Enum`多重継承の機械的な摩擦（ruff/mypy）を解消するための`enum.StrEnum`採用に伴い追加された。

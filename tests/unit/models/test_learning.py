@@ -8,7 +8,7 @@ from mod_personnel_db.models import (
     ErrorCategory,
     LearningRecord,
     LearningStatus,
-    PipelineStage,
+    PipelineStageName,
     RegressionStatus,
 )
 from mod_personnel_db.models.values import ModelValidationError
@@ -25,7 +25,7 @@ def _make_record(
         id=None,
         source_candidate_id=None,
         source_review_item_id=None,
-        pipeline_stage=PipelineStage.NORMALIZER,
+        pipeline_stage=PipelineStageName.NORMALIZER,
         error_category=ErrorCategory.KNOWLEDGE_GAP,
         field_name="rank",
         wrong_value="陸将補（誤）",
@@ -54,7 +54,7 @@ def test_learning_record_normal_open_state() -> None:
 
     assert record.status is LearningStatus.OPEN
     assert record.correct_value is None
-    assert record.pipeline_stage is PipelineStage.NORMALIZER
+    assert record.pipeline_stage is PipelineStageName.NORMALIZER
 
 
 def test_learning_record_in_review_requires_correct_value() -> None:
@@ -94,14 +94,14 @@ def test_learning_record_verified_with_regression_passed_is_valid() -> None:
 @pytest.mark.parametrize(
     "stage",
     [
-        PipelineStage.LAYOUT_DETECTOR,
-        PipelineStage.SECTION_PARSER,
-        PipelineStage.FIELD_EXTRACTOR,
-        PipelineStage.NORMALIZER,
-        PipelineStage.VALIDATOR,
+        PipelineStageName.LAYOUT_DETECTOR,
+        PipelineStageName.SECTION_PARSER,
+        PipelineStageName.FIELD_EXTRACTOR,
+        PipelineStageName.NORMALIZER,
+        PipelineStageName.VALIDATOR,
     ],
 )
-def test_pipeline_stage_enum_members(stage: PipelineStage) -> None:
+def test_pipeline_stage_enum_members(stage: PipelineStageName) -> None:
     assert isinstance(stage.value, str)
 
 

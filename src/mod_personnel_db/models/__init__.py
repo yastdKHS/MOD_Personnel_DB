@@ -14,7 +14,7 @@ from mod_personnel_db.models.enums import (
     ConfidenceBand,
     ErrorCategory,
     LearningStatus,
-    PipelineStage,
+    PipelineStageName,
     RegressionStatus,
 )
 from mod_personnel_db.models.export import ExportRecord
@@ -71,7 +71,7 @@ __all__ = [
     "PdfRecord",
     "PersonnelSection",
     "PersonnelSectionId",
-    "PipelineStage",
+    "PipelineStageName",
     "RawRecord",
     "RegressionStatus",
     "ReviewItem",
