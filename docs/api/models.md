@@ -143,14 +143,16 @@ Field Extractorの出力。正規化前のフィールド。
 @dataclass(frozen=True, slots=True)
 class RawRecord:
     section_ref: PersonnelSectionId | None
+    layout_id: str  # era_id（ADR-0039）
     record_index: int
     raw_fields: Mapping[str, str]
     extracted_at: datetime
 ```
 
-- **属性**: `section_ref`はパイプライン実行中（未永続化）は`None`、永続化後は`PersonnelSectionId`を持つ（[`pipeline.md`](pipeline.md)のステージ間受け渡しでは`None`のまま扱われ、`CandidateRepository.add_raw`呼び出し時に紐付けが確定する)。`raw_fields`は列位置ベースの汎用フィールド名（`column_1`, `column_2`, ...、[ADR-0038](../adr/0038-field-extractor-produces-field-extraction-result.md)）から生テキストへの写像。
-- **不変条件**: `raw_fields`は空でない。`record_index >= 0`。
-- **Validation Rule（[ADR-0038](../adr/0038-field-extractor-produces-field-extraction-result.md)で確定）**: `raw_fields`のキー集合は、Field Extractorが`PersonnelSection.section_text`の該当行から構造的に認識した列の集合と一致する（`column_1`, `column_2`, ...の汎用名。検証自体はField Extractorの責務、[`architecture-contract.md`](../architecture/architecture-contract.md)）。列位置から意味的フィールド名（`name`/`rank`/`organization`等）への対応付けは、[ADR-0038](../adr/0038-field-extractor-produces-field-extraction-result.md)の範囲外とし、Normalizer実装着手前に新規ADRで確定する。
+- **属性**: `section_ref`はパイプライン実行中（未永続化）は`None`、永続化後は`PersonnelSectionId`を持つ（[`pipeline.md`](pipeline.md)のステージ間受け渡しでは`None`のまま扱われ、`CandidateRepository.add_raw`呼び出し時に紐付けが確定する)。`layout_id`はField Extractorが入力`PersonnelSection.layout_id`をそのままコピーする`era_id`（[ADR-0037](../adr/0037-layout-detector-produces-layout-artifact.md)の`PersonnelSection.layout_id: str`と同じ意味論、[ADR-0039](../adr/0039-normalizer-field-mapping-via-extended-layout-knowledge.md)）。`raw_fields`は列位置ベースの汎用フィールド名（`column_1`, `column_2`, ...、[ADR-0038](../adr/0038-field-extractor-produces-field-extraction-result.md)）から生テキストへの写像。
+- **不変条件**: `raw_fields`は空でない。`record_index >= 0`。`layout_id`は空文字列を許容しない。
+- **Validation Rule（[ADR-0038](../adr/0038-field-extractor-produces-field-extraction-result.md)で確定）**: `raw_fields`のキー集合は、Field Extractorが`PersonnelSection.section_text`の該当行から構造的に認識した列の集合と一致する（`column_1`, `column_2`, ...の汎用名。検証自体はField Extractorの責務、[`architecture-contract.md`](../architecture/architecture-contract.md)）。
+- **列位置→意味的フィールド名マッピング（[ADR-0039](../adr/0039-normalizer-field-mapping-via-extended-layout-knowledge.md)で確定）**: `column_N`から意味的フィールド名（`name`/`rank`/`organization`等）への対応付けは、Normalizerが`layout_id`をキーに`knowledge/layout`カテゴリ（[`docs/knowledge/schema.md`](../knowledge/schema.md#layout)）のマッピングエントリを`KnowledgeSnapshot`経由で参照して行う。`RawRecord`自体は対応付け結果を持たない（正規化前の生値のみを保持するという既存方針を維持）。
 
 ### `FieldExtractionResult`（[ADR-0038](../adr/0038-field-extractor-produces-field-extraction-result.md)）
 

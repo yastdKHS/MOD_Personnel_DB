@@ -54,6 +54,7 @@
 | [0036](0036-pyyaml-for-layout-definition.md) | LayoutDefinitionの実装にPyYAMLを採用する | Accepted | 2026-07-19 | 2026-07-19 | 0001, 0005, 0026, 0034, 0035 | pyproject.toml |
 | [0037](0037-layout-detector-produces-layout-artifact.md) | Layout Detector Produces Layout Artifact | Accepted | 2026-07-19 | 2026-07-19 | 0011, 0032, 0035, 0038 | api/models.md, api/interfaces.md, api/package-design.md, architecture.md, architecture/architecture-contract.md, database/schema.md, review/queue.md |
 | [0038](0038-field-extractor-produces-field-extraction-result.md) | Field Extractor Produces FieldExtractionResult | Accepted | 2026-07-19 | 2026-07-19 | 0011, 0035, 0037 | api/models.md, api/interfaces.md, api/package-design.md, architecture/architecture-contract.md |
+| [0039](0039-normalizer-field-mapping-via-extended-layout-knowledge.md) | Normalizer Field Mapping via Extended Layout Knowledge | Accepted | 2026-07-19 | 2026-07-19 | 0003, 0005, 0011, 0012, 0037, 0038 | knowledge/schema.md, api/models.md |
 
 ## 検討したが採用しなかった候補
 
