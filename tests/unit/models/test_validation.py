@@ -99,7 +99,7 @@ def test_personnel_section_rejects_invalid_values(
     with pytest.raises(ModelValidationError):
         PersonnelSection(
             document_ref=PdfId(1),
-            layout_id=LayoutId(1),
+            layout_id="format_a",
             section_index=section_index,
             section_label=None,
             page_range=page_range,

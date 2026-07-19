@@ -1,6 +1,6 @@
 # Parser Development Guidelines
 
-> 本ドキュメントは、中核パイプラインの`document/`, `layout/`, `sections/`, `extractors/`, `normalizers/`, `validators/`各パッケージ（以下まとめて「Parser」と呼ぶ）を実装・変更する際に従う専用規約である。[`docs/implementation.md`](implementation.md)の「Parser Rule」が参照する正の文書。[ADR-0011](adr/0011-fixed-core-pipeline.md)（中核パイプライン固定化）・[ADR-0012](adr/0012-error-handling-priority-order.md)（未知パターンへの対応優先順位）・[`docs/architecture/architecture-contract.md`](architecture/architecture-contract.md)（11の分離保証）と矛盾しない。実装コードは含まない。
+> 本ドキュメントは、中核パイプラインの`document/`, `layout/`, `sections/`, `extractors/`, `normalizers/`, `validators/`各パッケージ（以下まとめて「Parser」と呼ぶ）を実装・変更する際に従う専用規約である。[`docs/implementation.md`](implementation.md)の「Parser Rule」が参照する正の文書。[ADR-0011](adr/0011-fixed-core-pipeline.md)（中核パイプライン固定化）・[ADR-0012](adr/0012-error-handling-priority-order.md)（未知パターンへの対応優先順位）・[`docs/architecture/architecture-contract.md`](architecture/architecture-contract.md)（12の分離保証）と矛盾しない。実装コードは含まない。
 
 ## ParserはKnowledgeより優先されない
 
@@ -16,7 +16,7 @@ Parserのコードロジック（正規表現・分岐処理等）は、`knowled
 
 ## Unknown検出を優先する
 
-Layout Detectorは、既存の`layouts/`のどの`era_id`にも該当しない入力を検出した場合、無理に最も近い既存様式へ分類しようとせず、明示的に「未知の様式」として扱う（[`docs/architecture.md`](architecture.md)）。**「エラーとして扱う」とは`LayoutDetectorError`を送出することではない**（[ADR-0035](adr/0035-layout-detector-owns-pdf-content-access.md)）。`LayoutDetector.run()`は正常に`LayoutDetectionResult`（`layout_id=None`, `LayoutWarning.NO_MATCH`または`LOW_CONFIDENCE`を含む）を返す。既存様式の判定ロジックを条件分岐で無理に拡張して未知パターンを飲み込むことを禁止する。未知の検出は、[`docs/review/policy.md`](review/policy.md)のレビューキュー優先度スコアにおいて`layout_unknown`として最優先で扱われる設計（[`docs/review/queue.md`](review/queue.md)が`LayoutDetectionResult.confidence`を読み取って算出する）と対応しており、Parser側で誤って「既知」と誤判定すると、この優先度付けの仕組みが機能しなくなる。
+Layout Detectorは、既存の`layouts/`のどの`era_id`にも該当しない入力を検出した場合、無理に最も近い既存様式へ分類しようとせず、明示的に「未知の様式」として扱う（[`docs/architecture.md`](architecture.md)）。**「エラーとして扱う」とは`LayoutDetectorError`を送出することではない**（[ADR-0035](adr/0035-layout-detector-owns-pdf-content-access.md)）。`LayoutDetector.run()`は正常に`LayoutArtifact`（`.detection.layout_id=None`, `.detection.warnings`に`LayoutWarning.NO_MATCH`または`LOW_CONFIDENCE`を含む、[ADR-0037](adr/0037-layout-detector-produces-layout-artifact.md)）を返す。既存様式の判定ロジックを条件分岐で無理に拡張して未知パターンを飲み込むことを禁止する。未知の検出は、[`docs/review/policy.md`](review/policy.md)のレビューキュー優先度スコアにおいて`layout_unknown`として最優先で扱われる設計（[`docs/review/queue.md`](review/queue.md)が`LayoutArtifact.detection.confidence`を読み取って算出する）と対応しており、Parser側で誤って「既知」と誤判定すると、この優先度付けの仕組みが機能しなくなる。
 
 ## Confidence算出方法
 
@@ -109,7 +109,7 @@ Parserの量的な品質は、[`docs/testing/test-policy.md`](testing/test-polic
 - [ADR-0011](adr/0011-fixed-core-pipeline.md) — 中核処理パイプラインの固定化
 - [ADR-0012](adr/0012-error-handling-priority-order.md) — 未知パターンへの対応優先順位
 - [ADR-0023](adr/0023-parser-versioning-policy.md) — Parserバージョニング方針
-- [`docs/architecture/architecture-contract.md`](architecture/architecture-contract.md) — Architecture Contract（11の分離保証）
+- [`docs/architecture/architecture-contract.md`](architecture/architecture-contract.md) — Architecture Contract（12の分離保証）
 - [`docs/api/package-design.md`](api/package-design.md) — パッケージ構成・依存禁止ルール
 - [`docs/api/pipeline.md`](api/pipeline.md) — `PipelineStage`（`run()`のみの公開）
 - [`docs/testing/test-policy.md`](testing/test-policy.md) — Performance Test / Benchmark Test

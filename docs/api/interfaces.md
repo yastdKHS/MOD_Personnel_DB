@@ -21,7 +21,7 @@
 ```python
 from typing import Protocol
 from mod_personnel_db.models import (
-    Document, Layout, LayoutDetectionResult, PersonnelSection,
+    Document, Layout, LayoutArtifact, SectionParseResult,
     RawRecord, NormalizedRecord, KnowledgeSnapshot, ValidationResult,
     ValidationRuleSet, PdfRecord,
 )
@@ -46,28 +46,28 @@ class LayoutDetector(Protocol):
     を用いてPDFファイルを自ら再読込する、**PDF本文（文字列・Font・Bounding Box・
     Drawing・Rotation・画像・Annotation）へアクセスできる唯一のPipeline Stage**
     である。Document Analyzer（段階1）はこれらにアクセスせず（ADR-0032）、
-    Section Parser以降（段階3〜）も直接アクセスしない。判定結果（`LayoutDetectionResult`）
-    のみが後続段階に渡される。
+    Section Parser以降（段階3〜）も直接アクセスしない。戻り値`LayoutArtifact`
+    （[ADR-0037](../adr/0037-layout-detector-produces-layout-artifact.md)）は、
+    判定結果（`.detection: LayoutDetectionResult`）に加え、再読込した各ページの
+    生テキスト（`.pages`）を保持する——これがSection ParserがPDF本文を得る
+    唯一の経路となる。
     """
 
-    def run(self, context: PipelineContext, document: Document) -> LayoutDetectionResult: ...
+    def run(self, context: PipelineContext, document: Document) -> LayoutArtifact: ...
 
 
 class SectionParser(Protocol):
-    """判定済みレイアウトに従い対象セクションを切り出す（段階3）。
+    """LayoutArtifactからPersonnel Sectionを切り出す（段階3）。
 
-    **注記（ADR-0035）**: Layout DetectorがPDF本文アクセスの唯一の担い手となった
-    ことにより、Section Parserがセクション切り出しに必要なテキストをどう得るか
-    （`LayoutDetectionResult`の拡張、または別の中間成果物の導入等）は本ドキュメント
-    時点では未確定である。Section Parserの実装着手前に別ADRで確定する
-    （[ADR-0035](../adr/0035-layout-detector-owns-pdf-content-access.md)参照）。
-    `PersonnelSection.page_range`の妥当性検証対象も同様に未確定
-    （[`models.md`](models.md#personnelsection)参照）。
+    **LayoutArtifact経由でのみPDFのテキストを得る（[ADR-0037](../adr/0037-layout-detector-produces-layout-artifact.md)）**:
+    Section ParserはPDFファイルを直接読み込まず、`pypdf`等のPDF解析ライブラリにも
+    依存しない。利用できるPDF由来のテキストは、入力`LayoutArtifact.pages`のみで
+    ある。`LayoutArtifact.detection.layout_id`が`None`（未知様式）の場合、
+    例外は送出せず`SectionParseResult.sections`を空で返す
+    （[`models.md`](models.md#sectionparseresult)参照）。
     """
 
-    def run(
-        self, context: PipelineContext, document: Document, layout_match: LayoutDetectionResult
-    ) -> tuple[PersonnelSection, ...]: ...
+    def run(self, context: PipelineContext, artifact: LayoutArtifact) -> SectionParseResult: ...
 
 
 class FieldExtractor(Protocol):

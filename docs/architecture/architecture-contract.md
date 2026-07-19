@@ -2,7 +2,7 @@
 
 > 本ドキュメントは[`docs/constitution.md`](../constitution.md)（Project Constitution）に従属する。両者が矛盾する場合はConstitutionが優先される。
 >
-> 本ドキュメントは、Interface & Package設計（[`docs/api/`](../api/)）全体が満たすべき11の分離保証を定義する（保証10は[ADR-0032](../adr/0032-redefine-document-analyzer-responsibility.md)、保証11は[ADR-0035](../adr/0035-layout-detector-owns-pdf-content-access.md)により追加）。個々の保証は[`package-design.md`](../api/package-design.md)（依存関係）・[`dependency-rule.md`](../api/dependency-rule.md)（禁止/許可パターン）・[`pipeline.md`](../api/pipeline.md)（`run()`のみの公開）・[`docs/review/`](../review/)（Review Domain）の設計によって、**構造的に**（レビューや申し合わせだけでなく、依存グラフ上の事実として）実現される。曖昧な保証は解釈を明記し、将来の実装者が異なる解釈をしないようにする。
+> 本ドキュメントは、Interface & Package設計（[`docs/api/`](../api/)）全体が満たすべき12の分離保証を定義する（保証10は[ADR-0032](../adr/0032-redefine-document-analyzer-responsibility.md)、保証11は[ADR-0035](../adr/0035-layout-detector-owns-pdf-content-access.md)、保証12は[ADR-0037](../adr/0037-layout-detector-produces-layout-artifact.md)により追加）。個々の保証は[`package-design.md`](../api/package-design.md)（依存関係）・[`dependency-rule.md`](../api/dependency-rule.md)（禁止/許可パターン）・[`pipeline.md`](../api/pipeline.md)（`run()`のみの公開）・[`docs/review/`](../review/)（Review Domain）の設計によって、**構造的に**（レビューや申し合わせだけでなく、依存グラフ上の事実として）実現される。曖昧な保証は解釈を明記し、将来の実装者が異なる解釈をしないようにする。
 >
 > **本ドキュメントに実装はない。**
 
@@ -21,8 +21,9 @@
 | 9 | Reviewだけがgold_records（Gold Database）を書き換えられる | `review/`以外のいかなるパッケージも`GoldRepository`の書き込みメソッドを呼ばない |
 | 10 | 各段階は自段階の出力物の生成を独占する（Exclusive Generation Ownership） | 各段階の出力型を生成できるのは対応する1パッケージのみ |
 | 11 | Layout DetectorだけがPDF本文にアクセスできる | `layout/`のみがPDF本文（文字列・Font・Bounding Box・Drawing・Rotation・画像・Annotation）を扱う |
+| 12 | Section ParserはLayoutArtifact経由でのみPDFのテキストを得られる | `sections/`はPDFファイル・PDF解析ライブラリに依存せず、`LayoutArtifact.pages`のみを入力とする |
 
-（`⊥`は「依存しない」を表す。保証8と9は同じ設計判断を異なる向きから述べたものであり、[9節](#9-reviewだけがgold_recordsgold-databaseを書き換えられる)で統合的に扱う。保証10は[ADR-0032](../adr/0032-redefine-document-analyzer-responsibility.md)（Document Analyzer責務再定義）に伴い、保証11は[ADR-0035](../adr/0035-layout-detector-owns-pdf-content-access.md)（Layout Detector Owns PDF Content Access）に伴い追加した）
+（`⊥`は「依存しない」を表す。保証8と9は同じ設計判断を異なる向きから述べたものであり、[9節](#9-reviewだけがgold_recordsgold-databaseを書き換えられる)で統合的に扱う。保証10は[ADR-0032](../adr/0032-redefine-document-analyzer-responsibility.md)（Document Analyzer責務再定義）に伴い、保証11は[ADR-0035](../adr/0035-layout-detector-owns-pdf-content-access.md)（Layout Detector Owns PDF Content Access）に伴い、保証12は[ADR-0037](../adr/0037-layout-detector-produces-layout-artifact.md)（Layout Detector Produces Layout Artifact）に伴い追加した）
 
 ---
 
@@ -42,7 +43,7 @@
 
 **理由**: Layout Detectorの責務は「どの様式か」の判定のみであり、フィールドの中身への言及は責務の逸脱である（単一責務、[ADR-0011](../adr/0011-fixed-core-pipeline.md)）。
 
-**実現方法**: `layout/`の依存先は`models/`, `utils/`のみ。`LayoutDetector.run()`の戻り値`LayoutDetectionResult`（[`models.md`](../api/models.md#補助的な値オブジェクト)）は`Layout`＋`Confidence`のみを持ち、フィールド定義を含まない。
+**実現方法**: `layout/`の依存先は`models/`, `utils/`のみ。`LayoutDetector.run()`の戻り値`LayoutArtifact`（[ADR-0037](../adr/0037-layout-detector-produces-layout-artifact.md)、`.detection: LayoutDetectionResult`と`.pages`を持つ）はフィールド定義を含まない。
 
 ## 3. Section Parserはknowledgeを知らない
 
@@ -114,8 +115,8 @@
 | 段階 | 独占して生成するもの | 対応する既存保証 |
 |---|---|---|
 | Document Analyzer | **何も生成しない**（文字列・レイアウト情報・論理構造のいずれも生成しない。メタデータ・統計・警告のみを返す） | [保証1](#1-document-analyzerはlayoutを知らない)の強化（Version 2.0、[ADR-0032](../adr/0032-redefine-document-analyzer-responsibility.md)） |
-| Layout Detector | レイアウト情報（`LayoutDetectionResult`） | [保証2](#2-layout-detectorはfieldを知らない) |
-| Section Parser | 論理構造（`PersonnelSection`、対象セクションの切り出し） | [保証3](#3-section-parserはknowledgeを知らない) |
+| Layout Detector | レイアウト情報とPDF本文（`LayoutArtifact`、`.detection: LayoutDetectionResult`＋`.pages`） | [保証2](#2-layout-detectorはfieldを知らない)・[保証11](#11-layout-detectorだけがpdf本文にアクセスできる) |
+| Section Parser | 論理構造（`SectionParseResult`、`.sections: tuple[PersonnelSection, ...]`＝対象セクションの切り出し） | [保証3](#3-section-parserはknowledgeを知らない)・[保証12](#12-section-parserはlayoutartifact経由でのみpdfのテキストを得られる) |
 | Field Extractor | 抽出結果（`RawRecord`） | [保証4](#4-field-extractorはdbを知らない) |
 | Normalizer | 正規化済みの値（`NormalizedRecord`） | [保証5](#5-normalizerは正規表現を持たない) |
 | Validator | 妥当性判定（`ValidationResult`。値そのものは生成しない） | [保証6](#6-validatorは修正しない) |
@@ -127,17 +128,25 @@
 
 ## 11. Layout DetectorだけがPDF本文にアクセスできる
 
-**保証の内容**: 中核パイプライン中で、PDF本文（ページ単位の生テキスト・文字列・Font情報・Bounding Box・Drawing・Rotation・画像・Annotation）へアクセスできるのは`layout/`パッケージ（Layout Detector）のみである。`document/`（Document Analyzer）はメタデータ・健全性・統計取得のためにPDFファイルを開くが、上記の情報を`Document`の出力に含めない（[保証1](#1-document-analyzerはlayoutを知らない)、[ADR-0032](../adr/0032-redefine-document-analyzer-responsibility.md)）。`sections/`以降（Section Parser〜Validator）はPDFファイルを直接読み込まず、`LayoutDetectionResult`（および将来のSection Parser設計で確定する追加の出力）のみを入力として受け取る。
+**保証の内容**: 中核パイプライン中で、PDF本文（ページ単位の生テキスト・文字列・Font情報・Bounding Box・Drawing・Rotation・画像・Annotation）へアクセスできるのは`layout/`パッケージ（Layout Detector）のみである。`document/`（Document Analyzer）はメタデータ・健全性・統計取得のためにPDFファイルを開くが、上記の情報を`Document`の出力に含めない（[保証1](#1-document-analyzerはlayoutを知らない)、[ADR-0032](../adr/0032-redefine-document-analyzer-responsibility.md)）。`sections/`以降（Section Parser〜Validator）はPDFファイルを直接読み込まず、`LayoutArtifact`（[ADR-0037](../adr/0037-layout-detector-produces-layout-artifact.md)、判定結果`LayoutDetectionResult`と再読込した各ページの生テキストを保持する）のみを入力として受け取る。
 
 **理由**: PDF本文へのアクセス手段（PDFパースライブラリの呼び出し）が複数のパッケージに分散すると、各パッケージが独自にPDF構造を解釈することになり、「様式判定はLayout Detectorの責務」（[ADR-0011](../adr/0011-fixed-core-pipeline.md)）という単一責務の原則が形骸化する。アクセス手段を1箇所に集約することで、PDFライブラリの入れ替え（[ADR-0034](../adr/0034-pypdf-for-document-analyzer.md)）の影響範囲を`layout/`（および`document/`のメタデータ取得部分）に限定できる。
 
 **実現方法**: `Document`（[`docs/api/models.md`](../api/models.md#document)）は`file_path`を保持するが、この値を実際に用いてPDFファイルを開くのは`layout/`パッケージの`LayoutDetector.run()`のみである（[ADR-0035](../adr/0035-layout-detector-owns-pdf-content-access.md)）。`layout/`の依存先は`models/`, `utils/`（プロジェクト内）と`pypdf`（外部、PDF再読込用）・`pyyaml`（外部、`LayoutDefinition`のYAMLロード用、[ADR-0036](../adr/0036-pyyaml-for-layout-definition.md)）に限定され、`sections/`以降のパッケージは`pypdf`等のPDFパースライブラリに依存しない（[`docs/api/package-design.md`](../api/package-design.md)の依存先サマリ表）。
 
+## 12. Section ParserはLayoutArtifact経由でのみPDFのテキストを得られる
+
+**保証の内容**: `sections/`パッケージ（Section Parser）は、PDFファイルを直接読み込まず、`pypdf`等のPDF解析ライブラリにも依存しない。Section Parserが利用できるPDF由来のテキストは、`layout/`パッケージ（Layout Detector）が生成した`LayoutArtifact.pages`のみである（[保証11](#11-layout-detectorだけがpdf本文にアクセスできる)、[ADR-0037](../adr/0037-layout-detector-produces-layout-artifact.md)）。
+
+**理由**: [保証11](#11-layout-detectorだけがpdf本文にアクセスできる)が「PDF本文へアクセスできるのはLayout Detectorのみ」と定めた直接の帰結として、Section ParserがPDF本文を必要とする場合の唯一正当な経路をLayout Detectorの出力に限定する必要がある。これにより、PDFライブラリへの依存が`layout/`1箇所に集約されたまま保たれ、Section Parserの実装がPDF構造の解釈を独自に持つことを防ぐ。
+
+**実現方法**: `LayoutDetector.run()`の戻り値`LayoutArtifact`（[`docs/api/models.md`](../api/models.md#layoutartifact)）は`pages: tuple[LayoutArtifactPage, ...]`を保持し、`SectionParser.run(context, artifact: LayoutArtifact) -> SectionParseResult`（[`docs/api/interfaces.md`](../api/interfaces.md#中核パイプライン6段階)）はこれを唯一の入力とする。`sections/`の依存先は`models/`, `utils/`（プロジェクト内）のみであり、`pypdf`等の外部PDFライブラリへの依存を持たない（[`docs/api/package-design.md`](../api/package-design.md)の依存先サマリ表）。
+
 ---
 
 ## この契約の検証方法
 
-本ドキュメントの11保証はいずれも「特定パッケージが特定パッケージに依存しない」「特定の出力型を生成できるパッケージが1つに限られる」または「特定の外部リソース（PDF本文）へアクセスできるパッケージが1つに限られる」という形に還元できる（[`dependency-rule.md`](../api/dependency-rule.md)の全体依存グラフ）。したがって、実装着手後にこの契約が破られていないかは、以下の方法で検証可能である。
+本ドキュメントの12保証はいずれも「特定パッケージが特定パッケージに依存しない」「特定の出力型を生成できるパッケージが1つに限られる」または「特定の外部リソース（PDF本文）へアクセスできるパッケージが1つに限られる」という形に還元できる（[`dependency-rule.md`](../api/dependency-rule.md)の全体依存グラフ）。したがって、実装着手後にこの契約が破られていないかは、以下の方法で検証可能である。
 
 1. **静的解析**: `import-linter`等によるパッケージ間import制約の機械的検証（[`dependency-rule.md`](../api/dependency-rule.md#機械的な検証将来の推奨事項)）。
 2. **型検査**: `Validator.run()`の戻り値型に修正後の値が含まれないこと等は、`mypy --strict`（[`python-contract.md`](../api/python-contract.md)）による型シグネチャの検証で担保される。
@@ -165,3 +174,4 @@
 - [ADR-0021](../adr/0021-review-ui-strategy.md) — レビュー用インターフェース戦略
 - [ADR-0032](../adr/0032-redefine-document-analyzer-responsibility.md) — Document Analyzer責務再定義（保証1の強化、保証10の新設根拠）
 - [ADR-0035](../adr/0035-layout-detector-owns-pdf-content-access.md) — Layout Detector Owns PDF Content Access（保証11の新設根拠）
+- [ADR-0037](../adr/0037-layout-detector-produces-layout-artifact.md) — Layout Detector Produces Layout Artifact（保証12の新設根拠）

@@ -91,17 +91,49 @@ Section Parserの出力。`candidate_records`table:`personnel_sections`に対応
 @dataclass(frozen=True, slots=True)
 class PersonnelSection:
     document_ref: PdfId
-    layout_id: LayoutId
+    layout_id: str
     section_index: int
     section_label: str | None
     page_range: tuple[int, int]
     section_text: str
 ```
 
-- **属性**: [`docs/database/schema.md`](../database/schema.md#3-personnel_sections)の`personnel_sections`列に対応（`parser_version_id`は永続化時に`CandidateRepository.add_section`の呼び出し文脈から付与されるため、モデル自体には持たせない——[`pipeline.md`](pipeline.md)の`PipelineContext`が保持する）。
+- **属性**: [`docs/database/schema.md`](../database/schema.md#3-personnel_sections)の`personnel_sections`列に対応（`parser_version_id`は永続化時に`CandidateRepository.add_section`の呼び出し文脈から付与されるため、モデル自体には持たせない——[`pipeline.md`](pipeline.md)の`PipelineContext`が保持する）。`layout_id`は`Layout`（`layouts`テーブル）のDB主キー`LayoutId`ではなく、`LayoutDetectionResult.layout_id`と同じ値域の`era_id`（`str`）である（[ADR-0037](../adr/0037-layout-detector-produces-layout-artifact.md)）。Section ParserはRepositoryにアクセスしないため、DB主キーへの解決は永続化時に`SqliteCandidateRepository.add_section`が担う。
 - **不変条件**: `section_index >= 0`。`page_range`は`(start, end)`で`start <= end`。
-- **未確定事項（[ADR-0032](../adr/0032-redefine-document-analyzer-responsibility.md)）**: `page_range`が参照するページ範囲の妥当性検証（旧設計では「`Document.pages`の範囲内」）は、Version 2.0で`Document`がページ情報を保持しなくなったことに伴い**未確定**である。Section Parser設計時に、`page_range`の妥当性を検証する対象（`ExtractedDocument`等、[ADR-0032](../adr/0032-redefine-document-analyzer-responsibility.md#pageの扱い)参照）を別ADRで確定する。Section Parser実装着手前に解決必須。
+- **`page_range`の妥当性検証対象（[ADR-0037](../adr/0037-layout-detector-produces-layout-artifact.md)で確定）**: `page_range`が参照するページ範囲は、Section Parserの入力`LayoutArtifact.pages`（[`#layoutartifact`](#layoutartifact)）のページ番号体系に対応する。Version 1設計時点の「`Document.pages`の範囲内」という検証対象は、Version 2.0で`Document`がページ情報を保持しなくなったことに伴い[ADR-0032](../adr/0032-redefine-document-analyzer-responsibility.md)時点では未確定だったが、`LayoutArtifact`の新設（ADR-0037）により確定した。
 - **Validation Rule**: `section_text`は空文字列を許容しない（空セクションはSection Parserが生成すべきでない、上位の契約違反として扱う）。
+
+### `SectionParseResult`（[ADR-0037](../adr/0037-layout-detector-produces-layout-artifact.md)）
+
+`SectionParser.run()`の戻り値。
+
+```python
+@dataclass(frozen=True, slots=True)
+class SectionEvidence:
+    header_line: str | None
+    footer_line: str | None
+    body_line_count: int
+    page_range: tuple[int, int]
+
+
+@dataclass(frozen=True, slots=True)
+class SectionCandidate:
+    section_index: int
+    score: float
+    evidence: SectionEvidence
+
+
+@dataclass(frozen=True, slots=True)
+class SectionParseResult:
+    sections: tuple[PersonnelSection, ...]
+    candidates: tuple[SectionCandidate, ...]
+    confidence: Confidence
+```
+
+- **属性**: `sections`は確定した`PersonnelSection`（`candidates`のうちConfidence閾値以上、かつ`LayoutArtifact.detection.layout_id`が既知の場合のみ生成される）。`candidates`は評価した全Section候補（`LayoutArtifact.pages`の各ページに対応、Confidence閾値未満のものを含む）。`confidence`は`candidates`のスコア平均（候補が0件の場合は`score=0.0`）。
+- **不変条件**: `SectionCandidate.score`は`[0.0, 1.0]`。`SectionEvidence.body_line_count >= 0`。`SectionEvidence.page_range`は`(start, end)`で`start <= end`。
+- **未一致・低Confidenceの扱い**: `LayoutArtifact.detection.layout_id`が`None`（未知様式）の場合、`SectionParser.run()`は例外を送出せず、`sections=()`（空）・`candidates`（評価は実施）・低い`confidence`を返す（[ADR-0035](../adr/0035-layout-detector-owns-pdf-content-access.md)以来の「内容品質の問題は例外ではなくデータとして表現する」方針を踏襲、`SectionParserError`との使い分けは[`interfaces.md`](interfaces.md#sectionparser)参照）。
+- **Section境界判定の粒度（Task6時点の実装判断）**: Section境界はページ境界を単位とする（1ページ=1Section候補）。複数ページにまたがるSectionの結合判定は、様式ごとの構造情報を要する可能性が高く、`LayoutArtifact`が持つ情報のみでは信頼できる判定ができないため、将来の拡張点として保留する。
 
 ## `RawRecord`
 
@@ -435,7 +467,7 @@ class ValidationRuleSet:
 
 ### `LayoutDetectionResult`（Version 2.0、[ADR-0035](../adr/0035-layout-detector-owns-pdf-content-access.md)）
 
-Layout Detectorの戻り値（[`interfaces.md`](interfaces.md)参照）。設計フェーズ当初（`layout: Layout` / `confidence: Confidence`の2属性、Superseded）から、Task5の実装指示に基づき拡張された。
+様式判定結果（[`interfaces.md`](interfaces.md)参照）。設計フェーズ当初（`layout: Layout` / `confidence: Confidence`の2属性、Superseded）から、Task5の実装指示に基づき拡張された。**Layout Detectorの戻り値そのものではない**——ADR-0037により、`LayoutDetector.run()`は本型を`.detection`として内包する`LayoutArtifact`（[`#layoutartifact`](#layoutartifact)）を返す。
 
 ```python
 from enum import StrEnum
@@ -518,6 +550,28 @@ class LayoutDetectionResult:
 - **`layout_id`の型**: `LayoutCandidate.layout_id`・`LayoutDetectionResult.layout_id`はいずれも`str`型で、`LayoutDefinition.era_id`と同じ値（`era_id`文字列）を表す。`Layout`（`layouts`テーブル）のDB主キーである`LayoutId`（`models/ids.py`の不透明な`int`）とは異なる。Layout Detectorは`LayoutDefinition`（`era_id`キー）のみを入力とし、`repositories/`に依存しない（[ADR-0035](../adr/0035-layout-detector-owns-pdf-content-access.md)）ため、`era_id`から`LayoutId`（DB主キー）への解決はLayout Detectorより後段の責務とする。
 - **不変条件**: `layout_id is not None`のとき`layout_version is not None`（およびその逆）。`layout_id is None`の場合`warnings`に`LayoutWarning.NO_MATCH`または`LayoutWarning.LOW_CONFIDENCE`のいずれかを含む。`LayoutCandidate.score`・`LayoutConfidence.score`は`[0.0, 1.0]`。
 - **`LayoutEvidence`の各フィールドの粒度**: `font_statistics`（検出された代表フォント名の集合）・`line_statistics`/`block_statistics`（1ページあたり平均行数/ブロック数）は、Task5の実装時点でLayout Detectorの判定精度に必要十分な粒度として選定した実装判断であり、将来Layout判定ルールの拡充に応じて型を精緻化してよい。
+
+### `LayoutArtifact`（[ADR-0037](../adr/0037-layout-detector-produces-layout-artifact.md)）
+
+`LayoutDetector.run()`の戻り値。Section ParserがPDF本文（テキスト）を得る唯一の経路であり（[ADR-0035](../adr/0035-layout-detector-owns-pdf-content-access.md)が確立した「Layout DetectorのみがPDF本文にアクセスできる」という保証の直接の帰結）、それより後段（Section Parser自身を含む）はPDFファイルを一切読み込まない。
+
+```python
+@dataclass(frozen=True, slots=True)
+class LayoutArtifactPage:
+    index: int
+    text: str
+
+
+@dataclass(frozen=True, slots=True)
+class LayoutArtifact:
+    source_pdf_id: PdfId
+    detection: LayoutDetectionResult
+    pages: tuple[LayoutArtifactPage, ...]
+```
+
+- **属性**: `detection`は[ADR-0035](../adr/0035-layout-detector-owns-pdf-content-access.md)が確定した`LayoutDetectionResult`（形状は無変更）をそのまま保持する。`docs/review/queue.md`の`layout_unknown`判定が参照する`confidence`は、アクセス経路が本型の`.detection.confidence`に変わる（値の意味・算出方法は無変更）。`pages`はLayout Detectorが再読込した各ページの生テキストを、ページ順（0始まりの連番）で保持する。
+- **不変条件**: `pages`の`index`は`0`始まりの連続した整数列でなければならない（`LayoutArtifactPage.index`は`0`以上）。
+- **Section Parserとの関係**: `PersonnelSection.page_range`が参照するページ範囲は、本型の`pages`のページ番号体系に対応する（[`#personnelsection`](#personnelsection)）。
 
 ### `LayoutDefinition`（[ADR-0035](../adr/0035-layout-detector-owns-pdf-content-access.md), [ADR-0036](../adr/0036-pyyaml-for-layout-definition.md)）
 

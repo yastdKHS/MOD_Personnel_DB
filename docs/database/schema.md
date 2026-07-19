@@ -244,7 +244,7 @@ CREATE INDEX idx_layouts_status ON layouts (status);
 
 **目的**: Document Analyzer → Layout Detector → Section Parser（[ADR-0011](../adr/0011-fixed-core-pipeline.md)）を経て切り出された、PDF内の「発令一覧」等のセクション単位の中間成果物。
 
-**責務**: PDFのどの範囲（ページ・セクション）が、どのレイアウト定義で、どのコードバージョンにより切り出されたかを記録する。Field Extractorの入力単位となる。
+**責務**: PDFのどの範囲（ページ・セクション）が、どのレイアウト定義で、どのコードバージョンにより切り出されたかを記録する。Field Extractorの入力単位となる。`layout_id`列（`layouts.id`へのFK）は、Section Parser（Repositoryにアクセスしない）が保持する`era_id`（[`models.md`](../api/models.md#personnelsection)の`PersonnelSection.layout_id`、[ADR-0037](../adr/0037-layout-detector-produces-layout-artifact.md)）から、`SqliteCandidateRepository.add_section`が永続化時に解決する。
 
 **保持期間**: 永久保持（監査・再現性のため）。`section_text` は大容量になり得るため、将来的に一定期間経過後の外部ストレージへのアーカイブを運用判断で検討してよいが、既定は永久保持とする。
 

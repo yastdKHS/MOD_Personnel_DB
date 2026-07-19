@@ -1,8 +1,10 @@
-"""Layout Detector実装。docs/api/interfaces.md#layoutdetector, ADR-0035, ADR-0036に対応する。
+"""Layout Detector実装。docs/api/interfaces.md#layoutdetector, ADR-0035/0036/0037に対応する。
 
 Document Analyzer（段階1）とは独立に、`document.file_path`を用いてPDFを自ら
 再読込し、様式判定に必要な特徴量（Evidence）を抽出し、注入された
-`LayoutDefinition`群と照合してVersion 2.0の`LayoutDetectionResult`を返す。
+`LayoutDefinition`群と照合する。戻り値は`LayoutArtifact`（ADR-0037）であり、
+判定結果（`LayoutDetectionResult`、`.detection`）に加え、再読込した各ページの
+生テキストを保持する——これがSection ParserがPDF本文を得る唯一の経路となる。
 Section生成・Field抽出・Regexによる値抽出・Knowledge参照・Normalizer/
 Validator/Repository参照・SQLite参照は行わない。
 """
@@ -20,6 +22,8 @@ from mod_personnel_db.models import (
     BoundingBoxStatistics,
     ConfidenceBand,
     Document,
+    LayoutArtifact,
+    LayoutArtifactPage,
     LayoutCandidate,
     LayoutConfidence,
     LayoutDefinition,
@@ -52,7 +56,7 @@ class _PageFeatures:
 
 
 class LayoutDetector:
-    """`PipelineStage[Document, LayoutDetectionResult]`を実装する。公開APIは`run()`のみ。"""
+    """`PipelineStage[Document, LayoutArtifact]`を実装する。公開APIは`run()`のみ。"""
 
     def __init__(
         self,
@@ -65,19 +69,26 @@ class LayoutDetector:
         self._confidence_threshold = confidence_threshold
         self._low_confidence_threshold = low_confidence_threshold
 
-    def run(self, context: PipelineContext, document: Document) -> LayoutDetectionResult:
+    def run(self, context: PipelineContext, document: Document) -> LayoutArtifact:
         del context
         raw_bytes = _read_bytes(document.file_path)
         reader = _open_reader(raw_bytes)
         pages = _extract_page_features(reader)
         evidence = _build_evidence(pages)
         candidates = _score_candidates(self._layout_definitions, evidence)
-        return _assemble_result(
+        detection = _assemble_result(
             candidates,
             self._layout_definitions,
             evidence,
             self._confidence_threshold,
             self._low_confidence_threshold,
+        )
+        return LayoutArtifact(
+            source_pdf_id=document.source_pdf_id,
+            detection=detection,
+            pages=tuple(
+                LayoutArtifactPage(index=index, text=page.text) for index, page in enumerate(pages)
+            ),
         )
 
 

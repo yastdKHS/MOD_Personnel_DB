@@ -35,9 +35,9 @@ flowchart LR
 
 1. **Document Analyzer**: 取得したPDFのメタデータ（SHA256・ファイル名・作成/更新日時・PDFバージョン・暗号化有無）・健全性（破損有無）・基本統計（ページ数・ファイルサイズ・画像数等）を取得し、警告（暗号化・画像PDF・破損等）を生成する。PDF解析（構造抽出）・OCR・文字抽出・様式判定は行わない（[ADR-0032](adr/0032-redefine-document-analyzer-responsibility.md)、Version 2.0）。
 
-   > **Version 1設計（Superseded）**: 設計フェーズ当初は「取得したPDFを解析可能な内部表現（ページ・テキスト・座標等）に変換する」という、文字抽出まで含む責務だった。[ADR-0032](adr/0032-redefine-document-analyzer-responsibility.md)により、文字抽出は後続Stage（未確定、同ADR参照）の責務に変更された。
-2. **Layout Detector**: Document Analyzerの出力（`Document`、Document Identity）から、`document.file_path`経由でPDFファイルを自ら再読込し、`layouts/` のどの `era_id` に該当するかを判定する。**中核パイプライン中でPDF本文（文字列・Font・座標・回転・画像・注釈）へアクセスできるのはLayout Detectorのみ**である（[ADR-0035](adr/0035-layout-detector-owns-pdf-content-access.md)、Document Analyzerはメタデータ・健全性・統計のみ）。未知の様式を検出した場合はエラーとして扱い、新しい様式の追加（`layouts/` への追加）を促す。既存様式の判定ロジックを無理に拡張して対応してはならない。
-3. **Section Parser**: 判定されたレイアウト定義に従い、PDF内の対象セクション（発令一覧の範囲等）を切り出す。
+   > **Version 1設計（Superseded）**: 設計フェーズ当初は「取得したPDFを解析可能な内部表現（ページ・テキスト・座標等）に変換する」という、文字抽出まで含む責務だった。[ADR-0032](adr/0032-redefine-document-analyzer-responsibility.md)により、文字抽出はLayout Detectorの責務に変更された（[ADR-0035](adr/0035-layout-detector-owns-pdf-content-access.md), [ADR-0037](adr/0037-layout-detector-produces-layout-artifact.md)）。
+2. **Layout Detector**: Document Analyzerの出力（`Document`、Document Identity）から、`document.file_path`経由でPDFファイルを自ら再読込し、`layouts/` のどの `era_id` に該当するかを判定する。**中核パイプライン中でPDF本文（文字列・Font・座標・回転・画像・注釈）へアクセスできるのはLayout Detectorのみ**である（[ADR-0035](adr/0035-layout-detector-owns-pdf-content-access.md)、Document Analyzerはメタデータ・健全性・統計のみ）。未知の様式を検出した場合はエラーとして扱い、新しい様式の追加（`layouts/` への追加）を促す。既存様式の判定ロジックを無理に拡張して対応してはならない。戻り値`LayoutArtifact`（[ADR-0037](adr/0037-layout-detector-produces-layout-artifact.md)）は、判定結果に加え再読込した各ページの生テキストを保持し、Section ParserがPDF本文を得る唯一の経路となる。
+3. **Section Parser**: Layout Detectorが生成した`LayoutArtifact`のみを入力とし、PDF内の対象セクション（発令一覧の範囲等）を切り出す。PDFファイルを直接読み込まず、`LayoutArtifact.pages`のテキストからHeader/Body/Footerを判定する（[ADR-0037](adr/0037-layout-detector-produces-layout-artifact.md)）。
 4. **Field Extractor**: 切り出されたセクションから、レイアウト定義に従って個々のフィールド（氏名・階級・補職・発令日等）を抽出する。この段階の出力は正規化前の生の値である。
 5. **Normalizer**: `knowledge/` のドメイン知識（階級名の表記ゆれ、組織名の改称履歴、氏名の異体字等）を用いて、抽出値を統一表現に変換する。
 6. **Validator**: ドメイン制約（あり得る階級か、発令日が発令PDFの公表日と整合するか等）に基づき、正規化後のデータを検証する。検証NGはサイレントに捨てず、[Learning Dataset](adr/0013-learning-dataset-not-correction-log.md) に記録する。

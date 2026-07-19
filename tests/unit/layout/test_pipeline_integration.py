@@ -7,7 +7,7 @@ from mod_personnel_db.models import (
     Document,
     Job,
     JobId,
-    LayoutDetectionResult,
+    LayoutArtifact,
     ParserVersionId,
     PdfId,
 )
@@ -20,7 +20,7 @@ from ._pdf_fixtures import text_pdf_bytes
 
 
 def test_layout_detector_satisfies_pipeline_stage_protocol() -> None:
-    stage: PipelineStage[Document, LayoutDetectionResult] = LayoutDetector(layout_definitions=())
+    stage: PipelineStage[Document, LayoutArtifact] = LayoutDetector(layout_definitions=())
     assert stage is not None
 
 

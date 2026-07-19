@@ -47,6 +47,8 @@ from mod_personnel_db.models.job import Job, ParserVersion
 from mod_personnel_db.models.knowledge import KnowledgeItem, Layout
 from mod_personnel_db.models.layout_detection import (
     BoundingBoxStatistics,
+    LayoutArtifact,
+    LayoutArtifactPage,
     LayoutCandidate,
     LayoutConfidence,
     LayoutDefinition,
@@ -62,6 +64,7 @@ from mod_personnel_db.models.layout_detection import (
 from mod_personnel_db.models.learning import LearningRecord
 from mod_personnel_db.models.pdf import PdfRecord
 from mod_personnel_db.models.review import ReviewItem
+from mod_personnel_db.models.sections import SectionCandidate, SectionEvidence, SectionParseResult
 from mod_personnel_db.models.values import Confidence
 
 __all__ = [
@@ -88,6 +91,8 @@ __all__ = [
     "KnowledgeItem",
     "KnowledgeItemId",
     "Layout",
+    "LayoutArtifact",
+    "LayoutArtifactPage",
     "LayoutCandidate",
     "LayoutConfidence",
     "LayoutDefinition",
@@ -118,6 +123,9 @@ __all__ = [
     "ReviewItemId",
     "ReviewSessionId",
     "RotationStatistics",
+    "SectionCandidate",
+    "SectionEvidence",
+    "SectionParseResult",
     "ValidationResult",
     "ValidationViolation",
 ]
