@@ -150,7 +150,8 @@ class RawRecord:
 
 - **属性**: `section_ref`はパイプライン実行中（未永続化）は`None`、永続化後は`PersonnelSectionId`を持つ（[`pipeline.md`](pipeline.md)のステージ間受け渡しでは`None`のまま扱われ、`CandidateRepository.add_raw`呼び出し時に紐付けが確定する)。`raw_fields`はフィールド名（`name`/`rank`/`organization`/`position`/`effective_date`等）から生テキストへの写像。
 - **不変条件**: `raw_fields`は空でない。`record_index >= 0`。
-- **Validation Rule**: `raw_fields`のキー集合は、対応する`Layout`の`manifest.yaml`が定義するフィールド集合の部分集合でなければならない（未知フィールドの混入を防ぐ。検証自体はField Extractorの責務、[`architecture-contract.md`](../architecture/architecture-contract.md)）。
+- **Validation Rule**: `raw_fields`のキー集合は、対応する様式が定義するフィールド集合の部分集合でなければならない（未知フィールドの混入を防ぐ。検証自体はField Extractorの責務、[`architecture-contract.md`](../architecture/architecture-contract.md)）。
+- **未確定事項（Phase2 Task7-0で発見）**: 上記の「対応する様式が定義するフィールド集合」をField Extractorがどう取得するかは、本ドキュメント時点では未確定である。`LayoutDefinition`（[ADR-0035](../adr/0035-layout-detector-owns-pdf-content-access.md), [ADR-0036](../adr/0036-pyyaml-for-layout-definition.md)）の判定ルール（`LayoutRuleKind`: `HEADER_PATTERN`/`FOOTER_PATTERN`/`MIN_PAGE_COUNT`/`FONT_NAME_CONTAINS`）にはフィールド抽出定義が含まれず、`layouts/<era_id>/manifest.yaml`のフィールド抽出スキーマ拡張は「将来のスキーマ拡張として別途検討」と明記されたまま未着手である（同ADRのYAML表現例の注記）。加えて、Field Extractor（`extractors/`）の依存先は`models/`, `utils/`のみであり（[`package-design.md`](package-design.md#extractorsfield-extractor)、[`dependency-rule.md`](dependency-rule.md)の依存グラフ）、現行設計では`layouts/`ディレクトリ・`LayoutDefinition`のいずれにも直接アクセスできない。この未確定事項は、Field Extractor実装着手前に新規ADRで確定する（Section Parserの同種の未確定事項が[ADR-0035](../adr/0035-layout-detector-owns-pdf-content-access.md)→[ADR-0037](../adr/0037-layout-detector-produces-layout-artifact.md)で段階的に解決された前例に倣う）。
 
 ## `NormalizedRecord`
 

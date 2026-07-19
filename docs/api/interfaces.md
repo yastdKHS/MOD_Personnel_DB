@@ -21,7 +21,7 @@
 ```python
 from typing import Protocol
 from mod_personnel_db.models import (
-    Document, Layout, LayoutArtifact, SectionParseResult,
+    Document, LayoutArtifact, SectionParseResult, PersonnelSection,
     RawRecord, NormalizedRecord, KnowledgeSnapshot, ValidationResult,
     ValidationRuleSet, PdfRecord,
 )
