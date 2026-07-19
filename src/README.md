@@ -2,9 +2,9 @@
 
 ## 責務
 
-本体実装（Pythonパッケージ）を置く場所。`src/` レイアウト（[ADR-0001](../docs/adr/0001-python-packaging.md)）を採用しており、パッケージ本体は `src/mod_personnel_db/` に配置する想定。
+本体実装（Pythonパッケージ）を置く場所。`src/` レイアウト（[ADR-0001](../docs/adr/0001-python-packaging.md)）を採用しており、パッケージ本体は `src/mod_personnel_db/` に配置する。
 
-> 現時点では設計フェーズのため、実装コードは存在しない。以下は今後の実装の指針であり、確定した設計ではない。
+> Phase2 Task1（Repository Skeleton）・Task2（Domain Model Implementation）・Task3（Pipeline Skeleton Implementation）より実装着手。`utils/`, `models/`（[`docs/api/models.md`](../docs/api/models.md)の13モデル全種）, `repositories/`（Protocol）, `repositories/sqlite/`（SQLite実装、CandidateRepository/GoldRepository/KnowledgeRepository/PDFRepository/JobRepository/ExportRepository/ReviewRepositoryの7種）, `pipeline/`（Pipeline Framework骨格のみ。PipelineContext/PipelineStage/PipelineEvent/PipelineException/PipelineFrameworkError/PipelineMetrics/PipelineResult/PipelineRunner/PipelineBuilder/PipelineFactory。中核パイプライン6段階の実装＝`document/`〜`validators/`は未実装のまま）が実装済み。`config/`、中核パイプライン（`document/` 〜 `validators/`）、`learning/`, `features/`, `review/`（Domain Service）, `export/`, `ftp/`, `fetch/`, `services/`, `cli/` は未実装。
 
 ## 想定するパッケージ構成
 

@@ -174,12 +174,8 @@ class LearningRecord:
     id: LearningRecordId | None
     source_candidate_id: CandidateId | None
     source_review_item_id: ReviewItemId | None
-    pipeline_stage: Literal[
-        "layout_detector", "section_parser", "field_extractor", "normalizer", "validator"
-    ]
-    error_category: Literal[
-        "unknown_alias", "unknown_layout", "knowledge_gap", "layout_gap", "true_exception"
-    ]
+    pipeline_stage: PipelineStageName
+    error_category: ErrorCategory
     field_name: str | None
     wrong_value: str
     correct_value: str | None
@@ -340,10 +336,10 @@ ReviewItemId = NewType("ReviewItemId", int)
 @dataclass(frozen=True, slots=True)
 class Confidence:
     score: float
-    band: Literal["verified", "high", "medium", "low"]
+    band: ConfidenceBand
 ```
 
-不変条件: `0.0 <= score <= 1.0`。
+不変条件: `0.0 <= score <= 1.0`。`band`の定義は[`ConfidenceBand`](#confidenceband)を参照。
 
 ### `PdfRecord`
 
@@ -431,7 +427,10 @@ class GoldRecord:
 ### `LearningStatus`
 
 ```python
-class LearningStatus(str, Enum):
+from enum import StrEnum
+
+
+class LearningStatus(StrEnum):
     OPEN = "open"
     IN_REVIEW = "in_review"
     REFLECTED = "reflected"
@@ -439,4 +438,53 @@ class LearningStatus(str, Enum):
     WONTFIX = "wontfix"
 ```
 
-`Enum`利用方針の詳細は[`python-contract.md`](python-contract.md#enum利用方針)を参照。
+`Enum`利用方針の詳細（`enum.StrEnum`採用の経緯は[ADR-0030](../adr/0030-strenum-adoption.md)）は[`python-contract.md`](python-contract.md#enum利用方針)を参照。
+
+### `PipelineStageName`
+
+Learning Datasetの`pipeline_stage`列挙値。`docs/api/pipeline.md`が定義する`PipelineStage`（Stage実装が満たすProtocol）とは別の概念であるため、命名を分離している（Phase2 Task3で発見・是正）。
+
+```python
+class PipelineStageName(StrEnum):
+    LAYOUT_DETECTOR = "layout_detector"
+    SECTION_PARSER = "section_parser"
+    FIELD_EXTRACTOR = "field_extractor"
+    NORMALIZER = "normalizer"
+    VALIDATOR = "validator"
+```
+
+### `ErrorCategory`
+
+Learning Datasetの`error_category`列挙値。[ADR-0012](../adr/0012-error-handling-priority-order.md)の優先順位分類に対応する。
+
+```python
+class ErrorCategory(StrEnum):
+    UNKNOWN_ALIAS = "unknown_alias"
+    UNKNOWN_LAYOUT = "unknown_layout"
+    KNOWLEDGE_GAP = "knowledge_gap"
+    LAYOUT_GAP = "layout_gap"
+    TRUE_EXCEPTION = "true_exception"
+```
+
+### `RegressionStatus`
+
+Learning Datasetの`regression_status`列挙値。
+
+```python
+class RegressionStatus(StrEnum):
+    NOT_RUN = "not_run"
+    PASSED = "passed"
+    FAILED = "failed"
+```
+
+### `ConfidenceBand`
+
+`Confidence.band`の列挙値（[`docs/database/json_schema.md`](../database/json_schema.md#confidenceの算出ルール)のバンド定義と対応）。
+
+```python
+class ConfidenceBand(StrEnum):
+    VERIFIED = "verified"
+    HIGH = "high"
+    MEDIUM = "medium"
+    LOW = "low"
+```

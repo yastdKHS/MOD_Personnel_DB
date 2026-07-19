@@ -6,8 +6,9 @@
 #
 # 技術選定の理由は docs/adr/0001-python-packaging.md を参照。
 #
-# NOTE: 本ファイルはリポジトリの「骨格」として先行整備するものであり、
-#       src/ 配下の実装はまだ存在しない。依存関係は実装着手時に確定させる。
+# Phase2 Task1（Repository Skeleton）よりPython 3.14を対象とする。
+# 本セッションのサンドボックス環境はネットワークポリシーにより3.14バイナリを
+# 取得できないため、実際のCI/本番実行環境での3.14検証は別途必要（報告参照）。
 
 [build-system]
 requires = ["setuptools>=68"]
@@ -18,16 +19,16 @@ name = "mod-personnel-db"
 version = "0.0.0"
 description = "防衛省人事発令PDFから構造化人事データベースを生成・公開する長期運用プロジェクト"
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.14"
 license = { text = "TBD" }
 authors = [
     { name = "MOD Personnel DB Maintainers" },
 ]
 classifiers = [
     "Private :: Do Not Upload",
-    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.14",
 ]
-# 実装着手時に確定させる想定の依存関係（例）。
+# Repository層はsqlite3標準ライブラリのみに依存する（SQLAlchemy等のORMは使用しない）。
 # 恒久的な「枯れた技術を選ぶ」方針（ADR-0001）に基づき、依存は最小限に保つ。
 dependencies = []
 
@@ -52,7 +53,7 @@ where = ["src"]
 # 理由: docs/adr/0002-lint-format-typecheck-tooling.md
 [tool.ruff]
 line-length = 100
-target-version = "py312"
+target-version = "py314"
 src = ["src", "tests", "scripts"]
 
 [tool.ruff.lint]
@@ -84,11 +85,9 @@ quote-style = "double"
 
 # --- 型チェック: mypy ---
 [tool.mypy]
-python_version = "3.12"
+python_version = "3.14"
 strict = true
 files = ["src", "tests", "scripts"]
-# src/ が空の段階では対象ファイルが存在しないため、CI側で存在チェックを行う
-# （.github/workflows/ci.yml を参照）。
 
 # --- テスト: pytest ---
 [tool.pytest.ini_options]
@@ -99,3 +98,7 @@ addopts = "-ra"
 [tool.coverage.run]
 source = ["src"]
 branch = true
+
+[tool.coverage.report]
+fail_under = 80
+show_missing = true
