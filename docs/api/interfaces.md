@@ -42,11 +42,12 @@ class DocumentAnalyzer(Protocol):
 class LayoutDetector(Protocol):
     """Documentから該当する様式（era_id）を判定する（段階2）。
 
-    **注記（ADR-0032）**: Version 2.0では、入力`Document`はページ単位の抽出済み
-    テキストを保持しない。本Stageがレイアウト判定に必要なテキストをどう得るか
-    （`document.source_pdf_id`経由で自らPDFへアクセスする等）は本ドキュメント時点
-    では未確定であり、Layout Detectorの実装着手前に別ADRで確定する
-    （[ADR-0032](../adr/0032-redefine-document-analyzer-responsibility.md#pageの扱い)参照）。
+    **PDF本文アクセスの独占（ADR-0035）**: Layout Detectorは、`document.file_path`
+    を用いてPDFファイルを自ら再読込する、**PDF本文（文字列・Font・Bounding Box・
+    Drawing・Rotation・画像・Annotation）へアクセスできる唯一のPipeline Stage**
+    である。Document Analyzer（段階1）はこれらにアクセスせず（ADR-0032）、
+    Section Parser以降（段階3〜）も直接アクセスしない。判定結果（`LayoutDetectionResult`）
+    のみが後続段階に渡される。
     """
 
     def run(self, context: PipelineContext, document: Document) -> LayoutDetectionResult: ...
@@ -55,9 +56,13 @@ class LayoutDetector(Protocol):
 class SectionParser(Protocol):
     """判定済みレイアウトに従い対象セクションを切り出す（段階3）。
 
-    **注記（ADR-0032）**: `PersonnelSection.page_range`の妥当性検証対象は、
-    `Document`のVersion 2.0再定義に伴い未確定（[`models.md`](models.md#personnelsection)
-    参照）。
+    **注記（ADR-0035）**: Layout DetectorがPDF本文アクセスの唯一の担い手となった
+    ことにより、Section Parserがセクション切り出しに必要なテキストをどう得るか
+    （`LayoutDetectionResult`の拡張、または別の中間成果物の導入等）は本ドキュメント
+    時点では未確定である。Section Parserの実装着手前に別ADRで確定する
+    （[ADR-0035](../adr/0035-layout-detector-owns-pdf-content-access.md)参照）。
+    `PersonnelSection.page_range`の妥当性検証対象も同様に未確定
+    （[`models.md`](models.md#personnelsection)参照）。
     """
 
     def run(

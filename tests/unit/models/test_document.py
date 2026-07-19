@@ -236,6 +236,7 @@ def test_document_v2_normal_construction() -> None:
     document = Document(
         id=DocumentId(1),
         source_pdf_id=PdfId(1),
+        file_path="/tmp/sample.pdf",
         analysis=DocumentAnalysisResult(
             metadata=_metadata(),
             statistics=_statistics(),
@@ -247,6 +248,7 @@ def test_document_v2_normal_construction() -> None:
     )
     assert document.analysis.metadata.filename == "sample.pdf"
     assert document.analyzer_version == "v1.0.0"
+    assert document.file_path == "/tmp/sample.pdf"
 
 
 @pytest.mark.parametrize("warning", list(DocumentWarning))

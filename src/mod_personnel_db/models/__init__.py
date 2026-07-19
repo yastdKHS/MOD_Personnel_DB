@@ -45,12 +45,27 @@ from mod_personnel_db.models.ids import (
 )
 from mod_personnel_db.models.job import Job, ParserVersion
 from mod_personnel_db.models.knowledge import KnowledgeItem, Layout
+from mod_personnel_db.models.layout_detection import (
+    BoundingBoxStatistics,
+    LayoutCandidate,
+    LayoutConfidence,
+    LayoutDefinition,
+    LayoutDetectionResult,
+    LayoutEvidence,
+    LayoutMatch,
+    LayoutRule,
+    LayoutRuleKind,
+    LayoutWarning,
+    PageStatistics,
+    RotationStatistics,
+)
 from mod_personnel_db.models.learning import LearningRecord
 from mod_personnel_db.models.pdf import PdfRecord
 from mod_personnel_db.models.review import ReviewItem
 from mod_personnel_db.models.values import Confidence
 
 __all__ = [
+    "BoundingBoxStatistics",
     "CandidateId",
     "CandidateRecord",
     "Confidence",
@@ -73,12 +88,22 @@ __all__ = [
     "KnowledgeItem",
     "KnowledgeItemId",
     "Layout",
+    "LayoutCandidate",
+    "LayoutConfidence",
+    "LayoutDefinition",
+    "LayoutDetectionResult",
+    "LayoutEvidence",
     "LayoutId",
+    "LayoutMatch",
+    "LayoutRule",
+    "LayoutRuleKind",
+    "LayoutWarning",
     "LearningRecord",
     "LearningRecordId",
     "LearningStatus",
     "NormalizedRecord",
     "NormalizedValue",
+    "PageStatistics",
     "PageV1",
     "ParserVersion",
     "ParserVersionId",
@@ -92,6 +117,7 @@ __all__ = [
     "ReviewItem",
     "ReviewItemId",
     "ReviewSessionId",
+    "RotationStatistics",
     "ValidationResult",
     "ValidationViolation",
 ]

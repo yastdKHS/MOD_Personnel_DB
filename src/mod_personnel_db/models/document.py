@@ -123,10 +123,15 @@ class DocumentAnalysisResult:
 
 @dataclass(frozen=True, slots=True)
 class Document:
-    """Document Analyzerの出力（Version 2.0、ADR-0032）。Pipelineを流れる「Document Identity」。"""
+    """Document Analyzerの出力（Version 2.0、ADR-0032）。Pipelineを流れる「Document Identity」。
+
+    `file_path`はLayout DetectorがRepositoryを経由せずにPDF本文へアクセスするための
+    参照であり、Document自身はこれを使ってPDFを読み込まない（ADR-0035）。
+    """
 
     id: DocumentId
     source_pdf_id: PdfId
+    file_path: str
     analysis: DocumentAnalysisResult
     analyzed_at: datetime
     analyzer_version: str

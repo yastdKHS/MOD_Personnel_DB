@@ -32,8 +32,11 @@ classifiers = [
 # 恒久的な「枯れた技術を選ぶ」方針（ADR-0001）に基づき、依存は最小限に保つ。
 # pypdf: Document Analyzer（document/）のPDF健全性・メタデータ・基本統計取得に使用
 # （実装着手時の選定、ADR-0026「PDFパースライブラリの選定は実装着手時に決定」に対応）。
+# PyYAML: LayoutDefinition（layout/）のYAMLロードに使用（ADR-0036）。knowledge/配下の
+# YAMLロード（将来実装）でも共通利用を想定。
 dependencies = [
     "pypdf>=6.0.0",
+    "pyyaml>=6.0.0",
 ]
 
 [project.optional-dependencies]
@@ -44,6 +47,7 @@ dev = [
     "pytest-cov",
     "pre-commit",
     "pip-tools",
+    "types-pyyaml",
 ]
 
 # 実装着手時に有効化する CLI エントリポイントの想定例（未実装のためコメントアウト）
