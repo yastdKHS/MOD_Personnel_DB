@@ -41,7 +41,7 @@
 
 | ファイル | 要約 |
 |---|---|
-| [`architecture-contract.md`](architecture/architecture-contract.md) | 9つの分離保証（Document Analyzerはlayoutを知らない／Layout Detectorはfieldを知らない／Section Parserはknowledgeを知らない／Field ExtractorはDBを知らない／Normalizerは正規表現を持たない／Validatorは修正しない／RepositoryはSQLiteを隠蔽する／Reviewはgold_recordsだけ更新できる／Reviewだけがgold_recordsを書き換えられる）とその実現方法・検証方法 |
+| [`architecture-contract.md`](architecture/architecture-contract.md) | Task 9時点は9つの分離保証（Document Analyzerはlayoutを知らない／Layout Detectorはfieldを知らない／Section Parserはknowledgeを知らない／Field ExtractorはDBを知らない／Normalizerは正規表現を持たない／Validatorは修正しない／RepositoryはSQLiteを隠蔽する／Reviewはgold_recordsだけ更新できる／Reviewだけがgold_recordsを書き換えられる）とその実現方法・検証方法。**Phase2 Task4着手前のArchitecture Synchronization（[ADR-0032](adr/0032-redefine-document-analyzer-responsibility.md)）で保証10（各段階は自段階の出力物の生成を独占する）が追加され、現在は10保証**（本表の他の項目と同様、以降の変更は`architecture-contract.md`自体を正とする） |
 
 ## 4. `docs/knowledge/`
 

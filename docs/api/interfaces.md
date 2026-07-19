@@ -29,19 +29,36 @@ from mod_personnel_db.pipeline import PipelineContext
 
 
 class DocumentAnalyzer(Protocol):
-    """取得済みPDFを解析可能な内部表現に変換する（中核パイプライン段階1）。"""
+    """取得済みPDFのメタデータ・健全性・基本統計を取得する（中核パイプライン段階1）。
+
+    Version 2.0（ADR-0032）: PDF解析（構造抽出）・OCR・文字抽出・様式判定は行わない。
+    戻り値`Document`はページ単位の抽出済みテキストを保持しない「Document Identity」
+    （id/source_pdf_id/analysis/analyzed_at/analyzer_version）である。
+    """
 
     def run(self, context: PipelineContext, source: PdfRecord) -> Document: ...
 
 
 class LayoutDetector(Protocol):
-    """Documentから該当する様式（era_id）を判定する（段階2）。"""
+    """Documentから該当する様式（era_id）を判定する（段階2）。
+
+    **注記（ADR-0032）**: Version 2.0では、入力`Document`はページ単位の抽出済み
+    テキストを保持しない。本Stageがレイアウト判定に必要なテキストをどう得るか
+    （`document.source_pdf_id`経由で自らPDFへアクセスする等）は本ドキュメント時点
+    では未確定であり、Layout Detectorの実装着手前に別ADRで確定する
+    （[ADR-0032](../adr/0032-redefine-document-analyzer-responsibility.md#pageの扱い)参照）。
+    """
 
     def run(self, context: PipelineContext, document: Document) -> LayoutDetectionResult: ...
 
 
 class SectionParser(Protocol):
-    """判定済みレイアウトに従い対象セクションを切り出す（段階3）。"""
+    """判定済みレイアウトに従い対象セクションを切り出す（段階3）。
+
+    **注記（ADR-0032）**: `PersonnelSection.page_range`の妥当性検証対象は、
+    `Document`のVersion 2.0再定義に伴い未確定（[`models.md`](models.md#personnelsection)
+    参照）。
+    """
 
     def run(
         self, context: PipelineContext, document: Document, layout_match: LayoutDetectionResult

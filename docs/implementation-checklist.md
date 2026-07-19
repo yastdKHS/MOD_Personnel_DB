@@ -11,7 +11,7 @@
 
 - [ ] 変更は中核パイプライン6段階（Document Analyzer → Layout Detector → Section Parser → Field Extractor → Normalizer → Validator）の構成・順序を変更していないか（[ADR-0011](adr/0011-fixed-core-pipeline.md)）。変更する場合はプロジェクトオーナーの明示的承認を得たか。
 - [ ] 新しいパッケージ・モジュールの依存先は[`docs/api/dependency-rule.md`](api/dependency-rule.md)の依存グラフに違反していないか。
-- [ ] Architecture Contract（[`docs/architecture/architecture-contract.md`](architecture/architecture-contract.md)）の9つの保証のいずれも侵害していないか。
+- [ ] Architecture Contract（[`docs/architecture/architecture-contract.md`](architecture/architecture-contract.md)）の10の保証のいずれも侵害していないか。
 
 ## ADR
 

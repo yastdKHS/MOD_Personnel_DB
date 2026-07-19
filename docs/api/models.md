@@ -14,26 +14,72 @@
 
 ## `Document`
 
-Document Analyzerの出力。PDFの内部構造表現。
+Document Analyzerの出力。**Version 2.0（[ADR-0032](../adr/0032-redefine-document-analyzer-responsibility.md)）**: Pipelineを流れる「Document Identity」——PDFメタデータ・健全性・基本統計の束であり、ページ単位の抽出済みテキストは保持しない。文字列抽出はDocument Analyzerの責務外であり、後続Stageの設計確定を待つ（[ADR-0032](../adr/0032-redefine-document-analyzer-responsibility.md)のMigration Plan参照）。
+
+> **Version 1設計（Superseded）との違い**: 設計フェーズ当初（Task 8）は`Document`が`pages: tuple[Page, ...]`（`Page.text`にページ単位の抽出済みテキストを保持）を持つ設計だった。Phase2 Task4着手前のArchitecture Synchronization（Task 3.1）で、Document Analyzerの実装指示（PDF解析・文字抽出を行わない）と非互換であることが判明し、[ADR-0032](../adr/0032-redefine-document-analyzer-responsibility.md)により現行のVersion 2.0設計に置き換えられた。旧`Page`型・旧`Document`の構造は同ADRの「Superseded Design」節を参照（削除せず参照として保持）。
 
 ```python
+from enum import StrEnum
+
+
+class DocumentWarning(StrEnum):
+    ENCRYPTED = "encrypted"
+    IMAGE_ONLY = "image_only"
+    BROKEN_PDF = "broken_pdf"
+    UNSUPPORTED_VERSION = "unsupported_version"
+    LARGE_PDF = "large_pdf"
+    UNKNOWN_ENCODING = "unknown_encoding"
+
+
 @dataclass(frozen=True, slots=True)
-class Page:
-    index: int
-    text: str
-    width: float
-    height: float
+class DocumentMetadata:
+    sha256: str
+    filename: str
+    created_at: datetime | None
+    modified_at: datetime | None
+    pdf_version: str
+    encrypted: bool
+
+
+@dataclass(frozen=True, slots=True)
+class DocumentStatistics:
+    page_count: int
+    file_size: int
+    text_length: int | None
+    image_count: int
+    rotation_count: int
+
+
+@dataclass(frozen=True, slots=True)
+class DocumentAnalysisResult:
+    metadata: DocumentMetadata
+    statistics: DocumentStatistics
+    warnings: tuple[DocumentWarning, ...]
+    analysis_time_ms: float
+    confidence: Confidence
+
 
 @dataclass(frozen=True, slots=True)
 class Document:
+    id: DocumentId
     source_pdf_id: PdfId
-    pages: tuple[Page, ...]
+    analysis: DocumentAnalysisResult
     analyzed_at: datetime
+    analyzer_version: str
 ```
 
-- **属性**: `source_pdf_id`（由来PDFへの参照、[ADR-0006](../adr/0006-pipeline-provenance.md)の来歴要件）、`pages`（ページ単位のテキスト・寸法）、`analyzed_at`。
-- **不変条件**: `pages`は空でない。各`Page.index`は`0`から`len(pages)-1`までの連番で重複がない。`Document`はfrozenであり、生成後に内容を変更しない。
-- **Validation Rule**: `Page.text`は空文字列を許容する（白紙ページの可能性）が`None`は許容しない。`width`/`height`は正の値。
+- **属性**: `id`（本解析実行を識別する[`DocumentId`](#id型)、同一`PdfRecord`への再解析を区別するための識別子。[ADR-0023](../adr/0023-parser-versioning-policy.md)）、`source_pdf_id`（由来`PdfRecord`への参照、[ADR-0006](../adr/0006-pipeline-provenance.md)の来歴要件）、`analysis`（[`DocumentAnalysisResult`](#documentanalysisresultversion-20adr-0032)）、`analyzed_at`、`analyzer_version`（解析を行ったDocument Analyzer実装のバージョン、来歴追跡用）。
+- **不変条件**: `Document`はfrozenであり、生成後に内容を変更しない。`DocumentMetadata.sha256`は64桁の16進文字列。`DocumentStatistics.page_count >= 0`、`file_size >= 0`、`image_count >= 0`、`rotation_count >= 0`。`DocumentAnalysisResult.analysis_time_ms >= 0`。`DocumentAnalysisResult.confidence.score`は`[0.0, 1.0]`（[`Confidence`](#confidence)と共通）。
+- **Validation Rule**: `DocumentMetadata.encrypted == True`の場合、`DocumentAnalysisResult.warnings`に`DocumentWarning.ENCRYPTED`を含む。
+- **`DocumentStatistics.text_length`に関する注記**: Document Analyzerは文字列（抽出結果）を生成・保持・返却しない（[ADR-0032](../adr/0032-redefine-document-analyzer-responsibility.md)）。`text_length`は、`DocumentWarning.IMAGE_ONLY`等の警告判定に必要な**軽量プローブによる文字数の計測値**（スカラー）のみを表し、抽出したテキスト本文そのものを保持しない。プローブが実行できない場合（例: 暗号化PDFで内容確認不可）は`None`。
+
+### `DocumentAnalysisResult`（Version 2.0、[ADR-0032](../adr/0032-redefine-document-analyzer-responsibility.md)）
+
+`Document.analysis`として保持される。上記コードブロックを参照。`metadata` / `statistics` / `warnings` / `analysis_time_ms` / `confidence`の5属性のみを持ち、PDFの内容（文字列）は一切含まない。
+
+### `Page`・旧`Document`構造（Superseded）
+
+Version 1で定義されていた`Page`（`index` / `text` / `width` / `height`）は廃止された。文字列保持責務の移管先（`ExtractedDocument` / `ExtractedPage`、仮称）は本ドキュメント時点では未確定である。詳細・経緯は[ADR-0032](../adr/0032-redefine-document-analyzer-responsibility.md#pageの扱い)を参照。
 
 ## `PersonnelSection`
 
@@ -51,7 +97,8 @@ class PersonnelSection:
 ```
 
 - **属性**: [`docs/database/schema.md`](../database/schema.md#3-personnel_sections)の`personnel_sections`列に対応（`parser_version_id`は永続化時に`CandidateRepository.add_section`の呼び出し文脈から付与されるため、モデル自体には持たせない——[`pipeline.md`](pipeline.md)の`PipelineContext`が保持する）。
-- **不変条件**: `section_index >= 0`。`page_range`は`(start, end)`で`start <= end`かつ`Document.pages`の範囲内。
+- **不変条件**: `section_index >= 0`。`page_range`は`(start, end)`で`start <= end`。
+- **未確定事項（[ADR-0032](../adr/0032-redefine-document-analyzer-responsibility.md)）**: `page_range`が参照するページ範囲の妥当性検証（旧設計では「`Document.pages`の範囲内」）は、Version 2.0で`Document`がページ情報を保持しなくなったことに伴い**未確定**である。Section Parser設計時に、`page_range`の妥当性を検証する対象（`ExtractedDocument`等、[ADR-0032](../adr/0032-redefine-document-analyzer-responsibility.md#pageの扱い)参照）を別ADRで確定する。Section Parser実装着手前に解決必須。
 - **Validation Rule**: `section_text`は空文字列を許容しない（空セクションはSection Parserが生成すべきでない、上位の契約違反として扱う）。
 
 ## `RawRecord`
@@ -320,6 +367,7 @@ GoldRecordId = NewType("GoldRecordId", int)
 KnowledgeItemId = NewType("KnowledgeItemId", int)
 LearningRecordId = NewType("LearningRecordId", int)
 PdfId = NewType("PdfId", int)
+DocumentId = NewType("DocumentId", int)
 JobId = NewType("JobId", int)
 ParserVersionId = NewType("ParserVersionId", int)
 LayoutId = NewType("LayoutId", int)
@@ -327,6 +375,8 @@ ExportId = NewType("ExportId", int)
 ReviewSessionId = NewType("ReviewSessionId", int)
 ReviewItemId = NewType("ReviewItemId", int)
 ```
+
+- `DocumentId`は[ADR-0032](../adr/0032-redefine-document-analyzer-responsibility.md)で`Document`（Document Analyzerの出力）向けに追加された。同一`PdfRecord`（`PdfId`）に対する複数回の解析実行（再解析）を区別する。
 
 ### `Confidence`
 
