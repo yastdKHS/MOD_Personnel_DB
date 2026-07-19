@@ -32,6 +32,7 @@
 | `CLAUDE.md` | Claude Code（AIコーディングエージェント）向けの作業規約 |
 | `AGENTS.md` | 任意のAIエージェント向けの汎用運用規約 |
 | `CONTRIBUTING.md` | 人間の開発者向けの開発フロー・規約 |
+| [`CHANGELOG.md`](CHANGELOG.md) | 複数ドキュメント・実装にまたがる仕様変更の記録（Phase2 Task4-0以降） |
 | `CODEOWNERS` | パスごとのレビュー担当者定義 |
 | `.gitignore` | Git管理除外ルール |
 | `pyproject.toml` | Pythonプロジェクトの唯一の設定源（依存関係・ビルド・lint・型・テスト設定） |

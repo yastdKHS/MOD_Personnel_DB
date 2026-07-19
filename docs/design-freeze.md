@@ -220,6 +220,18 @@ flowchart TB
 
 実装フェーズへの移行にあたっては、「TODO一覧」の該当項目から着手することを推奨する。
 
+## 凍結後の変更履歴
+
+「意味しないこと」節で述べたとおり、設計完了後も新規ADRの追加により設計は正しく進化する。本節は、設計完了宣言（本ドキュメント）以降に発生した、複数の設計文書にまたがる実質的な変更を記録する（軽微な誤字修正等は対象外）。個々の変更内容は各ADR本文を正とし、ここでは一覧性のためのポインタのみを示す。
+
+| ADR | 変更内容 | 影響範囲 |
+|---|---|---|
+| [ADR-0030](adr/0030-strenum-adoption.md) | Enum実装方針を`str, Enum`多重継承から`enum.StrEnum`に統一 | `docs/api/python-contract.md`, `docs/api/models.md` |
+| [ADR-0031](adr/0031-pipeline-metrics-field-finalization.md) | `PipelineMetrics`のフィールド構成を、設計フェーズのドラフト（4項目）から実装（6項目）に統一 | `docs/api/pipeline.md`, `docs/operations/observability.md` |
+| [ADR-0032](adr/0032-redefine-document-analyzer-responsibility.md) | Document Analyzerの責務を、PDF解析・文字抽出まで含む設計（Version 1）から、メタデータ・健全性・統計・警告の取得のみ（Version 2.0）に再定義。`Document`モデルを「Document Identity」として再定義し、ページ単位の抽出済みテキストの保持責務を後続Stage（未確定）に移管 | `docs/api/interfaces.md`, `docs/api/models.md`, `docs/architecture.md`, `docs/architecture/architecture-contract.md`（Architecture Contract保証1の強化・保証10の新設）, `docs/architecture-review-package.md` |
+
+上記いずれも、「凍結の対象」（中核パイプラインの6段階構成・Architecture Principles・Human Review Firstの構造的保証）には抵触しない範囲の変更である。ADR-0032はDocument Analyzerという1段階の**詳細責務**を変更したものであり、6段階の数・順序・名称（ADR-0011の凍結対象）は変更していない。
+
 ## 関連ドキュメント
 
 本ドキュメントは`docs/`配下の全設計文書を対象とするため、個別のADR・設計文書への網羅的なリンクは各節に埋め込み済みである。特に以下は本ドキュメントの構成上の基点となる。

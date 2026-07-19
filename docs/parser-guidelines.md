@@ -1,6 +1,6 @@
 # Parser Development Guidelines
 
-> 本ドキュメントは、中核パイプラインの`document/`, `layout/`, `sections/`, `extractors/`, `normalizers/`, `validators/`各パッケージ（以下まとめて「Parser」と呼ぶ）を実装・変更する際に従う専用規約である。[`docs/implementation.md`](implementation.md)の「Parser Rule」が参照する正の文書。[ADR-0011](adr/0011-fixed-core-pipeline.md)（中核パイプライン固定化）・[ADR-0012](adr/0012-error-handling-priority-order.md)（未知パターンへの対応優先順位）・[`docs/architecture/architecture-contract.md`](architecture/architecture-contract.md)（9つの分離保証）と矛盾しない。実装コードは含まない。
+> 本ドキュメントは、中核パイプラインの`document/`, `layout/`, `sections/`, `extractors/`, `normalizers/`, `validators/`各パッケージ（以下まとめて「Parser」と呼ぶ）を実装・変更する際に従う専用規約である。[`docs/implementation.md`](implementation.md)の「Parser Rule」が参照する正の文書。[ADR-0011](adr/0011-fixed-core-pipeline.md)（中核パイプライン固定化）・[ADR-0012](adr/0012-error-handling-priority-order.md)（未知パターンへの対応優先順位）・[`docs/architecture/architecture-contract.md`](architecture/architecture-contract.md)（10の分離保証）と矛盾しない。実装コードは含まない。
 
 ## ParserはKnowledgeより優先されない
 
@@ -35,7 +35,7 @@ Field Extractor・Normalizer・Validatorは、`PersonnelSection`（Section Parse
 
 ## ページ全体を一括解析しない
 
-Document Analyzerはページ・テキスト・座標情報への変換のみを行い、様式判定は行わない（[`docs/architecture.md`](architecture.md)）。ページ全体を一度にまとめて解析し、様式判定・セクション切り出し・フィールド抽出を単一の処理で済ませる実装をしない。中核パイプラインの6段階（[ADR-0011](adr/0011-fixed-core-pipeline.md)）は、この分割によって初めて「ある段階の変更が他の段階に影響しない」という設計上の利点を得る。段階をまたいだ最適化のための処理統合を行わない。
+Document AnalyzerはPDFのメタデータ取得・健全性確認・基本統計・警告生成のみを行い、文字抽出・様式判定は行わない（[`docs/architecture.md`](architecture.md)、Version 2.0・[ADR-0032](adr/0032-redefine-document-analyzer-responsibility.md)）。ページ全体を一度にまとめて解析し、様式判定・セクション切り出し・フィールド抽出を単一の処理で済ませる実装をしない。中核パイプラインの6段階（[ADR-0011](adr/0011-fixed-core-pipeline.md)）は、この分割によって初めて「ある段階の変更が他の段階に影響しない」という設計上の利点を得る。段階をまたいだ最適化のための処理統合を行わない。
 
 ## 正規化はNormalizerでのみ行う
 
@@ -109,7 +109,7 @@ Parserの量的な品質は、[`docs/testing/test-policy.md`](testing/test-polic
 - [ADR-0011](adr/0011-fixed-core-pipeline.md) — 中核処理パイプラインの固定化
 - [ADR-0012](adr/0012-error-handling-priority-order.md) — 未知パターンへの対応優先順位
 - [ADR-0023](adr/0023-parser-versioning-policy.md) — Parserバージョニング方針
-- [`docs/architecture/architecture-contract.md`](architecture/architecture-contract.md) — Architecture Contract（9つの分離保証）
+- [`docs/architecture/architecture-contract.md`](architecture/architecture-contract.md) — Architecture Contract（10の分離保証）
 - [`docs/api/package-design.md`](api/package-design.md) — パッケージ構成・依存禁止ルール
 - [`docs/api/pipeline.md`](api/pipeline.md) — `PipelineStage`（`run()`のみの公開）
 - [`docs/testing/test-policy.md`](testing/test-policy.md) — Performance Test / Benchmark Test

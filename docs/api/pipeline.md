@@ -118,21 +118,27 @@ class PipelineException(Exception):
 
 ## `PipelineMetrics`
 
-実行の定量的なサマリ。`Job`（DB永続化される軽量なサマリ）より詳細な、実行時観測用の集計値。
+`PipelineRunner`による1回の実行（1PDF・1レコード分）についての定量的なサマリ。`Job`（DB永続化される軽量なサマリ）より詳細な、実行時観測用の集計値。
 
 ```python
 from dataclasses import dataclass
+from datetime import datetime
 
 
 @dataclass(frozen=True, slots=True)
 class PipelineMetrics:
-    stage_durations_ms: dict[str, float]
-    processed_count: int
-    failed_count: int
-    skipped_count: int
+    elapsed_ms: float
+    started_at: datetime
+    finished_at: datetime
+    succeeded: bool
+    warning_count: int
+    error_count: int
 ```
 
-- **不変条件**: `processed_count + failed_count + skipped_count`は、その実行で入力となったレコード総数と一致する。
+- **不変条件**: `finished_at >= started_at`。`elapsed_ms >= 0`。`warning_count >= 0`、`error_count >= 0`。`succeeded == (error_count == 0)`。
+- **フィールド構成の経緯**: 本フィールド構成（`elapsed_ms` / `started_at` / `finished_at` / `succeeded` / `warning_count` / `error_count`）は、Phase2 Task3（Pipeline Skeleton Implementation）の実装指示に基づき確定した正式仕様である。設計フェーズ当初のドラフト（`stage_durations_ms: dict[str, float]` / `processed_count: int` / `failed_count: int` / `skipped_count: int`）から変更した経緯・理由は[ADR-0031](../adr/0031-pipeline-metrics-field-finalization.md)を参照。本ドキュメントが唯一の正式仕様（Single Source of Truth）であり、他ドキュメントは本節を参照する。
+- **Stage別処理時間の扱い**: 旧ドラフトの`stage_durations_ms`が担っていた「Stage別の所要時間の内訳」は、`PipelineMetrics`が保持する集計値ではなく、`PipelineEvent`列（各Stageの`started`/`completed`イベントの`timestamp`差分）から導出する運用に変更した（[`docs/operations/observability.md`](../operations/observability.md#metrics)のMetrics節を参照）。
+- **レコード件数集計の扱い**: 旧ドラフトの`processed_count`/`failed_count`/`skipped_count`（複数レコードにまたがる件数の内訳）は、`PipelineRunner`の1回の実行が1レコード分の処理であるという実装上の粒度（[`PipelineStage`](#pipelinestage)の`run()`は1入力→1出力の純粋な変換）とは異なる集約レベルの指標だったため、`PipelineMetrics`からは廃止した。複数レコードにまたがる集計は`Job.processed_count`/`Job.failed_count`（[`models.md`](models.md#job)）が担う。
 
 ---
 

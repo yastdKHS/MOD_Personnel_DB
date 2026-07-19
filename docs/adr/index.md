@@ -46,6 +46,8 @@
 | [0028](0028-pydantic-settings-for-configuration.md) | 設定管理へのPydantic Settings採用 | Accepted | 2026-07-18 | 2026-07-18 | 0001, 0002, 0026 | configuration.md, api/python-contract.md, api/package-design.md |
 | [0029](0029-export-integrity-and-audit-log-policy.md) | 公開成果物の完全性保証と監査ログ方針 | Accepted | 2026-07-18 | 2026-07-18 | 0006, 0014, 0019, 0022, 0026 | security.md |
 | [0030](0030-strenum-adoption.md) | Enum実装方針をenum.StrEnumに統一する | Accepted | 2026-07-18 | 2026-07-18 | 0002, 0014, 0028 | api/python-contract.md, api/models.md |
+| [0031](0031-pipeline-metrics-field-finalization.md) | PipelineMetricsのフィールド構成を確定する | Accepted | 2026-07-19 | 2026-07-19 | 0006, 0011, 0014, 0019 | api/pipeline.md, operations/observability.md, CHANGELOG.md |
+| [0032](0032-redefine-document-analyzer-responsibility.md) | Redefine Document Analyzer Responsibility | Accepted | 2026-07-19 | 2026-07-19 | 0006, 0011, 0012, 0023, 0030 | api/interfaces.md, api/models.md, architecture.md, architecture/architecture-contract.md, architecture-review-package.md, design-freeze.md |
 
 ## 検討したが採用しなかった候補
 

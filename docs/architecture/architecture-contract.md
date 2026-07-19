@@ -2,7 +2,7 @@
 
 > 本ドキュメントは[`docs/constitution.md`](../constitution.md)（Project Constitution）に従属する。両者が矛盾する場合はConstitutionが優先される。
 >
-> 本ドキュメントは、Interface & Package設計（[`docs/api/`](../api/)）全体が満たすべき9つの分離保証を定義する。個々の保証は[`package-design.md`](../api/package-design.md)（依存関係）・[`dependency-rule.md`](../api/dependency-rule.md)（禁止/許可パターン）・[`pipeline.md`](../api/pipeline.md)（`run()`のみの公開）・[`docs/review/`](../review/)（Review Domain）の設計によって、**構造的に**（レビューや申し合わせだけでなく、依存グラフ上の事実として）実現される。曖昧な保証は解釈を明記し、将来の実装者が異なる解釈をしないようにする。
+> 本ドキュメントは、Interface & Package設計（[`docs/api/`](../api/)）全体が満たすべき10の分離保証を定義する（保証10は[ADR-0032](../adr/0032-redefine-document-analyzer-responsibility.md)により追加）。個々の保証は[`package-design.md`](../api/package-design.md)（依存関係）・[`dependency-rule.md`](../api/dependency-rule.md)（禁止/許可パターン）・[`pipeline.md`](../api/pipeline.md)（`run()`のみの公開）・[`docs/review/`](../review/)（Review Domain）の設計によって、**構造的に**（レビューや申し合わせだけでなく、依存グラフ上の事実として）実現される。曖昧な保証は解釈を明記し、将来の実装者が異なる解釈をしないようにする。
 >
 > **本ドキュメントに実装はない。**
 
@@ -19,8 +19,9 @@
 | 7 | RepositoryはSQLiteを隠蔽する | `repositories/`（抽象）⊥ `sqlite3` |
 | 8 | Reviewはgold_recordsだけ更新できる | `GoldRepository`への書き込み経路を`review/`に一本化 |
 | 9 | Reviewだけがgold_records（Gold Database）を書き換えられる | `review/`以外のいかなるパッケージも`GoldRepository`の書き込みメソッドを呼ばない |
+| 10 | 各段階は自段階の出力物の生成を独占する（Exclusive Generation Ownership） | 各段階の出力型を生成できるのは対応する1パッケージのみ |
 
-（`⊥`は「依存しない」を表す。保証8と9は同じ設計判断を異なる向きから述べたものであり、[9節](#9-reviewだけがgold_recordsgold-databaseを書き換えられる)で統合的に扱う）
+（`⊥`は「依存しない」を表す。保証8と9は同じ設計判断を異なる向きから述べたものであり、[9節](#9-reviewだけがgold_recordsgold-databaseを書き換えられる)で統合的に扱う。保証10は[ADR-0032](../adr/0032-redefine-document-analyzer-responsibility.md)（Document Analyzer責務再定義）に伴い追加した）
 
 ---
 
@@ -30,7 +31,9 @@
 
 **理由**: PDFの構造抽出（ページ・テキスト・座標）は、どの様式かに関わらず共通の処理であるべきであり（[ADR-0011](../adr/0011-fixed-core-pipeline.md)）、様式判定ロジックが混入すると、新様式追加のたびに`document/`の変更が必要になり、[ADR-0003](../adr/0003-layout-definition-strategy.md)が意図する「レイアウト変更を`layouts/`の追加だけで完結させる」という目標を損なう。
 
-**実現方法**: [`package-design.md`](../api/package-design.md)の`document/`節が定めるとおり、`document/`の依存先は`models/`, `utils/`のみ。`DocumentAnalyzer.run()`（[`interfaces.md`](../api/interfaces.md)）の戻り値`Document`は、様式に関する情報を一切含まない（ページ・テキスト・座標のみ）。
+**実現方法**: [`package-design.md`](../api/package-design.md)の`document/`節が定めるとおり、`document/`の依存先は`models/`, `utils/`のみ。`DocumentAnalyzer.run()`（[`interfaces.md`](../api/interfaces.md)）の戻り値`Document`は、様式に関する情報を一切含まない。
+
+**Version 2.0での強化（[ADR-0032](../adr/0032-redefine-document-analyzer-responsibility.md)）**: 当初（Version 1）は「`Document`は様式情報を含まない（ページ・テキスト・座標のみ）」という保証だったが、Version 2.0では`Document`自体がページ・テキスト・座標を一切保持しない「Document Identity」（メタデータ・健全性・統計のみ）に再定義された。これにより、Document Analyzerがlayoutを知らないことに加え、**Document Analyzerは文字列（ページテキスト）そのものを生成しない**という、より強い保証が成立する（[保証10](#10-各段階は自段階の出力物の生成を独占する)参照）。
 
 ## 2. Layout Detectorはfieldを知らない
 
@@ -103,11 +106,29 @@
 
 **この保証が破られていないことの確認**: 実装着手後、`grep -r "GoldRepository" src/`のような単純な静的検索で、`repositories/sqlite/`の実装クラス自体を除けば`review/`パッケージ内にしか出現しないことを確認できる。将来的には[`dependency-rule.md`](../api/dependency-rule.md#機械的な検証将来の推奨事項)が推奨する`import-linter`の契約に、「`GoldRepository`への依存は`review/`のみ許可」というルールを追加することで、この確認を自動化する。
 
+## 10. 各段階は自段階の出力物の生成を独占する
+
+**保証の内容**: 中核パイプライン6段階＋Reviewの各段階について、その段階の出力型を実際に生成できるコンポーネントは1つに限られる。保証1〜9が「ある段階が他の段階の情報を**知らない**（依存しない）」という**非依存**の観点から責務分離を述べているのに対し、本保証は「ある種類の出力を**生成できるのはどのコンポーネントか**」という**生成の独占**の観点から責務分離を述べる、保証1〜9の裏返しである（[ADR-0032](../adr/0032-redefine-document-analyzer-responsibility.md)のTask 3.1-7で明文化）。
+
+| 段階 | 独占して生成するもの | 対応する既存保証 |
+|---|---|---|
+| Document Analyzer | **何も生成しない**（文字列・レイアウト情報・論理構造のいずれも生成しない。メタデータ・統計・警告のみを返す） | [保証1](#1-document-analyzerはlayoutを知らない)の強化（Version 2.0、[ADR-0032](../adr/0032-redefine-document-analyzer-responsibility.md)） |
+| Layout Detector | レイアウト情報（`LayoutDetectionResult`） | [保証2](#2-layout-detectorはfieldを知らない) |
+| Section Parser | 論理構造（`PersonnelSection`、対象セクションの切り出し） | [保証3](#3-section-parserはknowledgeを知らない) |
+| Field Extractor | 抽出結果（`RawRecord`） | [保証4](#4-field-extractorはdbを知らない) |
+| Normalizer | 正規化済みの値（`NormalizedRecord`） | [保証5](#5-normalizerは正規表現を持たない) |
+| Validator | 妥当性判定（`ValidationResult`。値そのものは生成しない） | [保証6](#6-validatorは修正しない) |
+| Review | `gold_records`（Gold Database）の更新 | [保証8](#8-reviewはgold_recordsだけ更新できる)・[保証9](#9-reviewだけがgold_recordsgold-databaseを書き換えられる) |
+
+**理由**: 生成の独占が成立しないと、複数の段階が同じ種類の出力を異なる方法で生成しうる状態になり、「なぜこの値になったか」の追跡（[ADR-0006](../adr/0006-pipeline-provenance.md)の来歴管理）が経路によって変わってしまう。特にDocument Analyzerについては、Version 1設計（文字列を含む`Document`を生成）からVersion 2.0設計（文字列を一切生成しない）への変更が、この保証を初めて成立させた変更点である。
+
+**実現方法**: 保証1〜9それぞれの「実現方法」節（パッケージ依存境界・戻り値型の制約）がそのまま本保証の実現方法を兼ねる。Document Analyzerについては、[`docs/api/models.md`](../api/models.md#document)の`Document`（Version 2.0）が`DocumentAnalysisResult`（メタデータ・統計・警告・信頼度のみ）しか保持しないことが、型レベルでの保証となる。
+
 ---
 
 ## この契約の検証方法
 
-本ドキュメントの9保証はいずれも「特定パッケージが特定パッケージに依存しない」という形に還元できる（[`dependency-rule.md`](../api/dependency-rule.md)の全体依存グラフ）。したがって、実装着手後にこの契約が破られていないかは、以下の方法で検証可能である。
+本ドキュメントの10保証はいずれも「特定パッケージが特定パッケージに依存しない」または「特定の出力型を生成できるパッケージが1つに限られる」という形に還元できる（[`dependency-rule.md`](../api/dependency-rule.md)の全体依存グラフ）。したがって、実装着手後にこの契約が破られていないかは、以下の方法で検証可能である。
 
 1. **静的解析**: `import-linter`等によるパッケージ間import制約の機械的検証（[`dependency-rule.md`](../api/dependency-rule.md#機械的な検証将来の推奨事項)）。
 2. **型検査**: `Validator.run()`の戻り値型に修正後の値が含まれないこと等は、`mypy --strict`（[`python-contract.md`](../api/python-contract.md)）による型シグネチャの検証で担保される。
@@ -133,3 +154,4 @@
 - [ADR-0011](../adr/0011-fixed-core-pipeline.md) — 中核処理パイプラインの固定化
 - [ADR-0012](../adr/0012-error-handling-priority-order.md) — 未知パターンへの対応優先順位
 - [ADR-0021](../adr/0021-review-ui-strategy.md) — レビュー用インターフェース戦略
+- [ADR-0032](../adr/0032-redefine-document-analyzer-responsibility.md) — Document Analyzer責務再定義（保証1の強化、保証10の新設根拠）
