@@ -98,14 +98,14 @@ src/mod_personnel_db/
 ### `layout/`（Layout Detector）
 
 - **目的**: `Document`から、`layouts/`（トップレベルのデータディレクトリ）のどの`era_id`に該当するかを判定する（段階2）。
-- **責務**: レイアウト判定シグナル（見出しパターン等、`layouts/<era_id>/manifest.yaml`由来）と`Document`を照合し、`LayoutMatch`（`Layout`モデル＋信頼度）を返す。
-- **依存先**: `models/`, `utils/`のみ。判定に使う`Layout`データ自体は、呼び出し元（`pipeline/`）から`PipelineContext`経由で渡される（[`pipeline.md`](pipeline.md)）。`layout/`パッケージ自身は`layouts/`ディレクトリのファイルI/Oを行わない。
-- **依存禁止**: `extractors/`, `normalizers/`, `validators/`, `repositories/`, `knowledge/`。「Layout Detectorはfieldを知らない」を強制する。
+- **責務**（Version 2.0、[ADR-0035](../adr/0035-layout-detector-owns-pdf-content-access.md)）: `document.file_path`を用いてPDFファイルを自ら再読込し、ページ解析・文字列取得・座標取得・Font取得・Rotation取得・Block取得を行ってLayout特徴量（`LayoutEvidence`）を抽出する。抽出したEvidenceを`LayoutDefinition`（判定ルール）と照合してConfidenceを算出し、`LayoutDetectionResult`を生成する。**PDF本文（文字列・Font・Bounding Box・Drawing・Rotation・画像・Annotation）へアクセスできるのは中核パイプライン中で`layout/`のみ**（Document Analyzerはメタデータ・健全性・統計のみ、[ADR-0032](../adr/0032-redefine-document-analyzer-responsibility.md)）。
+- **依存先**: `models/`, `utils/`のみ（プロジェクト内パッケージ）。外部ライブラリとして`pypdf`（PDF再読込、[ADR-0034](../adr/0034-pypdf-for-document-analyzer.md)）・`pyyaml`（`LayoutDefinition`のYAMLロード、[ADR-0036](../adr/0036-pyyaml-for-layout-definition.md)）に依存する。`layouts/<era_id>/manifest.yaml`のファイルI/Oは`layout/`パッケージ自身が直接行う（`document/`がPDFファイルを直接読むのと同様、Repositoryを経由しない）。
+- **依存禁止**: `sections/`, `extractors/`, `normalizers/`, `validators/`, `repositories/`（抽象含む）, `knowledge/`, その他すべてのサービス層パッケージ。「Layout Detectorはfieldを知らない」を強制する。
 
 ### `sections/`（Section Parser）
 
 - **目的**: 判定されたレイアウト定義に従い、PDF内の対象セクションを切り出す（段階3）。
-- **責務**: `Document` + `LayoutMatch` → `list[PersonnelSection]`。
+- **責務**: `Document` + `LayoutDetectionResult` → `list[PersonnelSection]`。**未確定（[ADR-0035](../adr/0035-layout-detector-owns-pdf-content-access.md)）**: Layout DetectorのみがPDF本文にアクセスできる設計となったため、Section Parserがセクション切り出しに必要なテキストをどう得るかは本Task5の範囲外であり、Section Parser実装着手前に別ADRで確定する。
 - **依存先**: `models/`, `utils/`のみ。
 - **依存禁止**: `knowledge/`, `repositories/`, `extractors/`, `normalizers/`, `validators/`。「Section Parserはknowledgeを知らない」を強制する。
 

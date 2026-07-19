@@ -63,12 +63,13 @@ class DocumentAnalysisResult:
 class Document:
     id: DocumentId
     source_pdf_id: PdfId
+    file_path: str
     analysis: DocumentAnalysisResult
     analyzed_at: datetime
     analyzer_version: str
 ```
 
-- **属性**: `id`（本解析実行を識別する[`DocumentId`](#id型)、同一`PdfRecord`への再解析を区別するための識別子。[ADR-0023](../adr/0023-parser-versioning-policy.md)）、`source_pdf_id`（由来`PdfRecord`への参照、[ADR-0006](../adr/0006-pipeline-provenance.md)の来歴要件）、`analysis`（[`DocumentAnalysisResult`](#documentanalysisresultversion-20adr-0032)）、`analyzed_at`、`analyzer_version`（解析を行ったDocument Analyzer実装のバージョン、来歴追跡用）。
+- **属性**: `id`（本解析実行を識別する[`DocumentId`](#id型)、同一`PdfRecord`への再解析を区別するための識別子。[ADR-0023](../adr/0023-parser-versioning-policy.md)）、`source_pdf_id`（由来`PdfRecord`への参照、[ADR-0006](../adr/0006-pipeline-provenance.md)の来歴要件）、`file_path`（由来PDFファイルの絶対パス。Document Analyzerが検証済みの`PdfRecord.file_path`を複写する。Layout DetectorがRepositoryを経由せずにPDF本文へアクセスするための参照、[ADR-0035](../adr/0035-layout-detector-owns-pdf-content-access.md)で追加）、`analysis`（[`DocumentAnalysisResult`](#documentanalysisresultversion-20adr-0032)）、`analyzed_at`、`analyzer_version`（解析を行ったDocument Analyzer実装のバージョン、来歴追跡用）。
 - **不変条件**: `Document`はfrozenであり、生成後に内容を変更しない。`DocumentMetadata.sha256`は64桁の16進文字列。`DocumentMetadata.file_size >= 0`。`DocumentStatistics.page_count >= 0`、`image_count >= 0`、`rotation_count >= 0`、`analysis_time_ms >= 0`。`DocumentAnalysisResult.confidence.score`は`[0.0, 1.0]`（[`Confidence`](#confidence)と共通）。
 - **Validation Rule**: `DocumentMetadata.encrypted == True`の場合、`DocumentAnalysisResult.warnings`に`DocumentWarning.ENCRYPTED`を含む。
 - **`DocumentStatistics.text_length`に関する注記**: Document Analyzerは文字列（抽出結果）を生成・保持・返却しない（[ADR-0032](../adr/0032-redefine-document-analyzer-responsibility.md)）。`text_length`は、`DocumentWarning.IMAGE_ONLY`等の警告判定に必要な**軽量プローブによる文字数の計測値**（スカラー）のみを表し、抽出したテキスト本文そのものを保持しない。プローブが実行できない場合（例: 暗号化PDFで内容確認不可）は`None`。
@@ -432,16 +433,135 @@ class ValidationRuleSet:
     as_of: date
 ```
 
-### `LayoutDetectionResult`
+### `LayoutDetectionResult`（Version 2.0、[ADR-0035](../adr/0035-layout-detector-owns-pdf-content-access.md)）
 
-Layout Detectorの戻り値（[`interfaces.md`](interfaces.md)参照）。
+Layout Detectorの戻り値（[`interfaces.md`](interfaces.md)参照）。設計フェーズ当初（`layout: Layout` / `confidence: Confidence`の2属性、Superseded）から、Task5の実装指示に基づき拡張された。
 
 ```python
+from enum import StrEnum
+
+
+class LayoutWarning(StrEnum):
+    NO_MATCH = "no_match"
+    LOW_CONFIDENCE = "low_confidence"
+    AMBIGUOUS_CANDIDATES = "ambiguous_candidates"
+
+
+@dataclass(frozen=True, slots=True)
+class LayoutMatch:
+    """1つの判定ルールをEvidenceに対して評価した結果。"""
+
+    rule_id: str
+    matched: bool
+    detail: str | None
+
+
+@dataclass(frozen=True, slots=True)
+class LayoutCandidate:
+    """1つの`era_id`（LayoutDefinition）に対する評価結果。"""
+
+    layout_id: str
+    score: float
+    matched_rules: tuple[LayoutMatch, ...]
+    failed_rules: tuple[LayoutMatch, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class LayoutConfidence:
+    score: float
+    band: ConfidenceBand
+
+
+@dataclass(frozen=True, slots=True)
+class PageStatistics:
+    page_count: int
+    average_char_count: float
+
+
+@dataclass(frozen=True, slots=True)
+class BoundingBoxStatistics:
+    average_width: float
+    average_height: float
+
+
+@dataclass(frozen=True, slots=True)
+class RotationStatistics:
+    rotated_page_count: int
+    dominant_rotation: int
+
+
+@dataclass(frozen=True, slots=True)
+class LayoutEvidence:
+    """Layout Detectorが再読込したPDFから抽出した特徴量。"""
+
+    font_statistics: tuple[str, ...]
+    page_statistics: PageStatistics
+    bbox_statistics: BoundingBoxStatistics
+    rotation_statistics: RotationStatistics
+    header_signature: str | None
+    footer_signature: str | None
+    line_statistics: float
+    block_statistics: float
+
+
 @dataclass(frozen=True, slots=True)
 class LayoutDetectionResult:
-    layout: Layout
-    confidence: Confidence
+    layout_id: str | None
+    layout_version: int | None
+    confidence: LayoutConfidence
+    candidate_layouts: tuple[LayoutCandidate, ...]
+    evidence: LayoutEvidence
+    warnings: tuple[LayoutWarning, ...]
 ```
+
+- **属性**: `layout_id` / `layout_version`は、最有力候補のConfidenceが閾値以上の場合にのみ値を持つ。閾値未満、または既知の`era_id`に一致しない場合は`None`（[`docs/review/queue.md`](../review/queue.md)の`layout_unknown`判定に対応）。`confidence`は最有力候補の`LayoutConfidence`（候補が0件の場合は`score=0.0`）。`candidate_layouts`は評価した全候補（スコア降順）。`evidence`は再読込したPDFから抽出した特徴量。`warnings`は`LayoutWarning`の集合。
+- **`layout_id`の型**: `LayoutCandidate.layout_id`・`LayoutDetectionResult.layout_id`はいずれも`str`型で、`LayoutDefinition.era_id`と同じ値（`era_id`文字列）を表す。`Layout`（`layouts`テーブル）のDB主キーである`LayoutId`（`models/ids.py`の不透明な`int`）とは異なる。Layout Detectorは`LayoutDefinition`（`era_id`キー）のみを入力とし、`repositories/`に依存しない（[ADR-0035](../adr/0035-layout-detector-owns-pdf-content-access.md)）ため、`era_id`から`LayoutId`（DB主キー）への解決はLayout Detectorより後段の責務とする。
+- **不変条件**: `layout_id is not None`のとき`layout_version is not None`（およびその逆）。`layout_id is None`の場合`warnings`に`LayoutWarning.NO_MATCH`または`LayoutWarning.LOW_CONFIDENCE`のいずれかを含む。`LayoutCandidate.score`・`LayoutConfidence.score`は`[0.0, 1.0]`。
+- **`LayoutEvidence`の各フィールドの粒度**: `font_statistics`（検出された代表フォント名の集合）・`line_statistics`/`block_statistics`（1ページあたり平均行数/ブロック数）は、Task5の実装時点でLayout Detectorの判定精度に必要十分な粒度として選定した実装判断であり、将来Layout判定ルールの拡充に応じて型を精緻化してよい。
+
+### `LayoutDefinition`（[ADR-0035](../adr/0035-layout-detector-owns-pdf-content-access.md), [ADR-0036](../adr/0036-pyyaml-for-layout-definition.md)）
+
+Layout判定ルールのみを保持する。[`docs/knowledge/schema.md`](../knowledge/schema.md)が定める`knowledge/`の8カテゴリには属さない（Knowledgeではない、[ADR-0003](../adr/0003-layout-definition-strategy.md)の`layouts/`外部データ定義に対応）。`layouts/<era_id>/manifest.yaml`（[`layouts/README.md`](../../layouts/README.md)）からYAMLとしてロード可能な構造とする。
+
+```python
+class LayoutRuleKind(StrEnum):
+    HEADER_PATTERN = "header_pattern"
+    FOOTER_PATTERN = "footer_pattern"
+    MIN_PAGE_COUNT = "min_page_count"
+    FONT_NAME_CONTAINS = "font_name_contains"
+
+
+@dataclass(frozen=True, slots=True)
+class LayoutRule:
+    rule_id: str
+    kind: LayoutRuleKind
+    value: str
+    weight: float
+
+
+@dataclass(frozen=True, slots=True)
+class LayoutDefinition:
+    era_id: str
+    version: int
+    rules: tuple[LayoutRule, ...]
+```
+
+- **属性**: `era_id` / `version`は`Layout`（`layouts`テーブル、[`docs/database/schema.md`](../database/schema.md#2-layouts)）の`(era_id, version)`と対応する。`rules`は判定ルールの集合で、各ルールは`kind`（判定方法の種別）・`value`（パターン等のルール固有データ）・`weight`（スコアへの寄与度）を持つ。
+- **不変条件**: `rules`は空でない。各`LayoutRule.weight`は`0.0`より大きい。`rule_id`は`LayoutDefinition`内で一意。
+- **YAML表現例**（`layouts/<era_id>/manifest.yaml`、Task5時点の最小実装。フィールド抽出定義等の拡張は将来のスキーマ拡張として別途検討）:
+  ```yaml
+  era_id: "2019_format_a"
+  version: 1
+  rules:
+    - rule_id: "header_a"
+      kind: "header_pattern"
+      value: "海上自衛隊人事発令"
+      weight: 0.6
+    - rule_id: "min_pages"
+      kind: "min_page_count"
+      value: "1"
+      weight: 0.1
+  ```
 
 ### `CandidateRecord`
 

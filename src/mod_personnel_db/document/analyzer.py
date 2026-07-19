@@ -102,6 +102,7 @@ class DocumentAnalyzer:
         return Document(
             id=DocumentId(secrets.randbits(63)),
             source_pdf_id=source.id,
+            file_path=str(path),
             analysis=analysis,
             analyzed_at=datetime.now(UTC),
             analyzer_version=self._analyzer_version,

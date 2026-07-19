@@ -50,6 +50,8 @@
 | [0032](0032-redefine-document-analyzer-responsibility.md) | Redefine Document Analyzer Responsibility | Accepted | 2026-07-19 | 2026-07-19 | 0006, 0011, 0012, 0023, 0030 | api/interfaces.md, api/models.md, architecture.md, architecture/architecture-contract.md, architecture-review-package.md, design-freeze.md |
 | [0033](0033-document-analyzer-output-field-composition.md) | Document Analyzer出力型のフィールド構成を確定する | Accepted | 2026-07-19 | 2026-07-19 | 0031, 0032 | api/models.md |
 | [0034](0034-pypdf-for-document-analyzer.md) | Document Analyzerの実装にpypdfを採用する | Accepted | 2026-07-19 | 2026-07-19 | 0001, 0026, 0032 | pyproject.toml, api/package-design.md |
+| [0035](0035-layout-detector-owns-pdf-content-access.md) | Layout Detector Owns PDF Content Access | Accepted | 2026-07-19 | 2026-07-19 | 0006, 0011, 0032, 0033, 0036 | api/models.md, api/interfaces.md, api/package-design.md, architecture/architecture-contract.md, architecture.md |
+| [0036](0036-pyyaml-for-layout-definition.md) | LayoutDefinitionの実装にPyYAMLを採用する | Accepted | 2026-07-19 | 2026-07-19 | 0001, 0005, 0026, 0034, 0035 | pyproject.toml |
 
 ## 検討したが採用しなかった候補
 

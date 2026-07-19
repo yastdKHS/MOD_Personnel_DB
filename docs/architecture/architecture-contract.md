@@ -2,7 +2,7 @@
 
 > 本ドキュメントは[`docs/constitution.md`](../constitution.md)（Project Constitution）に従属する。両者が矛盾する場合はConstitutionが優先される。
 >
-> 本ドキュメントは、Interface & Package設計（[`docs/api/`](../api/)）全体が満たすべき10の分離保証を定義する（保証10は[ADR-0032](../adr/0032-redefine-document-analyzer-responsibility.md)により追加）。個々の保証は[`package-design.md`](../api/package-design.md)（依存関係）・[`dependency-rule.md`](../api/dependency-rule.md)（禁止/許可パターン）・[`pipeline.md`](../api/pipeline.md)（`run()`のみの公開）・[`docs/review/`](../review/)（Review Domain）の設計によって、**構造的に**（レビューや申し合わせだけでなく、依存グラフ上の事実として）実現される。曖昧な保証は解釈を明記し、将来の実装者が異なる解釈をしないようにする。
+> 本ドキュメントは、Interface & Package設計（[`docs/api/`](../api/)）全体が満たすべき11の分離保証を定義する（保証10は[ADR-0032](../adr/0032-redefine-document-analyzer-responsibility.md)、保証11は[ADR-0035](../adr/0035-layout-detector-owns-pdf-content-access.md)により追加）。個々の保証は[`package-design.md`](../api/package-design.md)（依存関係）・[`dependency-rule.md`](../api/dependency-rule.md)（禁止/許可パターン）・[`pipeline.md`](../api/pipeline.md)（`run()`のみの公開）・[`docs/review/`](../review/)（Review Domain）の設計によって、**構造的に**（レビューや申し合わせだけでなく、依存グラフ上の事実として）実現される。曖昧な保証は解釈を明記し、将来の実装者が異なる解釈をしないようにする。
 >
 > **本ドキュメントに実装はない。**
 
@@ -20,8 +20,9 @@
 | 8 | Reviewはgold_recordsだけ更新できる | `GoldRepository`への書き込み経路を`review/`に一本化 |
 | 9 | Reviewだけがgold_records（Gold Database）を書き換えられる | `review/`以外のいかなるパッケージも`GoldRepository`の書き込みメソッドを呼ばない |
 | 10 | 各段階は自段階の出力物の生成を独占する（Exclusive Generation Ownership） | 各段階の出力型を生成できるのは対応する1パッケージのみ |
+| 11 | Layout DetectorだけがPDF本文にアクセスできる | `layout/`のみがPDF本文（文字列・Font・Bounding Box・Drawing・Rotation・画像・Annotation）を扱う |
 
-（`⊥`は「依存しない」を表す。保証8と9は同じ設計判断を異なる向きから述べたものであり、[9節](#9-reviewだけがgold_recordsgold-databaseを書き換えられる)で統合的に扱う。保証10は[ADR-0032](../adr/0032-redefine-document-analyzer-responsibility.md)（Document Analyzer責務再定義）に伴い追加した）
+（`⊥`は「依存しない」を表す。保証8と9は同じ設計判断を異なる向きから述べたものであり、[9節](#9-reviewだけがgold_recordsgold-databaseを書き換えられる)で統合的に扱う。保証10は[ADR-0032](../adr/0032-redefine-document-analyzer-responsibility.md)（Document Analyzer責務再定義）に伴い、保証11は[ADR-0035](../adr/0035-layout-detector-owns-pdf-content-access.md)（Layout Detector Owns PDF Content Access）に伴い追加した）
 
 ---
 
@@ -124,11 +125,19 @@
 
 **実現方法**: 保証1〜9それぞれの「実現方法」節（パッケージ依存境界・戻り値型の制約）がそのまま本保証の実現方法を兼ねる。Document Analyzerについては、[`docs/api/models.md`](../api/models.md#document)の`Document`（Version 2.0）が`DocumentAnalysisResult`（メタデータ・統計・警告・信頼度のみ）しか保持しないことが、型レベルでの保証となる。
 
+## 11. Layout DetectorだけがPDF本文にアクセスできる
+
+**保証の内容**: 中核パイプライン中で、PDF本文（ページ単位の生テキスト・文字列・Font情報・Bounding Box・Drawing・Rotation・画像・Annotation）へアクセスできるのは`layout/`パッケージ（Layout Detector）のみである。`document/`（Document Analyzer）はメタデータ・健全性・統計取得のためにPDFファイルを開くが、上記の情報を`Document`の出力に含めない（[保証1](#1-document-analyzerはlayoutを知らない)、[ADR-0032](../adr/0032-redefine-document-analyzer-responsibility.md)）。`sections/`以降（Section Parser〜Validator）はPDFファイルを直接読み込まず、`LayoutDetectionResult`（および将来のSection Parser設計で確定する追加の出力）のみを入力として受け取る。
+
+**理由**: PDF本文へのアクセス手段（PDFパースライブラリの呼び出し）が複数のパッケージに分散すると、各パッケージが独自にPDF構造を解釈することになり、「様式判定はLayout Detectorの責務」（[ADR-0011](../adr/0011-fixed-core-pipeline.md)）という単一責務の原則が形骸化する。アクセス手段を1箇所に集約することで、PDFライブラリの入れ替え（[ADR-0034](../adr/0034-pypdf-for-document-analyzer.md)）の影響範囲を`layout/`（および`document/`のメタデータ取得部分）に限定できる。
+
+**実現方法**: `Document`（[`docs/api/models.md`](../api/models.md#document)）は`file_path`を保持するが、この値を実際に用いてPDFファイルを開くのは`layout/`パッケージの`LayoutDetector.run()`のみである（[ADR-0035](../adr/0035-layout-detector-owns-pdf-content-access.md)）。`layout/`の依存先は`models/`, `utils/`（プロジェクト内）と`pypdf`（外部、PDF再読込用）・`pyyaml`（外部、`LayoutDefinition`のYAMLロード用、[ADR-0036](../adr/0036-pyyaml-for-layout-definition.md)）に限定され、`sections/`以降のパッケージは`pypdf`等のPDFパースライブラリに依存しない（[`docs/api/package-design.md`](../api/package-design.md)の依存先サマリ表）。
+
 ---
 
 ## この契約の検証方法
 
-本ドキュメントの10保証はいずれも「特定パッケージが特定パッケージに依存しない」または「特定の出力型を生成できるパッケージが1つに限られる」という形に還元できる（[`dependency-rule.md`](../api/dependency-rule.md)の全体依存グラフ）。したがって、実装着手後にこの契約が破られていないかは、以下の方法で検証可能である。
+本ドキュメントの11保証はいずれも「特定パッケージが特定パッケージに依存しない」「特定の出力型を生成できるパッケージが1つに限られる」または「特定の外部リソース（PDF本文）へアクセスできるパッケージが1つに限られる」という形に還元できる（[`dependency-rule.md`](../api/dependency-rule.md)の全体依存グラフ）。したがって、実装着手後にこの契約が破られていないかは、以下の方法で検証可能である。
 
 1. **静的解析**: `import-linter`等によるパッケージ間import制約の機械的検証（[`dependency-rule.md`](../api/dependency-rule.md#機械的な検証将来の推奨事項)）。
 2. **型検査**: `Validator.run()`の戻り値型に修正後の値が含まれないこと等は、`mypy --strict`（[`python-contract.md`](../api/python-contract.md)）による型シグネチャの検証で担保される。
@@ -155,3 +164,4 @@
 - [ADR-0012](../adr/0012-error-handling-priority-order.md) — 未知パターンへの対応優先順位
 - [ADR-0021](../adr/0021-review-ui-strategy.md) — レビュー用インターフェース戦略
 - [ADR-0032](../adr/0032-redefine-document-analyzer-responsibility.md) — Document Analyzer責務再定義（保証1の強化、保証10の新設根拠）
+- [ADR-0035](../adr/0035-layout-detector-owns-pdf-content-access.md) — Layout Detector Owns PDF Content Access（保証11の新設根拠）
