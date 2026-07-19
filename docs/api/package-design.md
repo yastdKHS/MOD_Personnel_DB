@@ -113,14 +113,14 @@ src/mod_personnel_db/
 ### `extractors/`（Field Extractor）
 
 - **目的**: セクションから個々のフィールドを抽出する（段階4）。
-- **責務**: `PersonnelSection` → `list[RawRecord]`。正規化は行わない。
+- **責務**（[ADR-0038](../adr/0038-field-extractor-produces-field-extraction-result.md)）: `PersonnelSection` → `FieldExtractionResult`。`section_text`の各行を構造的な区切り（連続空白等）で列に分割し、列位置ベースの汎用フィールド名（`column_1`, `column_2`, ...）で`RawRecord`を生成する。意味的フィールド名（`name`/`rank`等）への対応付け・正規化は行わない。
 - **依存先**: `models/`, `utils/`のみ。
 - **依存禁止**: `repositories/`（抽象・具象いずれも）, `knowledge/`, `learning/`, `features/`。「Field ExtractorはDBを知らない」を、一般的なDependency Rule（[`dependency-rule.md`](dependency-rule.md)）が許容する「repository経由なら可」よりも**厳格に**、repositoryへの依存自体を禁止する形で強制する（理由は[`dependency-rule.md`](dependency-rule.md#本プロジェクト固有の追加制約)参照）。
 
 ### `normalizers/`（Normalizer）
 
 - **目的**: 抽出値を`knowledge/`の知識で正規化する（段階5）。
-- **責務**: `RawRecord` + `KnowledgeSnapshot`（呼び出し元から注入される値オブジェクト） → `NormalizedRecord`。
+- **責務**: `RawRecord` → `NormalizationResult`（ADR-0040）。`KnowledgeSnapshot`（呼び出し元から注入される値オブジェクト）は`run()`の引数ではなく**コンストラクタ**で受け取る（`PipelineStage[RawRecord, NormalizationResult]`の単一入力規約を満たすため、ADR-0040）。
 - **依存先**: `models/`, `utils/`のみ。`KnowledgeSnapshot`は`models/`に属する値オブジェクトであり、`knowledge/`パッケージ（サービス）そのものには依存しない。
 - **依存禁止**: `knowledge/`（サービスパッケージ）, `repositories/`。「Normalizerは正規表現を持たない」の意味は[`architecture-contract.md`](../architecture/architecture-contract.md)を参照（ハードコードされたドメイン固有の正規表現パターンを禁止する趣旨であり、`re`モジュールの汎用的な利用自体は妨げない）。
 

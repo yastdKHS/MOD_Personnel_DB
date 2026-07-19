@@ -1,4 +1,4 @@
-"""Knowledge Base関連モデル。docs/api/models.md#knowledgeitem, #layout に対応する。"""
+"""Knowledge Base関連モデル。docs/api/models.md のKnowledgeItem/Layout/KnowledgeSnapshotに対応。"""
 
 from dataclasses import dataclass
 from datetime import date
@@ -52,3 +52,16 @@ class Layout:
     def __post_init__(self) -> None:
         if self.valid_to is not None and self.valid_to <= self.valid_from:
             raise ModelValidationError("valid_to must be > valid_from")
+
+
+@dataclass(frozen=True, slots=True)
+class KnowledgeSnapshot:
+    """Normalizerにコンストラクタ注入される、ある時点の知識ベース全体のスナップショット（ADR-0040）。"""
+
+    items: tuple[KnowledgeItem, ...]
+    snapshot_checksum: str
+    as_of: date
+
+    def __post_init__(self) -> None:
+        if self.snapshot_checksum == "":
+            raise ModelValidationError("snapshot_checksum must not be empty")

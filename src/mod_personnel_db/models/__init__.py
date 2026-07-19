@@ -26,6 +26,12 @@ from mod_personnel_db.models.enums import (
     RegressionStatus,
 )
 from mod_personnel_db.models.export import ExportRecord
+from mod_personnel_db.models.extraction import (
+    ExtractionCandidate,
+    ExtractionEvidence,
+    FieldExtractionResult,
+    RawField,
+)
 from mod_personnel_db.models.feature import FeatureVector
 from mod_personnel_db.models.gold import GoldRecord
 from mod_personnel_db.models.ids import (
@@ -44,7 +50,7 @@ from mod_personnel_db.models.ids import (
     ReviewSessionId,
 )
 from mod_personnel_db.models.job import Job, ParserVersion
-from mod_personnel_db.models.knowledge import KnowledgeItem, Layout
+from mod_personnel_db.models.knowledge import KnowledgeItem, KnowledgeSnapshot, Layout
 from mod_personnel_db.models.layout_detection import (
     BoundingBoxStatistics,
     LayoutArtifact,
@@ -62,6 +68,12 @@ from mod_personnel_db.models.layout_detection import (
     RotationStatistics,
 )
 from mod_personnel_db.models.learning import LearningRecord
+from mod_personnel_db.models.normalization import (
+    NormalizationCandidate,
+    NormalizationEvidence,
+    NormalizationResult,
+    NormalizedField,
+)
 from mod_personnel_db.models.pdf import PdfRecord
 from mod_personnel_db.models.review import ReviewItem
 from mod_personnel_db.models.sections import SectionCandidate, SectionEvidence, SectionParseResult
@@ -83,13 +95,17 @@ __all__ = [
     "ErrorCategory",
     "ExportId",
     "ExportRecord",
+    "ExtractionCandidate",
+    "ExtractionEvidence",
     "FeatureVector",
+    "FieldExtractionResult",
     "GoldRecord",
     "GoldRecordId",
     "Job",
     "JobId",
     "KnowledgeItem",
     "KnowledgeItemId",
+    "KnowledgeSnapshot",
     "Layout",
     "LayoutArtifact",
     "LayoutArtifactPage",
@@ -106,6 +122,10 @@ __all__ = [
     "LearningRecord",
     "LearningRecordId",
     "LearningStatus",
+    "NormalizationCandidate",
+    "NormalizationEvidence",
+    "NormalizationResult",
+    "NormalizedField",
     "NormalizedRecord",
     "NormalizedValue",
     "PageStatistics",
@@ -117,6 +137,7 @@ __all__ = [
     "PersonnelSection",
     "PersonnelSectionId",
     "PipelineStageName",
+    "RawField",
     "RawRecord",
     "RegressionStatus",
     "ReviewItem",

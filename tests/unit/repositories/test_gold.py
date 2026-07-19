@@ -30,6 +30,7 @@ def _make_candidate(
     )
     raw = RawRecord(
         section_ref=None,
+        layout_id=layout_era_id,
         record_index=0,
         raw_fields={"rank": "陸将補"},
         extracted_at=datetime(2026, 1, 1, tzinfo=UTC),
