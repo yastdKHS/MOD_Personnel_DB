@@ -1,6 +1,6 @@
 # ADR Dependency Map
 
-> `A --> B` は「AはBを参照・前提としている（Aを理解するにはBの決定を先に理解する必要がある）」ことを表す。矢印の向きは各ADR本文中の「関連ADR」節・コンテキスト中の参照から機械的に抽出したもの（抽出方法は[品質チェックレポート](quality-check.md#依存関係の抽出方法)を参照）。新規ADR（0018〜0026）の依存関係は、[`gap-analysis.md`](gap-analysis.md)での検討過程に基づき設計時点で付与したもの。ADR-0027（Review Domainの中核化）・ADR-0028（設定管理へのPydantic Settings採用）・ADR-0029（公開成果物の完全性保証と監査ログ方針）・ADR-0030（Enum実装方針をenum.StrEnumに統一する）・ADR-0031（PipelineMetricsのフィールド構成を確定する）・ADR-0032（Redefine Document Analyzer Responsibility）・ADR-0033（Document Analyzer出力型のフィールド構成を確定する）・ADR-0034（Document Analyzerの実装にpypdfを採用する）・ADR-0035（Layout Detector Owns PDF Content Access）・ADR-0036（LayoutDefinitionの実装にPyYAMLを採用する）・ADR-0037（Layout Detector Produces Layout Artifact）・ADR-0038（Field Extractor Produces FieldExtractionResult）・ADR-0039（Normalizer Field Mapping via Extended Layout Knowledge）・ADR-0040（Normalizer Produces NormalizationResult）の依存関係は、当該ADR本文の「コンテキスト」節・「関連ADR」節に基づき付与した。
+> `A --> B` は「AはBを参照・前提としている（Aを理解するにはBの決定を先に理解する必要がある）」ことを表す。矢印の向きは各ADR本文中の「関連ADR」節・コンテキスト中の参照から機械的に抽出したもの（抽出方法は[品質チェックレポート](quality-check.md#依存関係の抽出方法)を参照）。新規ADR（0018〜0026）の依存関係は、[`gap-analysis.md`](gap-analysis.md)での検討過程に基づき設計時点で付与したもの。ADR-0027（Review Domainの中核化）・ADR-0028（設定管理へのPydantic Settings採用）・ADR-0029（公開成果物の完全性保証と監査ログ方針）・ADR-0030（Enum実装方針をenum.StrEnumに統一する）・ADR-0031（PipelineMetricsのフィールド構成を確定する）・ADR-0032（Redefine Document Analyzer Responsibility）・ADR-0033（Document Analyzer出力型のフィールド構成を確定する）・ADR-0034（Document Analyzerの実装にpypdfを採用する）・ADR-0035（Layout Detector Owns PDF Content Access）・ADR-0036（LayoutDefinitionの実装にPyYAMLを採用する）・ADR-0037（Layout Detector Produces Layout Artifact）・ADR-0038（Field Extractor Produces FieldExtractionResult）・ADR-0039（Normalizer Field Mapping via Extended Layout Knowledge）・ADR-0040（Normalizer Produces NormalizationResult）・ADR-0041（Validator Constructor-Injects ValidationRuleSet）の依存関係は、当該ADR本文の「コンテキスト」節・「関連ADR」節に基づき付与した。
 
 ## 全体図（テーマ別クラスタ）
 
@@ -47,6 +47,7 @@ flowchart LR
         ADR0038["0038 Field Extractor Produces FieldExtractionResult"]
         ADR0039["0039 Normalizer Field Mapping via Extended Layout Knowledge"]
         ADR0040["0040 Normalizer Produces NormalizationResult"]
+        ADR0041["0041 Validator Constructor-Injects ValidationRuleSet"]
     end
 
     subgraph QUALITY["品質・テスト"]
@@ -195,6 +196,13 @@ flowchart LR
     ADR0040 --> ADR0037
     ADR0040 --> ADR0038
     ADR0040 --> ADR0039
+
+    ADR0041 --> ADR0005
+    ADR0041 --> ADR0006
+    ADR0041 --> ADR0011
+    ADR0041 --> ADR0014
+    ADR0041 --> ADR0037
+    ADR0041 --> ADR0040
 ```
 
 ## 読み方の例
@@ -205,21 +213,22 @@ flowchart LR
 
 ## 被参照数（in-degree）ランキング（上位、実測値）
 
-以下は本ファイルの全113エッジ（ADR-0040追加後）を実際に集計した値である（[品質チェックレポート](quality-check.md#依存関係の抽出方法)で検証済み。0034追加時点からの増分はADR-0035の新規4エッジ・ADR-0036の新規5エッジ・ADR-0037の新規3エッジ・ADR-0038の新規3エッジ・ADR-0039の新規6エッジ・ADR-0040の新規5エッジ）。
+以下は本ファイルの全119エッジ（ADR-0041追加後）を実際に集計した値である（[品質チェックレポート](quality-check.md#依存関係の抽出方法)で検証済み。0034追加時点からの増分はADR-0035の新規4エッジ・ADR-0036の新規5エッジ・ADR-0037の新規3エッジ・ADR-0038の新規3エッジ・ADR-0039の新規6エッジ・ADR-0040の新規5エッジ・ADR-0041の新規6エッジ）。
 
 | ADR | 被参照数 | 参照数 | 備考 |
 |---|---|---|---|
-| 0011 | 14 | 5 | 中核パイプライン固定化（ADR-0035追加により+1、ADR-0037追加により+1、ADR-0038追加により+1、ADR-0039追加により+1、ADR-0040追加により+1） |
-| 0006 | 12 | 2 | 来歴管理方針。データモデル全体の前提（ADR-0035追加により+1） |
+| 0011 | 15 | 5 | 中核パイプライン固定化（ADR-0035追加により+1、ADR-0037追加により+1、ADR-0038追加により+1、ADR-0039追加により+1、ADR-0040追加により+1、ADR-0041追加により+1） |
+| 0006 | 13 | 2 | 来歴管理方針。データモデル全体の前提（ADR-0035追加により+1、ADR-0041追加により+1） |
 | 0012 | 8 | 3 | 未知パターンへの対応優先順位（ADR-0039追加により被参照数が7→8に） |
-| 0005 | 7 | 3 | Knowledge Base正規化（ADR-0036追加により被参照数が4→5に、ADR-0039追加により5→6に、ADR-0040追加により6→7に） |
+| 0005 | 8 | 3 | Knowledge Base正規化（ADR-0036追加により被参照数が4→5に、ADR-0039追加により5→6に、ADR-0040追加により6→7に、ADR-0041追加により7→8に） |
 | 0013 | 6 | 4 | Learning Dataset方針 |
+| 0014 | 6 | 4 | 開発規律（ADR-0041追加により被参照数が5→6に） |
 | 0010 | 5 | 1 | CI/CD・公開戦略 |
-| 0014 | 5 | 4 | 開発規律 |
 | 0003 | 5 | 3 | Layout外部データ定義（ADR-0039追加により被参照数が4→5に） |
 | 0001 | 4 | 0 | Pythonパッケージング（ADR-0036追加により被参照数が3→4に） |
 | 0026 | 4 | 2 | セキュリティポリシー（ADR-0036追加により被参照数が3→4に） |
 | 0032 | 4 | 5 | Document Analyzer責務再定義（ADR-0037追加により被参照数が3→4に） |
+| 0037 | 4 | 3 | Layout Detector Produces Layout Artifact（ADR-0039追加により被参照数が1→2に、ADR-0040追加により2→3に、ADR-0041追加により3→4に） |
 | 0015 | 3 | 6 | SQLiteスキーマの確定 |
 | 0019 | 3 | 3 | Workflow Orchestration |
 | 0008 | 3 | 0 | データ倫理方針 |
@@ -227,8 +236,7 @@ flowchart LR
 | 0017 | 3 | 3 | Learning Dataset拡張 |
 | 0002 | 3 | 0 | Lint/Format/型チェックツールの選定 |
 | 0035 | 3 | 4 | Layout Detector PDF独占（ADR-0038追加により被参照数が2→3に、本表に初めて登場） |
-| 0037 | 3 | 3 | Layout Detector Produces Layout Artifact（ADR-0039追加により被参照数が1→2に、ADR-0040追加により2→3に、本表に初めて登場） |
 
-被参照数0のADR（`0018`, `0020`, `0024`, `0027`, `0029`, `0036`, `0040`、および既存の`0009`）については [`quality-check.md`](quality-check.md#孤立したadr) で個別に評価している。いずれも参照数（out-degree）は1以上あり、グラフ上完全に孤立したノード（in=0 かつ out=0）は存在しない（40ノード・113エッジで再検証済み）。`0021`は`0027`（Review Domainの中核化）から、`0026`は`0028`（Pydantic Settings採用）から、`0022`は`0029`（公開成果物の完全性保証と監査ログ方針）から、`0028`は`0030`（Enum実装方針をenum.StrEnumに統一する）から新たに参照されたため、この一覧から外れた。`0023`（Parser Versioning）・`0030`（StrEnum採用）は、いずれもADR-0032（Document Analyzer責務再定義）から、`0031`・`0032`はADR-0033（Document Analyzer出力型のフィールド構成を確定する）から、`0033`・`0034`はADR-0035（Layout Detector Owns PDF Content Access）から、`0037`はADR-0038（Field Extractor Produces FieldExtractionResult）から、`0038`はADR-0039（Normalizer Field Mapping via Extended Layout Knowledge）から、`0039`はADR-0040（Normalizer Produces NormalizationResult）から新たに参照されたため、それぞれの一覧から外れた。`0040`（Normalizer Produces NormalizationResult）は追加されたばかりで、まだどのADRからも参照されていない（被参照数0、Task8完了時点で自然な状態）。
+被参照数0のADR（`0018`, `0020`, `0024`, `0027`, `0029`, `0036`, `0041`、および既存の`0009`）については [`quality-check.md`](quality-check.md#孤立したadr) で個別に評価している。いずれも参照数（out-degree）は1以上あり、グラフ上完全に孤立したノード（in=0 かつ out=0）は存在しない（41ノード・119エッジで再検証済み）。`0021`は`0027`（Review Domainの中核化）から、`0026`は`0028`（Pydantic Settings採用）から、`0022`は`0029`（公開成果物の完全性保証と監査ログ方針）から、`0028`は`0030`（Enum実装方針をenum.StrEnumに統一する）から新たに参照されたため、この一覧から外れた。`0023`（Parser Versioning）・`0030`（StrEnum採用）は、いずれもADR-0032（Document Analyzer責務再定義）から、`0031`・`0032`はADR-0033（Document Analyzer出力型のフィールド構成を確定する）から、`0033`・`0034`はADR-0035（Layout Detector Owns PDF Content Access）から、`0037`はADR-0038（Field Extractor Produces FieldExtractionResult）から、`0038`はADR-0039（Normalizer Field Mapping via Extended Layout Knowledge）から、`0039`はADR-0040（Normalizer Produces NormalizationResult）から、`0040`はADR-0041（Validator Constructor-Injects ValidationRuleSet）から新たに参照されたため、それぞれの一覧から外れた。`0041`（Validator Constructor-Injects ValidationRuleSet）は追加されたばかりで、まだどのADRからも参照されていない（被参照数0、Task9-0完了時点で自然な状態）。
 
-**注記（発見した既知の問題、本Task5の範囲外）**: 上記の非巡回性の実測検証において、`ADR-0003`・`ADR-0005`・`ADR-0006`・`ADR-0011`の間に相互参照（例: `ADR-0003 --> ADR-0011`と`ADR-0011 --> ADR-0003`が同時に存在）による循環が複数存在することを確認した（Phase2 Task5でのDFSベースの機械検証により発見）。`git log`で確認したところ、これらの循環はADR統治基盤の最初のコミット（`dependency-map.md`初版）から存在しており、Phase2 Task5で新規に導入されたものではない。[`docs/design-freeze.md`](../design-freeze.md)が「DFS彩色法・Kahnのアルゴリズムの双方でグラフ全体が非巡回であることを検証済み」と述べているが、本Task5時点の機械検証では非巡回性が成立していないことが判明した。本ADR体系全体の再検証・整理は本Task5の責務範囲外（無関係なADRの実質的な書き換えを伴うため）であり、別タスクとして起票することを推奨する（詳細はPhase2 Task5 Review ReportのTODO参照）。Task6・Task7・Task8-0・Task8完了時点でも同じ既知の循環が残存しており（ADR-0037・ADR-0038・ADR-0039・ADR-0040の追加による新規循環はない、上記の機械検証で確認済み）、引き続き別タスクでの対応を推奨する。
+**注記（発見した既知の問題、本Task5の範囲外）**: 上記の非巡回性の実測検証において、`ADR-0003`・`ADR-0005`・`ADR-0006`・`ADR-0011`の間に相互参照（例: `ADR-0003 --> ADR-0011`と`ADR-0011 --> ADR-0003`が同時に存在）による循環が複数存在することを確認した（Phase2 Task5でのDFSベースの機械検証により発見）。`git log`で確認したところ、これらの循環はADR統治基盤の最初のコミット（`dependency-map.md`初版）から存在しており、Phase2 Task5で新規に導入されたものではない。[`docs/design-freeze.md`](../design-freeze.md)が「DFS彩色法・Kahnのアルゴリズムの双方でグラフ全体が非巡回であることを検証済み」と述べているが、本Task5時点の機械検証では非巡回性が成立していないことが判明した。本ADR体系全体の再検証・整理は本Task5の責務範囲外（無関係なADRの実質的な書き換えを伴うため）であり、別タスクとして起票することを推奨する（詳細はPhase2 Task5 Review ReportのTODO参照）。Task6・Task7・Task8-0・Task8・Task9-0完了時点でも同じ既知の循環が残存しており（ADR-0037・ADR-0038・ADR-0039・ADR-0040・ADR-0041の追加による新規循環はない、上記の機械検証で確認済み）、引き続き別タスクでの対応を推奨する。
