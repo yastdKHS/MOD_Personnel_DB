@@ -120,7 +120,7 @@ src/mod_personnel_db/
 ### `normalizers/`（Normalizer）
 
 - **目的**: 抽出値を`knowledge/`の知識で正規化する（段階5）。
-- **責務**: `RawRecord` + `KnowledgeSnapshot`（呼び出し元から注入される値オブジェクト） → `NormalizedRecord`。
+- **責務**: `RawRecord` → `NormalizationResult`（ADR-0040）。`KnowledgeSnapshot`（呼び出し元から注入される値オブジェクト）は`run()`の引数ではなく**コンストラクタ**で受け取る（`PipelineStage[RawRecord, NormalizationResult]`の単一入力規約を満たすため、ADR-0040）。
 - **依存先**: `models/`, `utils/`のみ。`KnowledgeSnapshot`は`models/`に属する値オブジェクトであり、`knowledge/`パッケージ（サービス）そのものには依存しない。
 - **依存禁止**: `knowledge/`（サービスパッケージ）, `repositories/`。「Normalizerは正規表現を持たない」の意味は[`architecture-contract.md`](../architecture/architecture-contract.md)を参照（ハードコードされたドメイン固有の正規表現パターンを禁止する趣旨であり、`re`モジュールの汎用的な利用自体は妨げない）。
 

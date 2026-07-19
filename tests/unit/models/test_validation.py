@@ -9,6 +9,7 @@ from mod_personnel_db.models import (
     Job,
     KnowledgeItem,
     KnowledgeItemId,
+    KnowledgeSnapshot,
     Layout,
     LayoutId,
     NormalizedRecord,
@@ -35,14 +36,32 @@ def test_confidence_accepts_boundary_scores() -> None:
 
 def test_raw_record_rejects_empty_fields() -> None:
     with pytest.raises(ModelValidationError):
-        RawRecord(section_ref=None, record_index=0, raw_fields={}, extracted_at=datetime.now(UTC))
+        RawRecord(
+            section_ref=None,
+            layout_id="format_a",
+            record_index=0,
+            raw_fields={},
+            extracted_at=datetime.now(UTC),
+        )
 
 
 def test_raw_record_rejects_negative_index() -> None:
     with pytest.raises(ModelValidationError):
         RawRecord(
             section_ref=None,
+            layout_id="format_a",
             record_index=-1,
+            raw_fields={"rank": "陸将"},
+            extracted_at=datetime.now(UTC),
+        )
+
+
+def test_raw_record_rejects_empty_layout_id() -> None:
+    with pytest.raises(ModelValidationError):
+        RawRecord(
+            section_ref=None,
+            layout_id="",
+            record_index=0,
             raw_fields={"rank": "陸将"},
             extracted_at=datetime.now(UTC),
         )
@@ -56,6 +75,7 @@ def test_normalized_value_rejects_empty_value() -> None:
 def test_normalized_record_requires_matching_field_keys() -> None:
     raw = RawRecord(
         section_ref=None,
+        layout_id="format_a",
         record_index=0,
         raw_fields={"rank": "陸将"},
         extracted_at=datetime(2026, 1, 1, tzinfo=UTC),
@@ -72,6 +92,7 @@ def test_normalized_record_requires_matching_field_keys() -> None:
 def test_normalized_record_rejects_earlier_normalized_at() -> None:
     raw = RawRecord(
         section_ref=None,
+        layout_id="format_a",
         record_index=0,
         raw_fields={"rank": "陸将"},
         extracted_at=datetime(2026, 1, 2, tzinfo=UTC),
@@ -207,6 +228,11 @@ def test_knowledge_item_rejects_effective_to_before_from() -> None:
             provenance_source="src",
             version=1,
         )
+
+
+def test_knowledge_snapshot_rejects_empty_checksum() -> None:
+    with pytest.raises(ModelValidationError):
+        KnowledgeSnapshot(items=(), snapshot_checksum="", as_of=date(2026, 1, 1))
 
 
 def test_layout_rejects_valid_to_before_from() -> None:

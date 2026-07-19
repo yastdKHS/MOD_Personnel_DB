@@ -152,7 +152,7 @@ class RawRecord:
 - **属性**: `section_ref`はパイプライン実行中（未永続化）は`None`、永続化後は`PersonnelSectionId`を持つ（[`pipeline.md`](pipeline.md)のステージ間受け渡しでは`None`のまま扱われ、`CandidateRepository.add_raw`呼び出し時に紐付けが確定する)。`layout_id`はField Extractorが入力`PersonnelSection.layout_id`をそのままコピーする`era_id`（[ADR-0037](../adr/0037-layout-detector-produces-layout-artifact.md)の`PersonnelSection.layout_id: str`と同じ意味論、[ADR-0039](../adr/0039-normalizer-field-mapping-via-extended-layout-knowledge.md)）。`raw_fields`は列位置ベースの汎用フィールド名（`column_1`, `column_2`, ...、[ADR-0038](../adr/0038-field-extractor-produces-field-extraction-result.md)）から生テキストへの写像。
 - **不変条件**: `raw_fields`は空でない。`record_index >= 0`。`layout_id`は空文字列を許容しない。
 - **Validation Rule（[ADR-0038](../adr/0038-field-extractor-produces-field-extraction-result.md)で確定）**: `raw_fields`のキー集合は、Field Extractorが`PersonnelSection.section_text`の該当行から構造的に認識した列の集合と一致する（`column_1`, `column_2`, ...の汎用名。検証自体はField Extractorの責務、[`architecture-contract.md`](../architecture/architecture-contract.md)）。
-- **列位置→意味的フィールド名マッピング（[ADR-0039](../adr/0039-normalizer-field-mapping-via-extended-layout-knowledge.md)で確定）**: `column_N`から意味的フィールド名（`name`/`rank`/`organization`等）への対応付けは、Normalizerが`layout_id`をキーに`knowledge/layout`カテゴリ（[`docs/knowledge/schema.md`](../knowledge/schema.md#layout)）のマッピングエントリを`KnowledgeSnapshot`経由で参照して行う。`RawRecord`自体は対応付け結果を持たない（正規化前の生値のみを保持するという既存方針を維持）。
+- **列位置→意味的フィールド名マッピング（[ADR-0039](../adr/0039-normalizer-field-mapping-via-extended-layout-knowledge.md)/[ADR-0040](../adr/0040-normalizer-produces-normalization-result.md)で確定）**: `column_N`から意味的フィールド名（`name`/`rank`/`organization`等）への対応付けは、Normalizerが`layout_id`をキーに`knowledge/layout`カテゴリ（[`docs/knowledge/schema.md`](../knowledge/schema.md#layout)）のマッピングエントリを`KnowledgeSnapshot`経由で参照して行う。`KnowledgeItem`の`category="layout"`, `item_key=f"{layout_id}.{raw_field_name}"`（例: `"format_a.column_1"`）, `canonical_value`が意味的フィールド名という規約を用いる（ADR-0040）。`RawRecord`自体は対応付け結果を持たない（正規化前の生値のみを保持するという既存方針を維持）。
 
 ### `FieldExtractionResult`（[ADR-0038](../adr/0038-field-extractor-produces-field-extraction-result.md)）
 
@@ -188,11 +188,11 @@ class FieldExtractionResult:
 
 - **属性**: `records`は確定した`RawRecord`（`candidates`のうちConfidence閾値以上、かつ`fields`が空でないもの）。`candidates`は評価した全行（`PersonnelSection.section_text`の各行に対応、閾値未満のものを含む）。`confidence`は`candidates`のスコア平均（候補が0件の場合は`score=0.0`）。`RawField`は1つの列から抽出された生の値（`name`は列位置ベースの汎用名`column_N`、`value`はPDFに書かれていた値そのまま）。
 - **不変条件**: `ExtractionCandidate.score`は`[0.0, 1.0]`。`ExtractionEvidence.column_count >= 0`。`RawField.name`は空文字列を許容しない。
-- **Section Parserとの構造対応**: `LayoutArtifact`→`LayoutDetectionResult`（ADR-0037）、`SectionParseResult`→`PersonnelSection`（ADR-0037）と同型の「集約結果が個別要素を内包し、後続段階へは個別要素が渡される」パターンに従う。`Normalizer.run(context, record: RawRecord, knowledge)`は`FieldExtractionResult.records`の要素を1件ずつ受け取る（呼び出し元`pipeline/`のJobRunnerが担う）。
+- **Section Parserとの構造対応**: `LayoutArtifact`→`LayoutDetectionResult`（ADR-0037）、`SectionParseResult`→`PersonnelSection`（ADR-0037）と同型の「集約結果が個別要素を内包し、後続段階へは個別要素が渡される」パターンに従う。`Normalizer.run(context, record: RawRecord)`（`KnowledgeSnapshot`はコンストラクタ注入、ADR-0040）は`FieldExtractionResult.records`の要素を1件ずつ受け取る（呼び出し元`pipeline/`のJobRunnerが担う）。
 
 ## `NormalizedRecord`
 
-Normalizerの出力。
+Normalizerの出力。**Phase1設計以来無変更**（[ADR-0040](../adr/0040-normalizer-produces-normalization-result.md)がTask8での再定義要求を検討し、`GoldRepository`・公開JSON輸出フォーマット（[ADR-0016](../adr/0016-public-json-format.md)）・既存Repositoryへの影響を避けるため維持を決定）。
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -209,8 +209,47 @@ class NormalizedRecord:
 ```
 
 - **属性**: `normalization_applied`は正規化に使った`KnowledgeItem`のID列（監査用、[ADR-0005](../adr/0005-knowledge-base-normalization.md)）。`NormalizedValue`は[`docs/database/json_schema.md`](../database/json_schema.md#normalizedvalue)の`value`/`raw`構造と対応する。
-- **不変条件**: `normalized_fields`のキー集合は`raw_record_ref.raw_fields`のキー集合と一致する（Normalizerはフィールドを追加・削除しない、値のみを変換する）。`normalized_at >= raw_record_ref.extracted_at`。
+- **不変条件**: `normalized_fields`のキー集合は`raw_record_ref.raw_fields`のキー集合と一致する（Normalizerはフィールドを追加・削除しない、値のみを変換する）。`normalized_at >= raw_record_ref.extracted_at`。`normalized_fields`のキーは`raw_record_ref.raw_fields`と同じ列位置ベースの汎用名（`column_N`）であり、意味的フィールド名へのリネームは行わない（ADR-0040。意味的フィールド名対応の内部的な適用結果は`NormalizationCandidate.fields`の`NormalizedField.name`ではなく、どの`KnowledgeItem`カテゴリを検索するかの判定にのみ使う）。
 - **Validation Rule**: `NormalizedValue.value`は空文字列を許容しない（正規化の結果、値が失われてはならない。正規化できなかった場合は`NormalizedRecord`を生成せず、上位でLearning Dataset記録に倒す、[ADR-0013](../adr/0013-learning-dataset-not-correction-log.md)）。
+
+### `NormalizationResult`（[ADR-0040](../adr/0040-normalizer-produces-normalization-result.md)）
+
+`Normalizer.run()`の戻り値。`FieldExtractionResult`（ADR-0038）と同型の集約結果パターン。
+
+```python
+@dataclass(frozen=True, slots=True)
+class NormalizedField:
+    name: str               # RawField.nameと同じキー（column_N等）
+    raw: str
+    value: str
+    normalization_method: str  # "typography" | "alias" | "organization" | "position" | "rank" | "identity"
+
+
+@dataclass(frozen=True, slots=True)
+class NormalizationEvidence:
+    layout_id: str
+    knowledge_version: str     # KnowledgeSnapshot.snapshot_checksum
+    matched_item_ids: tuple[KnowledgeItemId, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class NormalizationCandidate:
+    record_index: int
+    score: float
+    fields: tuple[NormalizedField, ...]
+    evidence: NormalizationEvidence
+
+
+@dataclass(frozen=True, slots=True)
+class NormalizationResult:
+    records: tuple[NormalizedRecord, ...]
+    candidates: tuple[NormalizationCandidate, ...]
+    confidence: Confidence
+```
+
+- **属性**: `records`はConfidence閾値以上の候補から構築された`NormalizedRecord`（0件または1件。`Normalizer.run()`は`RawRecord`を1件ずつ受け取るため、`candidates`も常に1件）。`NormalizedField.name`は`RawField.name`と同じキーを維持し、意味的フィールド名へのリネームは行わない（`NormalizedRecord.normalized_fields`の不変条件を破壊しないため）。`normalization_method`は`"typography"`（`knowledge/typography`のみ適用）・`"alias"`/`"organization"`/`"position"`/`"rank"`（対応するカテゴリのKnowledge Lookupが一致）・`"identity"`（いずれも一致せず未加工）のいずれか。
+- **不変条件**: `NormalizationCandidate.score`は`[0.0, 1.0]`。`NormalizedField.name`/`value`/`normalization_method`は空文字列を許容しない。`NormalizationEvidence.layout_id`/`knowledge_version`は空文字列を許容しない。
+- **Knowledge検索規約（ADR-0040）**: `KnowledgeItem`の既存の汎用形状（`item_key`/`canonical_value`）をそのまま用いる。`category="layout"`・`item_key=f"{layout_id}.{raw_field_name}"`で意味的フィールド名を解決し、対応する`category`（`alias`/`organization`/`position`/`rank`）・`item_key=`typography正規化後の値で正規化後の値を検索する。`effective_from`/`effective_to`は`KnowledgeSnapshot.as_of`を基準に絞り込む。
 
 ## `ValidationResult`
 

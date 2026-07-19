@@ -67,7 +67,7 @@
 
 **解釈上の注記（重要）**: これは「`re`モジュールを一切使ってはならない」という意味ではない。`knowledge/typography/`（[`docs/knowledge/schema.md`](../knowledge/schema.md#typography)）のルールは`pattern`/`replacement`のペアとしてデータ側に定義されており、Normalizerがそれを**汎用的な適用エンジン**として実行すること（例: `re.sub(pattern, replacement, text)`をデータ駆動で呼び出すこと）は許容される。禁止されるのは、**コード中に個別のドメイン知識を表すパターン文字列を直接書くこと**である（[ADR-0012](../adr/0012-error-handling-priority-order.md)の「Knowledge Base追加を正規表現の追加より優先する」を、コードレベルの制約として言い換えたもの）。
 
-**実現方法**: `Normalizer.run()`（[`interfaces.md`](../api/interfaces.md)）は`RawRecord`と、呼び出し元が注入する`KnowledgeSnapshot`（[`models.md`](../api/models.md)、`knowledge/typography/`・`knowledge/organizations/`等のルールを含む）を受け取り、`KnowledgeSnapshot`内のデータのみを使って変換する。`normalizers/`のコードレビューでは、リテラルな正規表現パターン（変数化されていない、`knowledge/`由来でないパターン文字列）の混入を明示的にチェック項目とする（[`python-contract.md`](../api/python-contract.md)のコードレビュー観点として今後明記）。
+**実現方法**: `Normalizer.run(context, record: RawRecord)`（[`interfaces.md`](../api/interfaces.md)）は、呼び出し元がコンストラクタ注入する`KnowledgeSnapshot`（[`models.md`](../api/models.md)、`knowledge/typography/`・`knowledge/organizations/`等のルールを含む、ADR-0040）内のデータのみを使って変換する。`normalizers/`のコードレビューでは、リテラルな正規表現パターン（変数化されていない、`knowledge/`由来でないパターン文字列）の混入を明示的にチェック項目とする（[`python-contract.md`](../api/python-contract.md)のコードレビュー観点として今後明記）。
 
 ## 6. Validatorは修正しない
 

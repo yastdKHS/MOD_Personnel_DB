@@ -22,8 +22,8 @@
 from typing import Protocol
 from mod_personnel_db.models import (
     Document, LayoutArtifact, SectionParseResult, PersonnelSection,
-    FieldExtractionResult, RawRecord, NormalizedRecord, KnowledgeSnapshot,
-    ValidationResult, ValidationRuleSet, PdfRecord,
+    FieldExtractionResult, RawRecord, NormalizationResult, NormalizedRecord,
+    KnowledgeSnapshot, ValidationResult, ValidationRuleSet, PdfRecord,
 )
 from mod_personnel_db.pipeline import PipelineContext
 
@@ -84,15 +84,29 @@ class FieldExtractor(Protocol):
 
 
 class Normalizer(Protocol):
-    """抽出値をKnowledge Baseで正規化する（段階5）。knowledgeは呼び出し元が注入する。"""
+    """抽出値をKnowledge Baseで正規化する（段階5）。
 
-    def run(
-        self, context: PipelineContext, record: RawRecord, knowledge: KnowledgeSnapshot
-    ) -> NormalizedRecord: ...
+    **`KnowledgeSnapshot`はコンストラクタ注入・戻り値は`NormalizationResult`
+    （ADR-0040）**: `run()`の2引数契約（`context, record, knowledge`）は
+    `PipelineStage[TIn, TOut]`の単一入力規約に違反していたため、
+    `KnowledgeSnapshot`は呼び出し元がインスタンス化時に注入する
+    （`Normalizer(knowledge, *, confidence_threshold=...)`、`FieldExtractor`の
+    `confidence_threshold`注入と同型）。戻り値は`LayoutArtifact`（ADR-0035）・
+    `SectionParseResult`（ADR-0037）・`FieldExtractionResult`（ADR-0038）と
+    同型の集約結果パターンの`NormalizationResult`であり、内包する
+    `NormalizedRecord`自体の形状は無変更（Phase1設計を維持）。
+    """
+
+    def run(self, context: PipelineContext, record: RawRecord) -> NormalizationResult: ...
 
 
 class Validator(Protocol):
-    """正規化後のデータを検証する（段階6）。レコードの値は変更しない。"""
+    """正規化後のデータを検証する（段階6）。レコードの値は変更しない。
+
+    **TODO（ADR-0040）**: `run()`の2引数契約（`context, record, rules`）は
+    `Normalizer`と同型の単一入力規約違反を抱える。Validator実装タスク着手前に
+    ADR-0040の解決パターン（コンストラクタ注入）を適用し、本Protocolを確定する。
+    """
 
     def run(
         self, context: PipelineContext, record: NormalizedRecord, rules: ValidationRuleSet

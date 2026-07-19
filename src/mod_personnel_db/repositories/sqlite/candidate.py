@@ -8,6 +8,11 @@ docs/api/repositories.mdの設計メモが「呼び出し文脈から付与さ�
 PersonnelSection.layout_id（str、era_id）とpersonnel_sections.layout_id
 （INTEGER、layouts.idへのFK）の解決はADR-0037により本Repositoryが担う
 （Section ParserはRepositoryにアクセスしないため、era_idのみを保持する）。
+
+RawRecord.layout_id（str、era_id、ADR-0039/0040）も同様にera_idのみを
+保持する値であり、candidate_records自体はlayout_id列を持たない
+（personnel_section_id経由でpersonnel_sections.layout_idをJOINして
+era_idへ解決する、ADR-0040のConsequences参照）。
 """
 
 import json
@@ -34,6 +39,13 @@ from mod_personnel_db.repositories.sqlite._serialization import (
     str_to_dt,
 )
 from mod_personnel_db.utils.exceptions import RepositoryError
+
+_CANDIDATE_SELECT_WITH_ERA_ID = """
+    SELECT cr.*, l.era_id AS era_id
+    FROM candidate_records cr
+    JOIN personnel_sections ps ON ps.id = cr.personnel_section_id
+    JOIN layouts l ON l.id = ps.layout_id
+"""
 
 
 def _row_to_section(row: sqlite3.Row) -> PersonnelSection:
@@ -65,6 +77,7 @@ def _resolve_layout_id(conn: sqlite3.Connection, era_id: str) -> int:
 def _row_to_candidate(row: sqlite3.Row) -> CandidateRecord:
     raw = RawRecord(
         section_ref=PersonnelSectionId(row["personnel_section_id"]),
+        layout_id=row["era_id"],
         record_index=row["record_index"],
         raw_fields=json.loads(row["raw_fields"]),
         extracted_at=str_to_dt(row["created_at"]),
@@ -166,25 +179,26 @@ class SqliteCandidateRepository(SqliteRepositoryBase):
 
     def get(self, candidate_id: CandidateId) -> CandidateRecord | None:
         row = self.conn.execute(
-            "SELECT * FROM candidate_records WHERE id = ?", (candidate_id,)
+            f"{_CANDIDATE_SELECT_WITH_ERA_ID} WHERE cr.id = ?", (candidate_id,)
         ).fetchone()
         return None if row is None else _row_to_candidate(row)
 
     def list_by_section(self, section_id: PersonnelSectionId) -> tuple[CandidateRecord, ...]:
         rows = self.conn.execute(
-            "SELECT * FROM candidate_records WHERE personnel_section_id = ? ORDER BY record_index",
+            f"{_CANDIDATE_SELECT_WITH_ERA_ID} WHERE cr.personnel_section_id = ? "
+            "ORDER BY cr.record_index",
             (section_id,),
         ).fetchall()
         return tuple(_row_to_candidate(row) for row in rows)
 
     def list_pending_validation(self) -> tuple[CandidateRecord, ...]:
         rows = self.conn.execute(
-            "SELECT * FROM candidate_records WHERE validation_status = 'pending' ORDER BY id"
+            f"{_CANDIDATE_SELECT_WITH_ERA_ID} WHERE cr.validation_status = 'pending' ORDER BY cr.id"
         ).fetchall()
         return tuple(_row_to_candidate(row) for row in rows)
 
     def list_failed_validation(self) -> tuple[CandidateRecord, ...]:
         rows = self.conn.execute(
-            "SELECT * FROM candidate_records WHERE validation_status = 'failed' ORDER BY id"
+            f"{_CANDIDATE_SELECT_WITH_ERA_ID} WHERE cr.validation_status = 'failed' ORDER BY cr.id"
         ).fetchall()
         return tuple(_row_to_candidate(row) for row in rows)

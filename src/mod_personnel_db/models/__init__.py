@@ -50,7 +50,7 @@ from mod_personnel_db.models.ids import (
     ReviewSessionId,
 )
 from mod_personnel_db.models.job import Job, ParserVersion
-from mod_personnel_db.models.knowledge import KnowledgeItem, Layout
+from mod_personnel_db.models.knowledge import KnowledgeItem, KnowledgeSnapshot, Layout
 from mod_personnel_db.models.layout_detection import (
     BoundingBoxStatistics,
     LayoutArtifact,
@@ -68,6 +68,12 @@ from mod_personnel_db.models.layout_detection import (
     RotationStatistics,
 )
 from mod_personnel_db.models.learning import LearningRecord
+from mod_personnel_db.models.normalization import (
+    NormalizationCandidate,
+    NormalizationEvidence,
+    NormalizationResult,
+    NormalizedField,
+)
 from mod_personnel_db.models.pdf import PdfRecord
 from mod_personnel_db.models.review import ReviewItem
 from mod_personnel_db.models.sections import SectionCandidate, SectionEvidence, SectionParseResult
@@ -99,6 +105,7 @@ __all__ = [
     "JobId",
     "KnowledgeItem",
     "KnowledgeItemId",
+    "KnowledgeSnapshot",
     "Layout",
     "LayoutArtifact",
     "LayoutArtifactPage",
@@ -115,6 +122,10 @@ __all__ = [
     "LearningRecord",
     "LearningRecordId",
     "LearningStatus",
+    "NormalizationCandidate",
+    "NormalizationEvidence",
+    "NormalizationResult",
+    "NormalizedField",
     "NormalizedRecord",
     "NormalizedValue",
     "PageStatistics",

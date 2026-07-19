@@ -47,7 +47,7 @@ class FieldExtractor:
         del context
         lines = _lines(section.section_text)
         candidates = tuple(_evaluate_line(index, line) for index, line in enumerate(lines))
-        records = _build_records(candidates, self._confidence_threshold)
+        records = _build_records(candidates, section.layout_id, self._confidence_threshold)
         return FieldExtractionResult(
             records=records, candidates=candidates, confidence=_overall_confidence(candidates)
         )
@@ -84,7 +84,7 @@ def _score(column_count: int) -> float:
 
 
 def _build_records(
-    candidates: tuple[ExtractionCandidate, ...], threshold: float
+    candidates: tuple[ExtractionCandidate, ...], layout_id: str, threshold: float
 ) -> tuple[RawRecord, ...]:
     records: list[RawRecord] = []
     for candidate in candidates:
@@ -92,15 +92,16 @@ def _build_records(
             continue
         if not candidate.fields:
             continue
-        records.append(_to_raw_record(candidate))
+        records.append(_to_raw_record(candidate, layout_id))
     return tuple(records)
 
 
-def _to_raw_record(candidate: ExtractionCandidate) -> RawRecord:
+def _to_raw_record(candidate: ExtractionCandidate, layout_id: str) -> RawRecord:
     raw_fields = {field.name: field.value for field in candidate.fields}
     try:
         return RawRecord(
             section_ref=None,
+            layout_id=layout_id,
             record_index=candidate.record_index,
             raw_fields=raw_fields,
             extracted_at=datetime.now(UTC),

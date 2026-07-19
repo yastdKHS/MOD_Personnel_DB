@@ -43,12 +43,23 @@ class PersonnelSection:
 
 @dataclass(frozen=True, slots=True)
 class RawRecord:
+    """Field Extractorの出力（ADR-0038）。
+
+    `layout_id`は`PersonnelSection.layout_id`と同じ意味論の`era_id`であり、
+    Field Extractorが入力`PersonnelSection.layout_id`をそのままコピーする
+    （ADR-0039）。Normalizerが`column_N`から意味的フィールド名への対応付けを
+    `knowledge/layout`カテゴリから引くためのキーとして用いる（ADR-0040）。
+    """
+
     section_ref: PersonnelSectionId | None
+    layout_id: str
     record_index: int
     raw_fields: Mapping[str, str]
     extracted_at: datetime
 
     def __post_init__(self) -> None:
+        if self.layout_id == "":
+            raise ModelValidationError("layout_id must not be empty")
         if self.record_index < 0:
             raise ModelValidationError("record_index must be >= 0")
         if len(self.raw_fields) == 0:

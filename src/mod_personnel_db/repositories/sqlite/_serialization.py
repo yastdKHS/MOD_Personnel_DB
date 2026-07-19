@@ -64,6 +64,7 @@ def normalized_record_to_json(record: NormalizedRecord) -> str:
     payload = {
         "raw_record_ref": {
             "section_ref": int(raw.section_ref) if raw.section_ref is not None else None,
+            "layout_id": raw.layout_id,
             "record_index": raw.record_index,
             "raw_fields": dict(raw.raw_fields),
             "extracted_at": dt_to_str(raw.extracted_at),
@@ -83,6 +84,7 @@ def json_to_normalized_record(text: str) -> NormalizedRecord:
     section_ref = raw_payload["section_ref"]
     raw = RawRecord(
         section_ref=None if section_ref is None else section_ref,
+        layout_id=raw_payload["layout_id"],
         record_index=raw_payload["record_index"],
         raw_fields=raw_payload["raw_fields"],
         extracted_at=str_to_dt(raw_payload["extracted_at"]),

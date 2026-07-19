@@ -70,6 +70,7 @@ def test_add_raw_and_get(
     section_id = repo.add_section(_make_section(pdf_id, layout_era_id))
     raw = RawRecord(
         section_ref=None,
+        layout_id=layout_era_id,
         record_index=0,
         raw_fields={"name": "山田太郎", "rank": "陸将補"},
         extracted_at=datetime(2026, 1, 1, tzinfo=UTC),
@@ -92,6 +93,7 @@ def test_attach_normalized(
     section_id = repo.add_section(_make_section(pdf_id, layout_era_id))
     raw = RawRecord(
         section_ref=None,
+        layout_id=layout_era_id,
         record_index=0,
         raw_fields={"rank": "陸将補"},
         extracted_at=datetime(2026, 1, 1, tzinfo=UTC),
@@ -119,6 +121,7 @@ def test_update_validation(
     section_id = repo.add_section(_make_section(pdf_id, layout_era_id))
     raw = RawRecord(
         section_ref=None,
+        layout_id=layout_era_id,
         record_index=0,
         raw_fields={"rank": "陸将補"},
         extracted_at=datetime(2026, 1, 1, tzinfo=UTC),
@@ -155,6 +158,7 @@ def test_list_by_section_orders_by_record_index(
             section_id,
             RawRecord(
                 section_ref=None,
+                layout_id=layout_era_id,
                 record_index=index,
                 raw_fields={"rank": "陸将補"},
                 extracted_at=datetime(2026, 1, 1, tzinfo=UTC),
@@ -173,6 +177,7 @@ def test_list_pending_and_failed_validation(
     section_id = repo.add_section(_make_section(pdf_id, layout_era_id))
     raw = RawRecord(
         section_ref=None,
+        layout_id=layout_era_id,
         record_index=0,
         raw_fields={"rank": "陸将補"},
         extracted_at=datetime(2026, 1, 1, tzinfo=UTC),
@@ -182,6 +187,7 @@ def test_list_pending_and_failed_validation(
         section_id,
         RawRecord(
             section_ref=None,
+            layout_id=layout_era_id,
             record_index=1,
             raw_fields={"rank": "不明"},
             extracted_at=datetime(2026, 1, 1, tzinfo=UTC),

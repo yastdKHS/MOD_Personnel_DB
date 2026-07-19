@@ -20,6 +20,7 @@ def _evidence(*, column_count: int = 1) -> ExtractionEvidence:
 def _record() -> RawRecord:
     return RawRecord(
         section_ref=None,
+        layout_id="format_a",
         record_index=0,
         raw_fields={"column_1": "山田太郎"},
         extracted_at=datetime(2026, 1, 1, tzinfo=UTC),
