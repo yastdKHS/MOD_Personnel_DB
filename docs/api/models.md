@@ -33,8 +33,9 @@ class DocumentWarning(StrEnum):
 
 @dataclass(frozen=True, slots=True)
 class DocumentMetadata:
-    sha256: str
     filename: str
+    sha256: str
+    file_size: int
     created_at: datetime | None
     modified_at: datetime | None
     pdf_version: str
@@ -44,10 +45,10 @@ class DocumentMetadata:
 @dataclass(frozen=True, slots=True)
 class DocumentStatistics:
     page_count: int
-    file_size: int
     text_length: int | None
     image_count: int
     rotation_count: int
+    analysis_time_ms: float
 
 
 @dataclass(frozen=True, slots=True)
@@ -55,7 +56,6 @@ class DocumentAnalysisResult:
     metadata: DocumentMetadata
     statistics: DocumentStatistics
     warnings: tuple[DocumentWarning, ...]
-    analysis_time_ms: float
     confidence: Confidence
 
 
@@ -69,13 +69,14 @@ class Document:
 ```
 
 - **属性**: `id`（本解析実行を識別する[`DocumentId`](#id型)、同一`PdfRecord`への再解析を区別するための識別子。[ADR-0023](../adr/0023-parser-versioning-policy.md)）、`source_pdf_id`（由来`PdfRecord`への参照、[ADR-0006](../adr/0006-pipeline-provenance.md)の来歴要件）、`analysis`（[`DocumentAnalysisResult`](#documentanalysisresultversion-20adr-0032)）、`analyzed_at`、`analyzer_version`（解析を行ったDocument Analyzer実装のバージョン、来歴追跡用）。
-- **不変条件**: `Document`はfrozenであり、生成後に内容を変更しない。`DocumentMetadata.sha256`は64桁の16進文字列。`DocumentStatistics.page_count >= 0`、`file_size >= 0`、`image_count >= 0`、`rotation_count >= 0`。`DocumentAnalysisResult.analysis_time_ms >= 0`。`DocumentAnalysisResult.confidence.score`は`[0.0, 1.0]`（[`Confidence`](#confidence)と共通）。
+- **不変条件**: `Document`はfrozenであり、生成後に内容を変更しない。`DocumentMetadata.sha256`は64桁の16進文字列。`DocumentMetadata.file_size >= 0`。`DocumentStatistics.page_count >= 0`、`image_count >= 0`、`rotation_count >= 0`、`analysis_time_ms >= 0`。`DocumentAnalysisResult.confidence.score`は`[0.0, 1.0]`（[`Confidence`](#confidence)と共通）。
 - **Validation Rule**: `DocumentMetadata.encrypted == True`の場合、`DocumentAnalysisResult.warnings`に`DocumentWarning.ENCRYPTED`を含む。
 - **`DocumentStatistics.text_length`に関する注記**: Document Analyzerは文字列（抽出結果）を生成・保持・返却しない（[ADR-0032](../adr/0032-redefine-document-analyzer-responsibility.md)）。`text_length`は、`DocumentWarning.IMAGE_ONLY`等の警告判定に必要な**軽量プローブによる文字数の計測値**（スカラー）のみを表し、抽出したテキスト本文そのものを保持しない。プローブが実行できない場合（例: 暗号化PDFで内容確認不可）は`None`。
+- **フィールド配置（[ADR-0033](../adr/0033-document-analyzer-output-field-composition.md)）**: `file_size`はファイルそのものの静的属性として`DocumentMetadata`に、`analysis_time_ms`は解析実行1回分の計測値として`DocumentStatistics`に、それぞれ配置する。
 
-### `DocumentAnalysisResult`（Version 2.0、[ADR-0032](../adr/0032-redefine-document-analyzer-responsibility.md)）
+### `DocumentAnalysisResult`（Version 2.0、[ADR-0032](../adr/0032-redefine-document-analyzer-responsibility.md)・[ADR-0033](../adr/0033-document-analyzer-output-field-composition.md)）
 
-`Document.analysis`として保持される。上記コードブロックを参照。`metadata` / `statistics` / `warnings` / `analysis_time_ms` / `confidence`の5属性のみを持ち、PDFの内容（文字列）は一切含まない。
+`Document.analysis`として保持される。上記コードブロックを参照。`metadata` / `statistics` / `warnings` / `confidence`の4属性のみを持ち、PDFの内容（文字列）は一切含まない。
 
 ### `Page`・旧`Document`構造（Superseded）
 

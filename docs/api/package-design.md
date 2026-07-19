@@ -90,8 +90,8 @@ src/mod_personnel_db/
 
 ### `document/`（Document Analyzer）
 
-- **目的**: 取得したPDFを解析可能な内部表現（`Document`モデル）に変換する（[ADR-0011](../adr/0011-fixed-core-pipeline.md)段階1）。
-- **責務**: PDFバイト列からページ・テキスト・座標情報を抽出する。様式判定は行わない。
+- **目的**: 取得したPDFのメタデータ・健全性・基本統計を取得し、`Document`（Document Identity）を生成する（[ADR-0011](../adr/0011-fixed-core-pipeline.md)段階1、[ADR-0032](../adr/0032-redefine-document-analyzer-responsibility.md)でVersion 2.0に再定義）。
+- **責務**: PDFの存在確認・メタデータ取得（SHA256・ファイル名・作成/更新日時・PDFバージョン・暗号化有無）・健全性確認（破損有無）・基本統計取得（ページ数・ファイルサイズ・画像数・回転数・軽量プローブによる文字数）・警告生成のみ。PDF解析（構造抽出）・OCR・文字抽出・様式判定は行わない（Version 1設計からの変更点、[ADR-0032](../adr/0032-redefine-document-analyzer-responsibility.md)）。
 - **依存先**: `models/`, `utils/`のみ。
 - **依存禁止**: `layout/`, `sections/`, `extractors/`, `normalizers/`, `validators/`, `repositories/`（抽象含む）, `knowledge/`, その他すべてのサービス層パッケージ。「Document Analyzerはlayoutを知らない」（[`architecture-contract.md`](../architecture/architecture-contract.md)）をパッケージレベルで強制する。
 
