@@ -113,7 +113,7 @@ src/mod_personnel_db/
 ### `extractors/`（Field Extractor）
 
 - **目的**: セクションから個々のフィールドを抽出する（段階4）。
-- **責務**: `PersonnelSection` → `list[RawRecord]`。正規化は行わない。
+- **責務**（[ADR-0038](../adr/0038-field-extractor-produces-field-extraction-result.md)）: `PersonnelSection` → `FieldExtractionResult`。`section_text`の各行を構造的な区切り（連続空白等）で列に分割し、列位置ベースの汎用フィールド名（`column_1`, `column_2`, ...）で`RawRecord`を生成する。意味的フィールド名（`name`/`rank`等）への対応付け・正規化は行わない。
 - **依存先**: `models/`, `utils/`のみ。
 - **依存禁止**: `repositories/`（抽象・具象いずれも）, `knowledge/`, `learning/`, `features/`。「Field ExtractorはDBを知らない」を、一般的なDependency Rule（[`dependency-rule.md`](dependency-rule.md)）が許容する「repository経由なら可」よりも**厳格に**、repositoryへの依存自体を禁止する形で強制する（理由は[`dependency-rule.md`](dependency-rule.md#本プロジェクト固有の追加制約)参照）。
 

@@ -26,6 +26,12 @@ from mod_personnel_db.models.enums import (
     RegressionStatus,
 )
 from mod_personnel_db.models.export import ExportRecord
+from mod_personnel_db.models.extraction import (
+    ExtractionCandidate,
+    ExtractionEvidence,
+    FieldExtractionResult,
+    RawField,
+)
 from mod_personnel_db.models.feature import FeatureVector
 from mod_personnel_db.models.gold import GoldRecord
 from mod_personnel_db.models.ids import (
@@ -83,7 +89,10 @@ __all__ = [
     "ErrorCategory",
     "ExportId",
     "ExportRecord",
+    "ExtractionCandidate",
+    "ExtractionEvidence",
     "FeatureVector",
+    "FieldExtractionResult",
     "GoldRecord",
     "GoldRecordId",
     "Job",
@@ -117,6 +126,7 @@ __all__ = [
     "PersonnelSection",
     "PersonnelSectionId",
     "PipelineStageName",
+    "RawField",
     "RawRecord",
     "RegressionStatus",
     "ReviewItem",

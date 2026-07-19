@@ -117,7 +117,7 @@
 | Document Analyzer | **何も生成しない**（文字列・レイアウト情報・論理構造のいずれも生成しない。メタデータ・統計・警告のみを返す） | [保証1](#1-document-analyzerはlayoutを知らない)の強化（Version 2.0、[ADR-0032](../adr/0032-redefine-document-analyzer-responsibility.md)） |
 | Layout Detector | レイアウト情報とPDF本文（`LayoutArtifact`、`.detection: LayoutDetectionResult`＋`.pages`） | [保証2](#2-layout-detectorはfieldを知らない)・[保証11](#11-layout-detectorだけがpdf本文にアクセスできる) |
 | Section Parser | 論理構造（`SectionParseResult`、`.sections: tuple[PersonnelSection, ...]`＝対象セクションの切り出し） | [保証3](#3-section-parserはknowledgeを知らない)・[保証12](#12-section-parserはlayoutartifact経由でのみpdfのテキストを得られる) |
-| Field Extractor | 抽出結果（`RawRecord`） | [保証4](#4-field-extractorはdbを知らない) |
+| Field Extractor | 抽出結果（`FieldExtractionResult`、`.records: tuple[RawRecord, ...]`、[ADR-0038](../adr/0038-field-extractor-produces-field-extraction-result.md)） | [保証4](#4-field-extractorはdbを知らない) |
 | Normalizer | 正規化済みの値（`NormalizedRecord`） | [保証5](#5-normalizerは正規表現を持たない) |
 | Validator | 妥当性判定（`ValidationResult`。値そのものは生成しない） | [保証6](#6-validatorは修正しない) |
 | Review | `gold_records`（Gold Database）の更新 | [保証8](#8-reviewはgold_recordsだけ更新できる)・[保証9](#9-reviewだけがgold_recordsgold-databaseを書き換えられる) |

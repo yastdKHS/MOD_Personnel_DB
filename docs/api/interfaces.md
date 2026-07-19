@@ -22,8 +22,8 @@
 from typing import Protocol
 from mod_personnel_db.models import (
     Document, LayoutArtifact, SectionParseResult, PersonnelSection,
-    RawRecord, NormalizedRecord, KnowledgeSnapshot, ValidationResult,
-    ValidationRuleSet, PdfRecord,
+    FieldExtractionResult, RawRecord, NormalizedRecord, KnowledgeSnapshot,
+    ValidationResult, ValidationRuleSet, PdfRecord,
 )
 from mod_personnel_db.pipeline import PipelineContext
 
@@ -71,9 +71,16 @@ class SectionParser(Protocol):
 
 
 class FieldExtractor(Protocol):
-    """セクションから正規化前のフィールドを抽出する（段階4）。"""
+    """セクションから正規化前のフィールドを抽出する（段階4）。
 
-    def run(self, context: PipelineContext, section: PersonnelSection) -> tuple[RawRecord, ...]: ...
+    **戻り値`FieldExtractionResult`（[ADR-0038](../adr/0038-field-extractor-produces-field-extraction-result.md)）**:
+    `LayoutArtifact`（ADR-0035）・`SectionParseResult`（ADR-0037）と同型の
+    集約結果パターン。`raw_fields`のキーは列位置ベースの汎用名（`column_1`,
+    `column_2`, ...）であり、意味的フィールド名への対応付けは行わない
+    （Knowledge/Layout定義への依存を持たないため）。
+    """
+
+    def run(self, context: PipelineContext, section: PersonnelSection) -> FieldExtractionResult: ...
 
 
 class Normalizer(Protocol):

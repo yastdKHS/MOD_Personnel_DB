@@ -15,6 +15,7 @@ tests/
     document/         # Document Analyzer本実装の検証（合成PDFフィクスチャ、実在PDFは使用しない）
     layout/            # Layout Detector本実装の検証（合成PDF・YAMLフィクスチャ、実在PDFは使用しない）
     sections/          # Section Parser本実装の検証（LayoutArtifactを直接構築、PDFフィクスチャ不要）
+    extractors/        # Field Extractor本実装の検証（PersonnelSectionを直接構築、PDFフィクスチャ不要）
   integration/       # 複数ステージを跨いだ結合テスト（未整備）
   golden/             # sample_pdfs/ と sample_outputs/ を用いたゴールデンファイルテスト（ADR-0007、未整備）
 ```
