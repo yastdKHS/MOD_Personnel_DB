@@ -169,7 +169,7 @@ flowchart TB
 | 10 | 任意のパッケージ → `utils/`以外への依存を`utils/`自身が持つ | `utils/`は常に依存グラフの葉 | `utils/`はドメイン知識を持たない汎用ヘルパーの集合であるため |
 | 11 | `validators/` → `knowledge/` | `pipeline/`が`knowledge/`から`ValidationRuleSet`を取得し、`Validator`のコンストラクタに注入する（ADR-0041、行6と対称） | Validatorはknowledgeサービスそのものを知らず、値オブジェクトのみを受け取る |
 | 12 | `pipeline/runner.py`（`PipelineRunner`） → `repositories/` / `knowledge/` / `learning/` / `review/` / `export/` | `pipeline/job_runner.py`（`JobRunner`）がこれらに依存し、`PipelineRunner`へは登録済み`PipelineStage`列と`PipelineContext`のみを渡す | `PipelineRunner`は純粋なStage実行機であり、これらへの依存はJobRunnerの責務（ADR-0044、[architecture-contract.md 保証13](../architecture/architecture-contract.md#13-pipelinerunnerはrepositoryknowledgelearningreviewexportを知らない)） |
-| 13 | `knowledge/`（`KnowledgeService`）・`learning/`（`LearningService`） → `pipeline/`、`repositories/sqlite/` | `pipeline/`（`JobRunner`）が`knowledge/`・`learning/`に依存する片方向のみ許可 | データ・Learning記録は常に「注入される」側であり、パイプラインを呼び出さない。Phase3 Task10-0.2で`KnowledgeService`/`LearningService`/`LearningRepository`をProtocol定義のみ実装したが、依存先は`models/`のみで、`pipeline/`・`repositories/sqlite/`のいずれもimportしない |
+| 13 | `knowledge/`（`KnowledgeService`）・`learning/`（`LearningService`） → `pipeline/`、`repositories/sqlite/` | `pipeline/`（`JobRunner`）が`knowledge/`・`learning/`に依存する片方向のみ許可 | データ・Learning記録は常に「注入される」側であり、パイプラインを呼び出さない。`KnowledgeService`/`LearningService`のProtocol定義自体は`models/`の型のみを参照し、`pipeline/`・`repositories/sqlite/`のいずれにも依存しない |
 
 ---
 

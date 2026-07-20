@@ -137,7 +137,6 @@ src/mod_personnel_db/
 - **責務**: YAMLファイルの読み込み・検証（Draft 2020-12スキーマ）・`KnowledgeRepository`経由でのDBインデックス更新。
 - **依存先**: `models/`, `repositories/`（抽象、`KnowledgeRepository`のみ）, `utils/`。
 - **依存禁止**: `document/`〜`validators/`（中核パイプライン6段階への逆依存はしない。データは常に「注入される」側であり、パイプライン段階を呼び出すことはない）、`repositories/sqlite/`（具象、直接は使わない）。
-- **実装状況（Phase3 Task10-0.2）**: `KnowledgeService` Protocol（[`src/mod_personnel_db/knowledge/__init__.py`](../../src/mod_personnel_db/knowledge/__init__.py)、DI用の契約のみ）を実装済み。上記のYAML読み込み・`KnowledgeRepository`連携を伴う具象実装は未着手（ADR-0044が前提とする`JobRunner`の依存契約を先行整備したのみ）。
 
 ### `learning/`（LearningService）
 
@@ -145,7 +144,6 @@ src/mod_personnel_db/
 - **責務**: エントリの作成・状態遷移（open→in_review→reflected→verified/wontfix）・集計クエリの提供。
 - **依存先**: `models/`, `repositories/`（抽象、`LearningRepository`のみ）, `utils/`。
 - **依存禁止**: `document/`〜`validators/`, `repositories/sqlite/`。
-- **実装状況（Phase3 Task10-0.2）**: `LearningService` Protocol（[`src/mod_personnel_db/learning/__init__.py`](../../src/mod_personnel_db/learning/__init__.py)、DI用の契約のみ）と、その永続化契約`LearningRepository`（[`src/mod_personnel_db/repositories/__init__.py`](../../src/mod_personnel_db/repositories/__init__.py)、[`repositories.md`](repositories.md#learningrepository)）を実装済み。上記の状態遷移ロジック・`LearningRepository`連携を伴う具象実装は未着手。
 
 ### `features/`（FeatureStore）
 
