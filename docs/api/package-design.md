@@ -185,7 +185,7 @@ src/mod_personnel_db/
 
 - **目的**: 中核パイプライン6段階の実行を調整する。詳細は[`pipeline.md`](pipeline.md)。パッケージ内部は「`JobRunner` → `PipelineRunner` → `PipelineStage`」の層構造を持ち、両者の責務は分離されている（[ADR-0044](../adr/0044-pipelinerunner-jobrunner-boundary.md)）。
 - **責務（`PipelineRunner`、`pipeline/runner.py`、実装済み）**: `PipelineContext`/`PipelineStage`/`PipelineResult`/`PipelineEvent`/`PipelineException`/`PipelineMetrics`の提供、および登録済み`PipelineStage`列の順次呼び出し（Artifact受け渡し・イベント記録）のみ。Stage生成（コンストラクタ注入）・`PipelineContext`生成・永続化は行わない。
-- **責務（`JobRunner`、`pipeline/job_runner.py`、未実装）**: `PipelineContext`生成、`KnowledgeSnapshot`/`ValidationRuleSet`取得によるStage生成（コンストラクタ注入）、`PipelineBuilder`経由での`PipelineRunner`への登録・呼び出し、`PipelineResult`のRepositoryへの永続化、Learning記録（[ADR-0013](../adr/0013-learning-dataset-not-correction-log.md)）。
+- **責務（`JobRunner`、`pipeline/job_runner.py`、実装済み）**: `PipelineContext`生成、`KnowledgeSnapshot`/`ValidationRuleSet`取得によるStage生成（コンストラクタ注入）、`PipelineBuilder`経由での`PipelineRunner`への登録・呼び出し、`PipelineResult`のRepositoryへの永続化、Learning記録（[ADR-0013](../adr/0013-learning-dataset-not-correction-log.md)）。
 - **依存先（パッケージ全体、`JobRunner`が必要とする分を含む）**: `models/`, `repositories/`（抽象、`PDFRepository`, `CandidateRepository`, `JobRepository`）, `document/`, `layout/`, `sections/`, `extractors/`, `normalizers/`, `validators/`, `knowledge/`, `learning/`, `utils/`。**ただし`PipelineRunner`自身のコードは`repositories/`, `knowledge/`, `learning/`のいずれにも依存しない**（[architecture-contract.md 保証13](../architecture/architecture-contract.md#13-pipelinerunnerはrepositoryknowledgelearningreviewexportを知らない)）。これらへの依存は`JobRunner`の責務としてのみ生じる。
 - **依存禁止**: `repositories/sqlite/`（具象）, `review/`, `export/`, `ftp/`（これらは中核パイプラインの外側であり、`pipeline/`から呼び出さない。連携が必要な場合は`services/`が両者を束ねる）。
 

@@ -298,6 +298,8 @@ class Scheduler(Protocol):
 
 ## `JobRunner`
 
+> 本Protocolを実装する`JobRunner`クラスは[`src/mod_personnel_db/pipeline/job_runner.py`](../../src/mod_personnel_db/pipeline/job_runner.py)に実装している（ADR-0044）。`PipelineRunner`の呼び出し元として、`PipelineContext`生成・Stage生成（コンストラクタ注入）・`PipelineBuilder`経由での登録・Repository永続化・Learning記録への委譲を行う。
+
 ```python
 from typing import Protocol
 from mod_personnel_db.models import Job, JobId, PdfRecord
