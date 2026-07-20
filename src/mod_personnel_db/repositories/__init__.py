@@ -1,6 +1,8 @@
 """Repository Protocol群。docs/api/repositories.md の型シグネチャに対応する。
 
-LearningRepositoryおよびUnitOfWorkは本タスク（Phase2 Task1）の対象外。
+UnitOfWorkは本タスク（Phase2 Task1）の対象外。LearningRepositoryはADR-0044が
+前提とするJobRunnerの依存契約を整備するため、Phase3 Task10-0.2で追加した
+（具象実装は対象外、docs/api/repositories.md#learningrepository）。
 """
 
 from datetime import date, datetime
@@ -17,6 +19,9 @@ from mod_personnel_db.models import (
     JobId,
     KnowledgeItem,
     Layout,
+    LearningRecord,
+    LearningRecordId,
+    LearningStatus,
     NormalizedRecord,
     ParserVersion,
     ParserVersionId,
@@ -75,6 +80,21 @@ class KnowledgeRepository(Protocol):
 
     def get_layout(self, era_id: str, version: int | None = None) -> Layout | None: ...
     def list_active_layouts(self, as_of: date | None = None) -> tuple[Layout, ...]: ...
+
+
+class LearningRepository(Protocol):
+    def add(self, record: LearningRecord) -> LearningRecordId: ...
+
+    def update(self, record_id: LearningRecordId, **fields: object) -> LearningRecord:
+        """ライフサイクル遷移に伴うフィールド更新（docs/architecture/learning_dataset.md参照）。"""
+        ...
+
+    def get(self, record_id: LearningRecordId) -> LearningRecord | None: ...
+    def list_by_status(self, status: LearningStatus) -> tuple[LearningRecord, ...]: ...
+    def list_by_error_category(self, category: str) -> tuple[LearningRecord, ...]: ...
+    def list_by_parser_version(
+        self, parser_version_id: ParserVersionId
+    ) -> tuple[LearningRecord, ...]: ...
 
 
 class PDFRepository(Protocol):

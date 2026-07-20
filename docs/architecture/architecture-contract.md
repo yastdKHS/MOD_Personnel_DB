@@ -2,7 +2,7 @@
 
 > 本ドキュメントは[`docs/constitution.md`](../constitution.md)（Project Constitution）に従属する。両者が矛盾する場合はConstitutionが優先される。
 >
-> 本ドキュメントは、Interface & Package設計（[`docs/api/`](../api/)）全体が満たすべき12の分離保証を定義する（保証10は[ADR-0032](../adr/0032-redefine-document-analyzer-responsibility.md)、保証11は[ADR-0035](../adr/0035-layout-detector-owns-pdf-content-access.md)、保証12は[ADR-0037](../adr/0037-layout-detector-produces-layout-artifact.md)により追加）。個々の保証は[`package-design.md`](../api/package-design.md)（依存関係）・[`dependency-rule.md`](../api/dependency-rule.md)（禁止/許可パターン）・[`pipeline.md`](../api/pipeline.md)（`run()`のみの公開）・[`docs/review/`](../review/)（Review Domain）の設計によって、**構造的に**（レビューや申し合わせだけでなく、依存グラフ上の事実として）実現される。曖昧な保証は解釈を明記し、将来の実装者が異なる解釈をしないようにする。
+> 本ドキュメントは、Interface & Package設計（[`docs/api/`](../api/)）全体が満たすべき13の分離保証を定義する（保証10は[ADR-0032](../adr/0032-redefine-document-analyzer-responsibility.md)、保証11は[ADR-0035](../adr/0035-layout-detector-owns-pdf-content-access.md)、保証12は[ADR-0037](../adr/0037-layout-detector-produces-layout-artifact.md)、保証13は[ADR-0044](../adr/0044-pipelinerunner-jobrunner-boundary.md)により追加）。個々の保証は[`package-design.md`](../api/package-design.md)（依存関係）・[`dependency-rule.md`](../api/dependency-rule.md)（禁止/許可パターン）・[`pipeline.md`](../api/pipeline.md)（`run()`のみの公開）・[`docs/review/`](../review/)（Review Domain）の設計によって、**構造的に**（レビューや申し合わせだけでなく、依存グラフ上の事実として）実現される。曖昧な保証は解釈を明記し、将来の実装者が異なる解釈をしないようにする。
 >
 > **本ドキュメントに実装はない。**
 
@@ -22,8 +22,9 @@
 | 10 | 各段階は自段階の出力物の生成を独占する（Exclusive Generation Ownership） | 各段階の出力型を生成できるのは対応する1パッケージのみ |
 | 11 | Layout DetectorだけがPDF本文にアクセスできる | `layout/`のみがPDF本文（文字列・Font・Bounding Box・Drawing・Rotation・画像・Annotation）を扱う |
 | 12 | Section ParserはLayoutArtifact経由でのみPDFのテキストを得られる | `sections/`はPDFファイル・PDF解析ライブラリに依存せず、`LayoutArtifact.pages`のみを入力とする |
+| 13 | PipelineRunnerはRepository・Knowledge・Learning・Review・Exportを知らない | `pipeline/runner.py`（`PipelineRunner`）は`repositories/`・`knowledge/`・`learning/`・`review/`・`export/`のいずれにも依存しない |
 
-（`⊥`は「依存しない」を表す。保証8と9は同じ設計判断を異なる向きから述べたものであり、[9節](#9-reviewだけがgold_recordsgold-databaseを書き換えられる)で統合的に扱う。保証10は[ADR-0032](../adr/0032-redefine-document-analyzer-responsibility.md)（Document Analyzer責務再定義）に伴い、保証11は[ADR-0035](../adr/0035-layout-detector-owns-pdf-content-access.md)（Layout Detector Owns PDF Content Access）に伴い、保証12は[ADR-0037](../adr/0037-layout-detector-produces-layout-artifact.md)（Layout Detector Produces Layout Artifact）に伴い追加した）
+（`⊥`は「依存しない」を表す。保証8と9は同じ設計判断を異なる向きから述べたものであり、[9節](#9-reviewだけがgold_recordsgold-databaseを書き換えられる)で統合的に扱う。保証10は[ADR-0032](../adr/0032-redefine-document-analyzer-responsibility.md)（Document Analyzer責務再定義）に伴い、保証11は[ADR-0035](../adr/0035-layout-detector-owns-pdf-content-access.md)（Layout Detector Owns PDF Content Access）に伴い、保証12は[ADR-0037](../adr/0037-layout-detector-produces-layout-artifact.md)（Layout Detector Produces Layout Artifact）に伴い、保証13は[ADR-0044](../adr/0044-pipelinerunner-jobrunner-boundary.md)（PipelineRunner / JobRunner Boundary）に伴い追加した）
 
 ---
 
@@ -142,11 +143,19 @@
 
 **実現方法**: `LayoutDetector.run()`の戻り値`LayoutArtifact`（[`docs/api/models.md`](../api/models.md#layoutartifact)）は`pages: tuple[LayoutArtifactPage, ...]`を保持し、`SectionParser.run(context, artifact: LayoutArtifact) -> SectionParseResult`（[`docs/api/interfaces.md`](../api/interfaces.md#中核パイプライン6段階)）はこれを唯一の入力とする。`sections/`の依存先は`models/`, `utils/`（プロジェクト内）のみであり、`pypdf`等の外部PDFライブラリへの依存を持たない（[`docs/api/package-design.md`](../api/package-design.md)の依存先サマリ表）。
 
+## 13. PipelineRunnerはRepository・Knowledge・Learning・Review・Exportを知らない
+
+**保証の内容**: `pipeline/`パッケージは`repositories/`（抽象）・`knowledge/`・`learning/`への依存をパッケージレベルでは許可されている（[`JobRunner`](../api/interfaces.md#jobrunner)がこれらを必要とするため）が、`pipeline/`パッケージ内の`PipelineRunner`（`src/mod_personnel_db/pipeline/runner.py`）自身のコードは、`repositories/`・`knowledge/`・`learning/`・`review/`・`export/`のいずれもimportしない。`PipelineRunner`はStage生成（コンストラクタ注入）・`PipelineContext`生成・永続化を行わず、登録済み`PipelineStage`列を順に呼び出すだけの純粋な実行機である（[ADR-0044](../adr/0044-pipelinerunner-jobrunner-boundary.md)）。
+
+**理由**: `pipeline/`パッケージがこれらへの依存をパッケージ単位で許可されている以上、パッケージ境界（[`dependency-rule.md`](../api/dependency-rule.md)）だけでは`PipelineRunner`自身が実際にこれらへ依存していないことを保証できない。この区別を怠ると、「`pipeline/`パッケージ内だから」という理由でRepository・Knowledge依存が`PipelineRunner`（またはそれに近いモジュール）へ混入するリスクがあり、[保証4](#4-field-extractordbを知らない)等が個々のパッケージ境界で担保している「各段階は純粋な変換である」という原則が、パイプライン全体を統合する層で骨抜きになりうる。
+
+**実現方法**: `PipelineContext`生成・Stage生成（`Normalizer(knowledge, ...)`等のコンストラクタ注入）・`repositories/`への永続化・`KnowledgeSnapshot`/`ValidationRuleSet`の取得・Learning記録は、いずれも`JobRunner`（`pipeline/job_runner.py`、[ADR-0044](../adr/0044-pipelinerunner-jobrunner-boundary.md)）の責務であり、`PipelineRunner`の責務ではない。`PipelineRunner.run(context, job, initial_input)`は`PipelineContext`・登録済みStage列・初期入力を受け取り、各Stageの出力を次段へ不透明に渡すのみで、`repositories/`・`knowledge/`・`learning/`・`review/`・`export/`のいずれの型もimportしない（実装は`src/mod_personnel_db/pipeline/runner.py`のimport文で機械的に確認できる）。
+
 ---
 
 ## この契約の検証方法
 
-本ドキュメントの12保証はいずれも「特定パッケージが特定パッケージに依存しない」「特定の出力型を生成できるパッケージが1つに限られる」または「特定の外部リソース（PDF本文）へアクセスできるパッケージが1つに限られる」という形に還元できる（[`dependency-rule.md`](../api/dependency-rule.md)の全体依存グラフ）。したがって、実装着手後にこの契約が破られていないかは、以下の方法で検証可能である。
+本ドキュメントの13保証はいずれも「特定パッケージ（またはパッケージ内の特定モジュール）が特定パッケージに依存しない」「特定の出力型を生成できるパッケージが1つに限られる」または「特定の外部リソース（PDF本文）へアクセスできるパッケージが1つに限られる」という形に還元できる（[`dependency-rule.md`](../api/dependency-rule.md)の全体依存グラフ）。したがって、実装着手後にこの契約が破られていないかは、以下の方法で検証可能である。
 
 1. **静的解析**: `import-linter`等によるパッケージ間import制約の機械的検証（[`dependency-rule.md`](../api/dependency-rule.md#機械的な検証将来の推奨事項)）。
 2. **型検査**: `Validator.run()`の戻り値型に修正後の値が含まれないこと等は、`mypy --strict`（[`python-contract.md`](../api/python-contract.md)）による型シグネチャの検証で担保される。

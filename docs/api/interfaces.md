@@ -2,6 +2,8 @@
 
 > **本ドキュメントに実装はない。** すべてのコードブロックは`typing.Protocol`による**型シグネチャのみ**（メソッド本体は`...`）であり、`.pyi`スタブファイルと同等の位置づけである。ロジックは一切含まない。実際の実装は将来のタスクで別途行う。
 >
+> **例外（Phase3 Task10-0.2）**: `KnowledgeService`（[`src/mod_personnel_db/knowledge/__init__.py`](../../src/mod_personnel_db/knowledge/__init__.py)）・`LearningService`（[`src/mod_personnel_db/learning/__init__.py`](../../src/mod_personnel_db/learning/__init__.py)）は、ADR-0044が前提とする`JobRunner`の依存契約（Dependency Injection用の抽象型）を先行整備するため、Protocol定義のみを`src/`に実装済みである。ロジック（YAML読み込み・LearningRepositoryへの永続化）を伴う具象実装は引き続き将来のタスクの対象であり、本ドキュメントの「実装はない」という性質そのものは変わらない（Protocol定義自体は元々ロジックを持たないため）。
+>
 > 型は[`models.md`](models.md)で定義するモデル・値オブジェクトを用いる。パッケージ境界は[`package-design.md`](package-design.md)、依存ルールは[`dependency-rule.md`](dependency-rule.md)を参照。Protocol/ABC使い分けの方針は[`python-contract.md`](python-contract.md)を参照。
 
 ## 対象コンポーネント
@@ -210,16 +212,21 @@ class FTPService(Protocol):
 
 ## `KnowledgeService`
 
+> 本Protocolは[`src/mod_personnel_db/knowledge/__init__.py`](../../src/mod_personnel_db/knowledge/__init__.py)に実装済み（Phase3 Task10-0.2）。`load_validation_rules()`は、`Validator`のコンストラクタ注入（ADR-0041, ADR-0043）が要求する`ValidationRuleSet`を`JobRunner`（ADR-0044）が取得するための追加メソッドとして本タスクで補った（既存メソッドの変更はない）。
+
 ```python
 from typing import Protocol
 from datetime import date
-from mod_personnel_db.models import KnowledgeSnapshot, KnowledgeItem
+from mod_personnel_db.models import KnowledgeSnapshot, KnowledgeItem, ValidationRuleSet
 
 
 class KnowledgeService(Protocol):
     """knowledge/ 配下のYAMLを読み込み、正規化・検証に使うスナップショットを提供する（ADR-0005）。"""
 
     def load_snapshot(self, as_of: date | None = None) -> KnowledgeSnapshot: ...
+    def load_validation_rules(self, as_of: date | None = None) -> ValidationRuleSet:
+        """category="validation"のKnowledgeItem群を提供する（ADR-0041, ADR-0043）。"""
+        ...
     def get_item(self, category: str, item_key: str) -> KnowledgeItem | None: ...
     def reload(self) -> KnowledgeSnapshot:
         """knowledge/ ディレクトリを再読み込みし、KnowledgeRepositoryへ反映する。"""
@@ -229,6 +236,8 @@ class KnowledgeService(Protocol):
 ---
 
 ## `LearningService`
+
+> 本Protocolは[`src/mod_personnel_db/learning/__init__.py`](../../src/mod_personnel_db/learning/__init__.py)に実装済み（Phase3 Task10-0.2、シグネチャは変更なし）。
 
 ```python
 from typing import Protocol
