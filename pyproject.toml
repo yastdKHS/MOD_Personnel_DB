@@ -6,9 +6,9 @@
 #
 # 技術選定の理由は docs/adr/0001-python-packaging.md を参照。
 #
-# Phase2 Task1（Repository Skeleton）よりPython 3.14を対象とする。
-# 本セッションのサンドボックス環境はネットワークポリシーにより3.14バイナリを
-# 取得できないため、実際のCI/本番実行環境での3.14検証は別途必要（報告参照）。
+# Python 3.13を対象とする（ADR-0042）。Phase2 Task1で一時的に3.14へ引き上げ
+# られたが、実地検証されないままCI（3.12）・ローカル開発環境（3.13）との
+# 不整合を招いたため、実際に検証されてきた3.13へ統一した。
 
 [build-system]
 requires = ["setuptools>=68"]
@@ -19,14 +19,14 @@ name = "mod-personnel-db"
 version = "0.0.0"
 description = "防衛省人事発令PDFから構造化人事データベースを生成・公開する長期運用プロジェクト"
 readme = "README.md"
-requires-python = ">=3.14"
+requires-python = ">=3.13"
 license = { text = "TBD" }
 authors = [
     { name = "MOD Personnel DB Maintainers" },
 ]
 classifiers = [
     "Private :: Do Not Upload",
-    "Programming Language :: Python :: 3.14",
+    "Programming Language :: Python :: 3.13",
 ]
 # Repository層はsqlite3標準ライブラリのみに依存する（SQLAlchemy等のORMは使用しない）。
 # 恒久的な「枯れた技術を選ぶ」方針（ADR-0001）に基づき、依存は最小限に保つ。
@@ -93,7 +93,7 @@ quote-style = "double"
 
 # --- 型チェック: mypy ---
 [tool.mypy]
-python_version = "3.14"
+python_version = "3.13"
 strict = true
 files = ["src", "tests", "scripts"]
 
