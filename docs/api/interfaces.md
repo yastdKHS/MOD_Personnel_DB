@@ -103,11 +103,13 @@ class Normalizer(Protocol):
 class Validator(Protocol):
     """正規化後のデータを検証する（段階6）。レコードの値は変更しない。
 
-    **`ValidationRuleSet`はコンストラクタ注入（ADR-0041）**: `run()`の2引数契約
-    （`context, record, rules`）は`PipelineStage[TIn, TOut]`の単一入力規約に
-    違反していたため、`ValidationRuleSet`は呼び出し元がインスタンス化時に注入する
-    （`Validator(rules)`、`Normalizer(knowledge, ...)`と同型）。`RuleEngine`等の
-    追加抽象は導入しない（ADR-0041の「検討した代替案」参照）。
+    **`ValidationRuleSet`・`KnowledgeSnapshot`・`RuleEngine`はコンストラクタ注入
+    （ADR-0041/ADR-0043）**: `run()`の2引数契約（`context, record, rules`）は
+    `PipelineStage[TIn, TOut]`の単一入力規約に違反していたため、これらは
+    呼び出し元がインスタンス化時に注入する（`Validator(rules, knowledge, engine=...)`、
+    `Normalizer(knowledge, ...)`と同型）。`KnowledgeSnapshot`は、Normalizerが
+    `column_N`から意味的フィールド名への対応付けに使うのと同じ`category="layout"`
+    エントリをValidatorも参照するために必要（ADR-0043）。
     """
 
     def run(self, context: PipelineContext, record: NormalizedRecord) -> ValidationResult: ...

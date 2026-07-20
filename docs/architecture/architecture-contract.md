@@ -71,11 +71,11 @@
 
 ## 6. Validatorは修正しない
 
-**保証の内容**: `Validator.run()`の戻り値`ValidationResult`（[`models.md`](../api/models.md)）は、検証対象の値そのもの（修正後の値）を一切含まない。合否（`status`）・違反内容（`violations`）・信頼度（`confidence`）のみを返す。
+**保証の内容**: `Validator.run()`の戻り値`ValidationResult`（[`models.md`](../api/models.md)）は、検証対象の値そのもの（修正後の値）を一切含まない。合否（`status`）・違反内容（`candidates[].errors`/`warnings`）・信頼度（`confidence`）のみを返す（ADR-0043）。
 
 **理由**: 検証と修正を同じコンポーネントに持たせると、「なぜその値になったか」の追跡が困難になり、[ADR-0006](../adr/0006-pipeline-provenance.md)の来歴管理の原則に反する。修正が必要な場合は、人手レビュー（`review/`、[ADR-0021](../adr/0021-review-ui-strategy.md)）を経由するか、Knowledge Base/Layoutの改善（[ADR-0012](../adr/0012-error-handling-priority-order.md)）による再処理を経由する。
 
-**実現方法**: [`models.md`](../api/models.md#validationresult)の`ValidationResult`型定義に`NormalizedRecord`（修正後の値）を含むフィールドは存在しない。`subject_ref`は検証**対象への参照**であり、値のコピーや改変版ではない。
+**実現方法**: [`models.md`](../api/models.md#validationresult)の`ValidationResult`型定義に`NormalizedRecord`（修正後の値）を含むフィールドは存在しない。検証対象への参照は`ValidationEvidence`の`record_index`/`layout_id`という軽量な識別情報のみとし、`NormalizedRecord`自体（値のコピーや改変版）は保持しない（ADR-0043）。
 
 ## 7. RepositoryはSQLiteを隠蔽する
 

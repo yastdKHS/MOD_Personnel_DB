@@ -251,29 +251,60 @@ class NormalizationResult:
 - **不変条件**: `NormalizationCandidate.score`は`[0.0, 1.0]`。`NormalizedField.name`/`value`/`normalization_method`は空文字列を許容しない。`NormalizationEvidence.layout_id`/`knowledge_version`は空文字列を許容しない。
 - **Knowledge検索規約（ADR-0040）**: `KnowledgeItem`の既存の汎用形状（`item_key`/`canonical_value`）をそのまま用いる。`category="layout"`・`item_key=f"{layout_id}.{raw_field_name}"`で意味的フィールド名を解決し、対応する`category`（`alias`/`organization`/`position`/`rank`）・`item_key=`typography正規化後の値で正規化後の値を検索する。`effective_from`/`effective_to`は`KnowledgeSnapshot.as_of`を基準に絞り込む。
 
-## `ValidationResult`
+## `ValidationResult`（[ADR-0043](../adr/0043-validator-produces-validation-result-with-rule-engine.md)）
 
-Validatorの出力。**レコードの値は含まない**（Validatorは修正しないため、[`architecture-contract.md`](../architecture/architecture-contract.md)）。
+Validatorの出力。**レコードの値は含まない**（Validatorは修正しないため、[`architecture-contract.md`](../architecture/architecture-contract.md)）。`FieldExtractionResult`（ADR-0038）・`NormalizationResult`（ADR-0040）と同型の集約結果パターン。
 
 ```python
 @dataclass(frozen=True, slots=True)
-class ValidationViolation:
+class ValidationError:
     rule_id: str
-    severity: Literal["error", "warning"]
     message: str
 
 @dataclass(frozen=True, slots=True)
+class ValidationWarning:
+    rule_id: str
+    message: str
+
+@dataclass(frozen=True, slots=True)
+class ValidationEvidence:
+    record_index: int
+    layout_id: str
+    rules_evaluated: int
+
+@dataclass(frozen=True, slots=True)
+class ValidationCandidate:
+    record_index: int
+    score: float
+    errors: tuple[ValidationError, ...]
+    warnings: tuple[ValidationWarning, ...]
+    evidence: ValidationEvidence
+
+@dataclass(frozen=True, slots=True)
 class ValidationResult:
-    subject_ref: NormalizedRecord
     status: Literal["passed", "failed"]
-    violations: tuple[ValidationViolation, ...]
+    candidates: tuple[ValidationCandidate, ...]
     confidence: Confidence
     validated_at: datetime
 ```
 
-- **属性**: `violations`は`knowledge/validation/`（[`docs/knowledge/schema.md`](../knowledge/schema.md#validation)）の`ValidationEntry`群との照合結果。
-- **不変条件**: `status == "failed"` である場合、かつその場合に限り、`violations`に`severity == "error"`のものが1件以上存在する（`status`は`violations`から導出可能な冗長情報だが、明示的に持たせることでクエリ・シリアライズを簡潔にする）。
+- **属性**: `Validator.run()`は`NormalizedRecord`を1件ずつ受け取るため、`candidates`は常に1件（Validatorは常に検証結果を返し、Field Extractor/Normalizerのような「Confidence閾値未満のため出力しない」という状態はない）。`status`は`candidates[0].errors`が空かどうかから導出する。`ValidationEvidence`の`record_index`/`layout_id`は`NormalizedRecord.raw_record_ref`から取得できる値であり、`subject_ref`（旧設計、[ADR-0041](../adr/0041-validator-constructor-injects-validation-rule-set.md)時点では維持していた）は保持しない（呼び出し元が検証対象の`NormalizedRecord`を別途保持しているため冗長、[ADR-0043](../adr/0043-validator-produces-validation-result-with-rule-engine.md)）。
+- **不変条件**: `status == "failed"` である場合、かつその場合に限り、`candidates[0].errors`が1件以上存在する。`ValidationCandidate.score`は`[0.0, 1.0]`。`ValidationEvidence.record_index >= 0`、`rules_evaluated >= 0`。
 - **Validation Rule**: `confidence.score`は`0.0`〜`1.0`（[`docs/database/json_schema.md`](../database/json_schema.md#confidenceの算出ルール)のバンド定義と整合）。
+- **Knowledge検索規約（`category="validation"`、ADR-0043）**: `KnowledgeItem`の既存の汎用形状をそのまま用いる。`item_key`が対象フィールド名（意味的フィールド名）、`canonical_value`が許容される値の1つを表す。同一`item_key`を持つ複数の`KnowledgeItem`が1フィールドの許容値集合を構成する。該当`item_key`のエントリが存在しないフィールドは「制約なし」として扱う。
+
+### `RuleEngine`（[ADR-0043](../adr/0043-validator-produces-validation-result-with-rule-engine.md)）
+
+Validatorがコンストラクタで生成・保持する、フィールド単位のルール評価を担う具象クラス（差し替え可能、デフォルト実装を内蔵）。
+
+```python
+class RuleEngine:
+    def evaluate_field(
+        self, field_name: str, value: str, rules: ValidationRuleSet
+    ) -> ValidationError | None: ...
+```
+
+`Validator`は`record.raw_record_ref.layout_id`と`KnowledgeSnapshot`の`category="layout"`エントリから各フィールドの意味的名称を解決し（Normalizerと同じ規約だが、`validators/`は`normalizers/`に依存しないため解決ロジックは独立実装する）、解決できたフィールドについて`RuleEngine.evaluate_field()`を呼び出す。解決できなかったフィールドは`ValidationWarning`（`rule_id="layout.unmapped_field"`）とする。
 
 ## `ReviewItem`
 

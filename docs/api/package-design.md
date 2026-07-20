@@ -127,9 +127,9 @@ src/mod_personnel_db/
 ### `validators/`（Validator）
 
 - **目的**: 正規化後のデータをドメイン制約に基づき検証する（段階6）。
-- **責務**: `NormalizedRecord` → `ValidationResult`（ADR-0041）。`ValidationRuleSet`（呼び出し元から注入される値オブジェクト）は`run()`の引数ではなく**コンストラクタ**で受け取る（`PipelineStage[NormalizedRecord, ValidationResult]`の単一入力規約を満たすため、ADR-0041）。**レコードの値そのものは変更しない**（[`architecture-contract.md`](../architecture/architecture-contract.md)）。
-- **依存先**: `models/`, `utils/`のみ。`ValidationRuleSet`は`models/`に属する値オブジェクトであり、`knowledge/`パッケージ（サービス）そのものには依存しない。
-- **依存禁止**: `repositories/`, `knowledge/`, `learning/`。検証NGの`learning_dataset`への記録は`validators/`自身ではなく`pipeline/`（呼び出し元）が行う。ルール評価アルゴリズムは`validators/`内部の実装詳細とし、独立した`RuleEngine`コンポーネントへは切り出さない（ADR-0041、過剰設計を避けるため）。
+- **責務**: `NormalizedRecord` → `ValidationResult`（ADR-0041/ADR-0043）。`ValidationRuleSet`・`KnowledgeSnapshot`（いずれも呼び出し元から注入される値オブジェクト）・`RuleEngine`（差し替え可能な具象クラス、デフォルト実装あり）は`run()`の引数ではなく**コンストラクタ**で受け取る（`PipelineStage[NormalizedRecord, ValidationResult]`の単一入力規約を満たすため、ADR-0041）。`KnowledgeSnapshot`は、`column_N`から意味的フィールド名への対応付け（`category="layout"`、Normalizerと同じ規約）をValidatorも参照するために必要（ADR-0043）。**レコードの値そのものは変更しない**（[`architecture-contract.md`](../architecture/architecture-contract.md)）。
+- **依存先**: `models/`, `utils/`のみ。`ValidationRuleSet`・`KnowledgeSnapshot`・`RuleEngine`はいずれも`models/`に属する値オブジェクト・具象クラスであり、`knowledge/`パッケージ（サービス）そのものには依存しない。
+- **依存禁止**: `repositories/`, `knowledge/`, `learning/`, `normalizers/`（他段階への直接依存はしない。意味的フィールド名解決ロジックはNormalizerと重複するが、`validators/`内に独立実装する、ADR-0043）。検証NGの`learning_dataset`への記録は`validators/`自身ではなく`pipeline/`（呼び出し元）が行う。
 
 ### `knowledge/`（KnowledgeService）
 
