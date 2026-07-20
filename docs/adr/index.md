@@ -56,6 +56,8 @@
 | [0038](0038-field-extractor-produces-field-extraction-result.md) | Field Extractor Produces FieldExtractionResult | Accepted | 2026-07-19 | 2026-07-19 | 0011, 0035, 0037 | api/models.md, api/interfaces.md, api/package-design.md, architecture/architecture-contract.md |
 | [0039](0039-normalizer-field-mapping-via-extended-layout-knowledge.md) | Normalizer Field Mapping via Extended Layout Knowledge | Accepted | 2026-07-19 | 2026-07-19 | 0003, 0005, 0011, 0012, 0037, 0038 | knowledge/schema.md, api/models.md |
 | [0040](0040-normalizer-produces-normalization-result.md) | Normalizer Produces NormalizationResult via Constructor-Injected KnowledgeSnapshot | Accepted | 2026-07-19 | 2026-07-19 | 0005, 0011, 0037, 0038, 0039 | api/interfaces.md, api/models.md, api/package-design.md |
+| [0041](0041-validator-constructor-injects-validation-rule-set.md) | Validator Constructor-Injects ValidationRuleSet | Accepted | 2026-07-19 | 2026-07-19 | 0005, 0006, 0011, 0014, 0037, 0040 | api/interfaces.md, api/package-design.md, api/dependency-rule.md |
+| [0042](0042-python-version-target-realignment.md) | Python Version Target Realignment | Accepted | 2026-07-20 | 2026-07-20 | 0001, 0002, 0009, 0010, 0030 | pyproject.toml, .github/workflows/ci.yml, api/python-contract.md |
 
 ## 検討したが採用しなかった候補
 

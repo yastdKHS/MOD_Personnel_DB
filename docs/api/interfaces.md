@@ -103,14 +103,14 @@ class Normalizer(Protocol):
 class Validator(Protocol):
     """正規化後のデータを検証する（段階6）。レコードの値は変更しない。
 
-    **TODO（ADR-0040）**: `run()`の2引数契約（`context, record, rules`）は
-    `Normalizer`と同型の単一入力規約違反を抱える。Validator実装タスク着手前に
-    ADR-0040の解決パターン（コンストラクタ注入）を適用し、本Protocolを確定する。
+    **`ValidationRuleSet`はコンストラクタ注入（ADR-0041）**: `run()`の2引数契約
+    （`context, record, rules`）は`PipelineStage[TIn, TOut]`の単一入力規約に
+    違反していたため、`ValidationRuleSet`は呼び出し元がインスタンス化時に注入する
+    （`Validator(rules)`、`Normalizer(knowledge, ...)`と同型）。`RuleEngine`等の
+    追加抽象は導入しない（ADR-0041の「検討した代替案」参照）。
     """
 
-    def run(
-        self, context: PipelineContext, record: NormalizedRecord, rules: ValidationRuleSet
-    ) -> ValidationResult: ...
+    def run(self, context: PipelineContext, record: NormalizedRecord) -> ValidationResult: ...
 ```
 
 各段階の入出力型・パッケージ境界の詳細は[`package-design.md`](package-design.md)の該当節を参照。
