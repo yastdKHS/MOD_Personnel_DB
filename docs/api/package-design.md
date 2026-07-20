@@ -183,9 +183,10 @@ src/mod_personnel_db/
 
 ### `pipeline/`
 
-- **目的**: 中核パイプライン6段階の実行を調整する。詳細は[`pipeline.md`](pipeline.md)。
-- **責務**: `PipelineContext`/`PipelineStage`/`PipelineResult`/`PipelineEvent`/`PipelineException`/`PipelineMetrics`の提供、および`JobRunner`（各段階の呼び出し・Repositoryへの永続化）。
-- **依存先**: `models/`, `repositories/`（抽象、`PDFRepository`, `CandidateRepository`, `JobRepository`）, `document/`, `layout/`, `sections/`, `extractors/`, `normalizers/`, `validators/`, `knowledge/`, `learning/`, `utils/`。
+- **目的**: 中核パイプライン6段階の実行を調整する。詳細は[`pipeline.md`](pipeline.md)。パッケージ内部は「`JobRunner` → `PipelineRunner` → `PipelineStage`」の層構造を持ち、両者の責務は分離されている（[ADR-0044](../adr/0044-pipelinerunner-jobrunner-boundary.md)）。
+- **責務（`PipelineRunner`、`pipeline/runner.py`、実装済み）**: `PipelineContext`/`PipelineStage`/`PipelineResult`/`PipelineEvent`/`PipelineException`/`PipelineMetrics`の提供、および登録済み`PipelineStage`列の順次呼び出し（Artifact受け渡し・イベント記録）のみ。Stage生成（コンストラクタ注入）・`PipelineContext`生成・永続化は行わない。
+- **責務（`JobRunner`、`pipeline/job_runner.py`、未実装）**: `PipelineContext`生成、`KnowledgeSnapshot`/`ValidationRuleSet`取得によるStage生成（コンストラクタ注入）、`PipelineBuilder`経由での`PipelineRunner`への登録・呼び出し、`PipelineResult`のRepositoryへの永続化、Learning記録（[ADR-0013](../adr/0013-learning-dataset-not-correction-log.md)）。
+- **依存先（パッケージ全体、`JobRunner`が必要とする分を含む）**: `models/`, `repositories/`（抽象、`PDFRepository`, `CandidateRepository`, `JobRepository`）, `document/`, `layout/`, `sections/`, `extractors/`, `normalizers/`, `validators/`, `knowledge/`, `learning/`, `utils/`。**ただし`PipelineRunner`自身のコードは`repositories/`, `knowledge/`, `learning/`のいずれにも依存しない**（[architecture-contract.md 保証13](../architecture/architecture-contract.md#13-pipelinerunnerはrepositoryknowledgelearningreviewexportを知らない)）。これらへの依存は`JobRunner`の責務としてのみ生じる。
 - **依存禁止**: `repositories/sqlite/`（具象）, `review/`, `export/`, `ftp/`（これらは中核パイプラインの外側であり、`pipeline/`から呼び出さない。連携が必要な場合は`services/`が両者を束ねる）。
 
 ### `services/`
@@ -221,8 +222,10 @@ src/mod_personnel_db/
 | `export/` | `models/`, `repositories/`（抽象）, `utils/` | 中核パイプライン6段階, `repositories/sqlite/` |
 | `ftp/` | `utils/` | `repositories/`, `models/` |
 | `fetch/` | `models/`, `repositories/`（抽象）, `ftp/`, `utils/` | 中核パイプライン6段階 |
-| `pipeline/` | `models/`, `repositories/`（抽象）, 中核パイプライン6段階, `knowledge/`, `learning/`, `utils/` | `repositories/sqlite/`, `review/`, `export/`, `ftp/` |
+| `pipeline/`（パッケージ全体・`JobRunner`分を含む） | `models/`, `repositories/`（抽象）, 中核パイプライン6段階, `knowledge/`, `learning/`, `utils/` | `repositories/sqlite/`, `review/`, `export/`, `ftp/` |
 | `services/` | `pipeline/`, `review/`, `export/`, `models/`, `utils/` | `repositories/sqlite/`, 中核パイプライン6段階（直接） |
 | `cli/` | `services/`, `review/`, `export/`, `pipeline/`, `config/`, `models/`, `repositories/sqlite/`（合成ルートとしての例外） | 中核パイプライン6段階（直接） |
+
+上記`pipeline/`行はパッケージ全体（`JobRunner`が必要とする依存を含む）のサマリである。`PipelineRunner`（`pipeline/runner.py`）自身は`repositories/`, `knowledge/`, `learning/`のいずれにも依存しない（[ADR-0044](../adr/0044-pipelinerunner-jobrunner-boundary.md)、[architecture-contract.md 保証13](../architecture/architecture-contract.md#13-pipelinerunnerはrepositoryknowledgelearningreviewexportを知らない)）。この区別はパッケージ単位の本表では表現できないモジュール単位の規律であり、[`dependency-rule.md`](dependency-rule.md)の注記を参照。
 
 完全な依存グラフ（Mermaid）は[`dependency-rule.md`](dependency-rule.md)を参照。
