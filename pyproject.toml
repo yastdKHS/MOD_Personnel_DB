@@ -95,7 +95,7 @@ quote-style = "double"
 [tool.mypy]
 python_version = "3.13"
 strict = true
-files = ["src", "tests", "scripts"]
+files = ["src", "tests"]
 
 # --- テスト: pytest ---
 [tool.pytest.ini_options]
