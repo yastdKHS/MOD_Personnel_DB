@@ -3,6 +3,8 @@
 ## ステータス
 Accepted
 
+> **注記（Task9.1で追記）**: `RuleEngine`および`ValidationResult`形状に関する副次判断は[ADR-0043](0043-validator-produces-validation-result-with-rule-engine.md)で更新された。単一入力`run()`・コンストラクタ注入という本ADRの核心決定自体は変更されていない（詳細は本ADR末尾の「関連ADR」節を参照）。
+
 ## コンテキスト（Context）
 
 [ADR-0040](0040-normalizer-produces-normalization-result.md)は、`Normalizer.run()`の2引数契約（`context, record, knowledge`）が`PipelineStage[TIn, TOut]`の単一入力規約に違反していることを発見し、`KnowledgeSnapshot`をコンストラクタで注入する解決パターンを確立した。同ADRのConsequences節は「将来のValidator実装（`Validator.run(context, record, rules: ValidationRuleSet)`も同型の2引数問題を抱える）は、本ADRの解決パターンをそのまま適用できるが、Validator自体の実装は本ADRの範囲外とし、Validator実装タスク着手前に本ADRを参照して確定する」と明記していた。
