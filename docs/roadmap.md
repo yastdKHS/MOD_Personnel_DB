@@ -13,6 +13,7 @@
 | 項目 | Priority | Target | Status | 詳細 |
 |---|---|---|---|---|
 | `Document.file_path`保持方式の再評価（`DocumentReference` / `Artifact Locator` / Repository経由解決 / Storage Abstraction） | Low | Version 3 | Deferred | [ADR-0035 Future Improvements](adr/0035-layout-detector-owns-pdf-content-access.md#future-improvements), [`docs/design-freeze.md`のDeferred Decisions](design-freeze.md#deferred-decisions) |
+| Validation Rule Engine Expansion（`cross_field_constraint` / `date_range_constraint` / `severity`別評価 / `effective_from`・`effective_to`による期間評価） | Low | Version 3 | Deferred | [ADR-0043 Future Improvements](adr/0043-validator-produces-validation-result-with-rule-engine.md#future-improvements) |
 
 ## 関連ドキュメント
 

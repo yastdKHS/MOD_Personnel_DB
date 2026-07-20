@@ -127,6 +127,21 @@ Validator本体は、`record.raw_record_ref.layout_id`と`KnowledgeSnapshot`の`
 | [`docs/api/package-design.md`](../api/package-design.md) | `validators/`節を更新（`KnowledgeSnapshot`参照理由・`RuleEngine`導入） |
 | [`docs/architecture/architecture-contract.md`](../architecture/architecture-contract.md) | 保証6の`ValidationResult`構成記述・`subject_ref`廃止を反映 |
 
+## Future Improvements
+
+本節は、Phase2 Task9.1（Documentation Update、Task9 Reviewの推奨事項反映）で記録する**将来の実装拡張候補**である。現時点では実装変更を行わない（後述「実装範囲（Version 2.0時点）」参照）。
+
+**実装範囲（Version 2.0時点）**: `RuleEngine`は`category="validation"`の`KnowledgeItem`について、`item_key`（対象フィールド名）に対する`canonical_value`（許容値）の集合照合——[`docs/knowledge/schema.md`](../knowledge/schema.md#validation)が定める`rule_type`のうち`allowed_value_set`相当——のみを実装対象とした。これは現行のTask9実装要件を満たすために必要十分な範囲であり、意図的な最小実装である（[ADR-0014](0014-development-discipline.md)の開発規律、過剰設計を避ける方針に基づく）。
+
+**未実装として意図的に対象外とした項目**:
+
+- **`cross_field_constraint`**: `docs/knowledge/schema.md`が定める、あるフィールドの値に応じて別フィールドの許容値を制約するルール種別。`KnowledgeItem`（実装済みモデル）は`item_key`/`canonical_value`の平坦な形状のみを持ち、`if_field`/`if_value`/`then_field`/`then_allowed`という多項の構造を表現できない。
+- **`date_range_constraint`**: 発令日等の日付範囲制約。同様に`KnowledgeItem`の現行形状では表現できない。
+- **`severity`別評価（error/warning）**: `docs/knowledge/schema.md`は`category="validation"`エントリに`severity: error | warning`を持たせ、`error`は`status=failed`、`warning`は`learning_dataset`記録のみとする設計を示すが、`KnowledgeItem`は`severity`フィールドを持たず、`RuleEngine`は`ValidationError`のみを生成する（`ValidationWarning`は`knowledge/layout`未解決時にのみ用いる別概念）。
+- **`effective_from`/`effective_to`による期間評価**: Validatorが`knowledge/layout`エントリの解決（`_resolve_semantic_field_name`）では`KnowledgeSnapshot.as_of`による期間絞り込みを行っているのに対し、`RuleEngine.evaluate_field()`は`ValidationRuleSet`の`category="validation"`エントリに対して同様の期間絞り込みを行わない（`ValidationRuleSet.as_of`は現状未使用）。
+
+**現時点での判断**: 上記はいずれも**設計変更しない**。`RuleEngine`はVersion 2.0の実装要件（`allowed_value_set`相当のチェック）を満たしており、現行のValidator/Normalizer責務境界・依存制約とも整合する。拡張候補は、実際の`knowledge/validation/`データで複数`rule_type`・`severity`分岐・期間付きルールが必要になった時点で、新規ADRの起票を通じて再評価する（[`docs/roadmap.md`](../roadmap.md)参照）。
+
 ## 関連ADR
 - [ADR-0006](0006-pipeline-provenance.md) — パイプライン来歴管理。`subject_ref`除去後も`record_index`/`layout_id`で満たされることの根拠。
 - [ADR-0011](0011-fixed-core-pipeline.md) — 中核パイプラインの固定化。段階の数・順序・名称は本ADRでも変更しない。
