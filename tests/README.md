@@ -17,6 +17,7 @@ tests/
     sections/          # Section Parser本実装の検証（LayoutArtifactを直接構築、PDFフィクスチャ不要）
     extractors/        # Field Extractor本実装の検証（PersonnelSectionを直接構築、PDFフィクスチャ不要）
     normalizers/       # Normalizer本実装の検証（RawRecord/KnowledgeSnapshotを直接構築、PDFフィクスチャ不要）
+    validators/        # Validator本実装の検証（NormalizedRecord/ValidationRuleSetを直接構築、PDFフィクスチャ不要）
   integration/       # 複数ステージを跨いだ結合テスト（未整備）
   golden/             # sample_pdfs/ と sample_outputs/ を用いたゴールデンファイルテスト（ADR-0007、未整備）
 ```

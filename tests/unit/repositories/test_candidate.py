@@ -13,8 +13,10 @@ from mod_personnel_db.models import (
     PersonnelSection,
     PersonnelSectionId,
     RawRecord,
+    ValidationCandidate,
+    ValidationError,
+    ValidationEvidence,
     ValidationResult,
-    ValidationViolation,
 )
 from mod_personnel_db.models.values import Confidence
 from mod_personnel_db.repositories.sqlite.candidate import SqliteCandidateRepository
@@ -127,16 +129,18 @@ def test_update_validation(
         extracted_at=datetime(2026, 1, 1, tzinfo=UTC),
     )
     candidate_id = repo.add_raw(section_id, raw)
-    normalized = NormalizedRecord(
-        raw_record_ref=raw,
-        normalized_fields={"rank": NormalizedValue(value="陸将補", raw="陸将補")},
-        normalization_applied=(),
-        normalized_at=datetime(2026, 1, 1, tzinfo=UTC),
+    candidate = ValidationCandidate(
+        record_index=raw.record_index,
+        score=0.9,
+        errors=(),
+        warnings=(),
+        evidence=ValidationEvidence(
+            record_index=raw.record_index, layout_id=raw.layout_id, rules_evaluated=1
+        ),
     )
     result = ValidationResult(
-        subject_ref=normalized,
         status="passed",
-        violations=(),
+        candidates=(candidate,),
         confidence=Confidence(score=0.9, band=ConfidenceBand.HIGH),
         validated_at=datetime(2026, 1, 1, tzinfo=UTC),
     )
@@ -193,18 +197,18 @@ def test_list_pending_and_failed_validation(
             extracted_at=datetime(2026, 1, 1, tzinfo=UTC),
         ),
     )
-    normalized = NormalizedRecord(
-        raw_record_ref=raw,
-        normalized_fields={"rank": NormalizedValue(value="不明", raw="不明")},
-        normalization_applied=(),
-        normalized_at=datetime(2026, 1, 1, tzinfo=UTC),
+    failed_candidate = ValidationCandidate(
+        record_index=raw.record_index,
+        score=0.0,
+        errors=(ValidationError(rule_id="rank_known", message="未知の階級"),),
+        warnings=(),
+        evidence=ValidationEvidence(
+            record_index=raw.record_index, layout_id=raw.layout_id, rules_evaluated=1
+        ),
     )
     failed_result = ValidationResult(
-        subject_ref=normalized,
         status="failed",
-        violations=(
-            ValidationViolation(rule_id="rank_known", severity="error", message="未知の階級"),
-        ),
+        candidates=(failed_candidate,),
         confidence=Confidence(score=0.2, band=ConfidenceBand.LOW),
         validated_at=datetime(2026, 1, 1, tzinfo=UTC),
     )

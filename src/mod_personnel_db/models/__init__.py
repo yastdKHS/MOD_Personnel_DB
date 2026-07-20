@@ -6,8 +6,6 @@ from mod_personnel_db.models.candidate import (
     NormalizedValue,
     PersonnelSection,
     RawRecord,
-    ValidationResult,
-    ValidationViolation,
 )
 from mod_personnel_db.models.document import (
     Document,
@@ -50,7 +48,12 @@ from mod_personnel_db.models.ids import (
     ReviewSessionId,
 )
 from mod_personnel_db.models.job import Job, ParserVersion
-from mod_personnel_db.models.knowledge import KnowledgeItem, KnowledgeSnapshot, Layout
+from mod_personnel_db.models.knowledge import (
+    KnowledgeItem,
+    KnowledgeSnapshot,
+    Layout,
+    ValidationRuleSet,
+)
 from mod_personnel_db.models.layout_detection import (
     BoundingBoxStatistics,
     LayoutArtifact,
@@ -77,6 +80,13 @@ from mod_personnel_db.models.normalization import (
 from mod_personnel_db.models.pdf import PdfRecord
 from mod_personnel_db.models.review import ReviewItem
 from mod_personnel_db.models.sections import SectionCandidate, SectionEvidence, SectionParseResult
+from mod_personnel_db.models.validation import (
+    ValidationCandidate,
+    ValidationError,
+    ValidationEvidence,
+    ValidationResult,
+    ValidationWarning,
+)
 from mod_personnel_db.models.values import Confidence
 
 __all__ = [
@@ -147,6 +157,10 @@ __all__ = [
     "SectionCandidate",
     "SectionEvidence",
     "SectionParseResult",
+    "ValidationCandidate",
+    "ValidationError",
+    "ValidationEvidence",
     "ValidationResult",
-    "ValidationViolation",
+    "ValidationRuleSet",
+    "ValidationWarning",
 ]

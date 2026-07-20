@@ -1,4 +1,4 @@
-"""Knowledge Base関連モデル。docs/api/models.md のKnowledgeItem/Layout/KnowledgeSnapshotに対応。"""
+"""Knowledge Base関連モデル。docs/api/models.md のKnowledgeItem等に対応する。"""
 
 from dataclasses import dataclass
 from datetime import date
@@ -65,3 +65,11 @@ class KnowledgeSnapshot:
     def __post_init__(self) -> None:
         if self.snapshot_checksum == "":
             raise ModelValidationError("snapshot_checksum must not be empty")
+
+
+@dataclass(frozen=True, slots=True)
+class ValidationRuleSet:
+    """Validatorにコンストラクタ注入される、category="validation"のKnowledgeItem群（ADR-0041）。"""
+
+    rules: tuple[KnowledgeItem, ...]
+    as_of: date

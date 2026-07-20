@@ -11,7 +11,7 @@ from mod_personnel_db.models.ids import (
     PdfId,
     PersonnelSectionId,
 )
-from mod_personnel_db.models.values import Confidence, ModelValidationError
+from mod_personnel_db.models.values import ModelValidationError
 
 
 @dataclass(frozen=True, slots=True)
@@ -90,29 +90,6 @@ class NormalizedRecord:
             )
         if self.normalized_at < self.raw_record_ref.extracted_at:
             raise ModelValidationError("normalized_at must be >= raw_record_ref.extracted_at")
-
-
-@dataclass(frozen=True, slots=True)
-class ValidationViolation:
-    rule_id: str
-    severity: Literal["error", "warning"]
-    message: str
-
-
-@dataclass(frozen=True, slots=True)
-class ValidationResult:
-    subject_ref: NormalizedRecord
-    status: Literal["passed", "failed"]
-    violations: tuple[ValidationViolation, ...]
-    confidence: Confidence
-    validated_at: datetime
-
-    def __post_init__(self) -> None:
-        has_error = any(v.severity == "error" for v in self.violations)
-        if self.status == "failed" and not has_error:
-            raise ModelValidationError("status='failed' requires a severity='error' violation")
-        if self.status == "passed" and has_error:
-            raise ModelValidationError("status='passed' forbids severity='error' violations")
 
 
 @dataclass(frozen=True, slots=True)

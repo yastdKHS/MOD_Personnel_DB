@@ -92,5 +92,6 @@ class ValidationResult:
 - [ADR-0014](0014-development-discipline.md) — 開発規律。`RuleEngine`等の過剰な抽象を導入しない判断根拠。
 - [ADR-0037](0037-layout-detector-produces-layout-artifact.md) — 単一入力`run()`への修正パターンの最初の先例。
 - [ADR-0040](0040-normalizer-produces-normalization-result.md) — 本ADRが直接適用する、コンストラクタ注入による単一入力化の確立元。
+- [ADR-0043](0043-validator-produces-validation-result-with-rule-engine.md) — 本ADRの副次判断（「`ValidationResult`は変更不要」「`RuleEngine`は不要」）を、Phase2 Task9の実装要求に基づき改めた後継ADR。単一入力`run()`・コンストラクタ注入という本ADRの核心決定はADR-0043でも変更されていない。
 
-（本ADRはADR-0005/0006/0011/0014/0037/0040のいずれの核心決定も変更しないため、Supersededにはしない。）
+（本ADRはADR-0005/0006/0011/0014/0037/0040のいずれの核心決定も変更しないため、Supersededにはしない。ADR-0043は本ADRの核心決定を維持したまま副次判断のみを改めるものであり、本ADR自体もSupersededにはしない。）
