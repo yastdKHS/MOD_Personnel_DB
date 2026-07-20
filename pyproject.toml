@@ -61,8 +61,10 @@ where = ["src"]
 # 理由: docs/adr/0002-lint-format-typecheck-tooling.md
 [tool.ruff]
 line-length = 100
-target-version = "py314"
-src = ["src", "tests", "scripts"]
+target-version = "py313"
+# scriptsは将来用ディレクトリでありPythonコードを管理していないため対象外
+# （Pythonスクリプトを追加した時点でsrc/testsの並びに戻す、scripts/README.md参照）。
+src = ["src", "tests"]
 
 [tool.ruff.lint]
 # C90 / PLR091x: 「大きな関数の禁止」(docs/adr/0014-development-discipline.md) を
@@ -95,7 +97,9 @@ quote-style = "double"
 [tool.mypy]
 python_version = "3.13"
 strict = true
-files = ["src", "tests", "scripts"]
+# scriptsは将来用ディレクトリでありPythonコードを管理していないため対象外
+# （Pythonスクリプトを追加した時点でsrc/testsの並びに戻す、scripts/README.md参照）。
+files = ["src", "tests"]
 
 # --- テスト: pytest ---
 [tool.pytest.ini_options]
