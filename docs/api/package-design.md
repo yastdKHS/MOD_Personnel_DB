@@ -134,9 +134,9 @@ src/mod_personnel_db/
 ### `knowledge/`（KnowledgeService）
 
 - **目的**: `knowledge/`ディレクトリ（データ、8カテゴリ、[`docs/knowledge/schema.md`](../knowledge/schema.md)）を読み込み、`KnowledgeSnapshot`として提供する。
-- **責務**: YAMLファイルの読み込み・検証（Draft 2020-12スキーマ）・`KnowledgeRepository`経由でのDBインデックス更新。
-- **依存先**: `models/`, `repositories/`（抽象、`KnowledgeRepository`のみ）, `utils/`。
-- **依存禁止**: `document/`〜`validators/`（中核パイプライン6段階への逆依存はしない。データは常に「注入される」側であり、パイプライン段階を呼び出すことはない）、`repositories/sqlite/`（具象、直接は使わない）。
+- **責務**: YAMLファイルの読み込み・検証・`KnowledgeSnapshot`/`ValidationRuleSet`への変換。
+- **依存先**: `models/`, `utils/`のみ。具象実装（`FileKnowledgeService`）はYAML読込に責務を限定し、DBインデックス更新は行わない（[interfaces.md#knowledgeservice](interfaces.md#knowledgeservice)）。
+- **依存禁止**: `document/`〜`validators/`（中核パイプライン6段階への逆依存はしない。データは常に「注入される」側であり、パイプライン段階を呼び出すことはない）、`repositories/`（抽象含む）、`repositories/sqlite/`（具象、直接は使わない）。
 
 ### `learning/`（LearningService）
 
@@ -215,7 +215,7 @@ src/mod_personnel_db/
 | `repositories/` | `models/` | `sqlite3`等の具体DBドライバ、`config/` |
 | `repositories/sqlite/` | `repositories/`, `models/`, `config/`, `utils/` | 中核パイプライン6段階、サービス層 |
 | `document/`〜`validators/` | `models/`, `utils/` | `repositories/`（抽象含む）, `knowledge/`, 他段階間の直接依存 |
-| `knowledge/` | `models/`, `repositories/`（抽象）, `utils/` | 中核パイプライン6段階, `repositories/sqlite/` |
+| `knowledge/` | `models/`, `utils/` | 中核パイプライン6段階, `repositories/`（抽象含む）, `repositories/sqlite/` |
 | `learning/` | `models/`, `repositories/`（抽象）, `utils/` | 中核パイプライン6段階, `repositories/sqlite/` |
 | `features/` | `models/`, `learning/`, `utils/` | 中核パイプライン6段階, `repositories/` |
 | `review/` | `models/`, `repositories/`（抽象）, `learning/`, `utils/` | 中核パイプライン6段階, `repositories/sqlite/`, `knowledge/` |

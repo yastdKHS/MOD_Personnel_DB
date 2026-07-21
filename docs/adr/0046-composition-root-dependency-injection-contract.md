@@ -31,12 +31,12 @@ Task11-0は複数の代替案（CLI直接生成・Composition Root分離・Servi
 `cli/`配下のComposition Rootは、以下の順序で依存を構築する。
 
 1. **Repository具象生成**: `config/`から接続情報を取得し、`repositories/sqlite/`の各具象クラス（`SqlitePDFRepository`, `SqliteJobRepository`, `SqliteCandidateRepository`等）を構築する。
-2. **KnowledgeService生成**: `KnowledgeRepository`（前段で生成した具象）等を用いて、`KnowledgeService`の具象実装を構築する。
+2. **KnowledgeService生成**: `cli/`が`knowledge_root`（`knowledge/`ディレクトリのパス）をコンストラクタ注入し、`FileKnowledgeService`（YAML読込のみを責務とし、Repositoryには依存しない、Task11-2）を構築する。
 3. **LearningService生成**: `LearningRepository`（前段で生成した具象）等を用いて、`LearningService`の具象実装を構築する。
 4. **JobRunner生成**: 前段で生成した`KnowledgeService`・`LearningService`・Repository群を、後述の注入契約（決定3）に従い`JobRunner`へ注入して構築する。
 5. **CLI Command生成**: 構築済みの`JobRunner`等を、各CLIサブコマンド（`run`, `review`, `export`等）のハンドラへ渡す。
 
-この順序は依存の前後関係（`KnowledgeService`/`LearningService`は対応するRepositoryを必要とし、`JobRunner`は`KnowledgeService`/`LearningService`を必要とする）から導かれる自然な順序であり、実装時の生成コードもこの順序に従う。
+この順序は依存の前後関係（`LearningService`は対応するRepositoryを必要とし、`KnowledgeService`はYAML読込のみで完結しRepositoryを必要としない、`JobRunner`は`KnowledgeService`/`LearningService`を必要とする）から導かれる自然な順序であり、実装時の生成コードもこの順序に従う。
 
 ### 3. JobRunnerへの注入契約
 
