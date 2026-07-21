@@ -34,9 +34,12 @@ classifiers = [
 # （実装着手時の選定、ADR-0026「PDFパースライブラリの選定は実装着手時に決定」に対応）。
 # PyYAML: LayoutDefinition（layout/）のYAMLロードに使用（ADR-0036）。knowledge/配下の
 # YAMLロード（将来実装）でも共通利用を想定。
+# pyarrow: export/parquet_writer.pyのParquetエクスポート（ADR-0022）に使用
+# （Phase6 Task14-3、ユーザー承認済みの最小限の追加）。
 dependencies = [
     "pypdf>=6.0.0",
     "pyyaml>=6.0.0",
+    "pyarrow>=17.0.0",
 ]
 
 [project.optional-dependencies]

@@ -8,15 +8,22 @@
 `export_all()`/`export_since()`/`export_person()`（`GoldRecord`をそのまま
 返す、Phase4 Task12-1由来）に加えて、`export_all_records()`/
 `export_since_records()`/`export_person_records()`（ADR-0016の公開JSON
-契約に対応する`PersonnelRecord`を返す、Phase6 Task14-2で追加）を提供する。
-後者は`GoldRecord`を一切呼び出し元へ返さない、外部公開用の別APIである。
-前者はCLI（`cli/commands.py`）が既に依存しているため、シグネチャ・戻り値
-を変更していない。
+契約に対応する`PersonnelRecord`を返す、Phase6 Task14-2で追加）、
+`export_all_csv()`/`export_all_parquet()`（ADR-0022のCSV/Parquet出力、
+Phase6 Task14-3で追加）を提供する。後3者・CSV/Parquetの2者はいずれも
+`GoldRecord`を一切呼び出し元・出力先へ渡さない、外部公開用の別APIである
+（`export_all_csv`/`export_all_parquet`は内部で`export_all_records()`が
+返す`PersonnelRecord`のみを`csv_writer.py`/`parquet_writer.py`へ渡す）。
+最初の3者はCLI（`cli/commands.py`）が既に依存しているため、シグネチャ・
+戻り値を変更していない。
 """
 
 from datetime import datetime
+from pathlib import Path
 
+from mod_personnel_db.export.csv_writer import write_csv
 from mod_personnel_db.export.mapper import to_personnel_record
+from mod_personnel_db.export.parquet_writer import write_parquet
 from mod_personnel_db.models import GoldRecord, PersonnelRecord
 from mod_personnel_db.repositories import GoldRepository
 
@@ -47,6 +54,14 @@ class RepositoryExportService:
     def export_person_records(self, person_id: str) -> tuple[PersonnelRecord, ...]:
         """指定した`person_key`の全バージョン履歴を、公開用`PersonnelRecord`として返す。"""
         return tuple(to_personnel_record(record) for record in self.export_person(person_id))
+
+    def export_all_csv(self, destination: str | Path) -> None:
+        """現在有効なGold Record全件を、`PersonnelRecord`としてCSVへ書き出す（ADR-0022）。"""
+        write_csv(self.export_all_records(), destination)
+
+    def export_all_parquet(self, destination: str | Path) -> None:
+        """現在有効なGold Record全件を、`PersonnelRecord`としてParquetへ書き出す（ADR-0022）。"""
+        write_parquet(self.export_all_records(), destination)
 
 
 __all__ = ["RepositoryExportService"]
