@@ -1,12 +1,15 @@
-"""LearningService契約（Protocol）。docs/api/interfaces.md#learningservice に対応する。
+"""LearningService契約（Protocol）と具象実装。docs/api/interfaces.md#learningservice に対応する。
 
-Phase3 Task10-0.2（契約整備のみ）の対象。Dependency Injection用の抽象型のみを
-提供し、LearningRepositoryへの永続化を伴う具象実装は含まない（具象実装は
-将来のタスクでlearning/配下に追加する、docs/api/package-design.mdのlearning/節）。
+Dependency Injection用の抽象型（`LearningService` Protocol）に加え、
+`LearningRepository`へ永続化を委譲するライフサイクル管理の具象実装
+（`RepositoryLearningService`）を提供する（docs/api/package-design.mdの
+learning/節）。具象実装の生成はComposition Root（`cli/`、ADR-0046）にのみ
+許可される。
 """
 
 from typing import Protocol
 
+from mod_personnel_db.learning.service import RepositoryLearningService
 from mod_personnel_db.models import LearningRecord, LearningRecordId, LearningStatus
 
 
@@ -26,4 +29,4 @@ class LearningService(Protocol):
     def summarize_by_error_category(self) -> dict[str, int]: ...
 
 
-__all__ = ["LearningService"]
+__all__ = ["LearningService", "RepositoryLearningService"]
