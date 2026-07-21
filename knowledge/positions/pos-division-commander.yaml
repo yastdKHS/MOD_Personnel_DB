@@ -1,0 +1,13 @@
+# knowledge/positions/pos-division-commander.yaml
+#
+# category: position（knowledge/positions/README.md）
+# Phase6 Task14-0で追加。官職・補職名の最小構成の例。本Golden Testの
+# サンプルPDFは4列（氏名/階級/組織/発令日）のみでpositionフィールドを
+# 含まないため直接は発火しないが、positionカテゴリのYAMLが読み込み可能で
+# あることを示す標準的なエントリ。
+
+items:
+  - item_key: 師団長
+    canonical_value: 師団長
+    provenance_source: Phase6 Task14-0 Golden Testフィクスチャ（合成データ、実在の公表資料に基づかない）
+    version: 1

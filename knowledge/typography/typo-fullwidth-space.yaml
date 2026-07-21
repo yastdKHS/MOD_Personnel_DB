@@ -1,0 +1,15 @@
+# knowledge/typography/typo-fullwidth-space.yaml
+#
+# category: typography（knowledge/typography/README.md）
+# Phase6 Task14-0で追加。全角スペース（PDFのレイアウト崩れ・OCR起因で
+# 稀に残る）を半角スペースへ正規化する、値に依存しない機械的なルールの
+# 最小構成の例。本Golden Testのサンプルpdfでは全角スペースを使用していない
+# ため直接は発火しないが、Normalizerのtypography適用経路（unicodedata.NFKC
+# の後段でknowledge由来のtypography置換を行う、normalizers/normalizer.py
+# の_apply_typography）が読み込み可能であることを示す標準的なエントリ。
+
+items:
+  - item_key: "　"
+    canonical_value: " "
+    provenance_source: Phase6 Task14-0 Golden Testフィクスチャ（合成データ、実在の公表資料に基づかない）
+    version: 1

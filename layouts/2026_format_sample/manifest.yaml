@@ -1,0 +1,27 @@
+# layouts/2026_format_sample/manifest.yaml
+#
+# Phase6 Task14-0で追加した最小構成のLayout Definition。
+# tests/golden/sample_pdfs/2026_format_sample_20260701_synthetic.pdf
+# （合成データ、実在の発令PDFではない）を判定するためのルールセット。
+# 読み込み実装: src/mod_personnel_db/layout/definitions.py
+# （LayoutDefinition: era_id/version/rules、LayoutRule: rule_id/kind/value/weight）。
+
+era_id: 2026_format_sample
+version: 1
+rules:
+  - rule_id: header-notice-title
+    kind: header_pattern
+    value: 人事異動
+    weight: 0.4
+  - rule_id: footer-closing
+    kind: footer_pattern
+    value: 以上
+    weight: 0.2
+  - rule_id: min-pages
+    kind: min_page_count
+    value: "1"
+    weight: 0.2
+  - rule_id: font-ipagothic
+    kind: font_name_contains
+    value: IPAGothic
+    weight: 0.2

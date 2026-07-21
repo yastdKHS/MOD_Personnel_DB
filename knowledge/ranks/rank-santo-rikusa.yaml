@@ -1,0 +1,12 @@
+# knowledge/ranks/rank-santo-rikusa.yaml
+#
+# category: rank（knowledge/ranks/README.md）
+# Phase6 Task14-0で追加。陸上自衛隊の階級呼称「三等陸佐」を既知の階級として
+# 登録する最小構成の例（canonical_valueはPDF上の表記と同一、正規の呼称として
+# 確定済みであることを表す）。
+
+items:
+  - item_key: 三等陸佐
+    canonical_value: 三等陸佐
+    provenance_source: Phase6 Task14-0 Golden Testフィクスチャ（合成データ、実在の公表資料に基づかない）
+    version: 1

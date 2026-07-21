@@ -1,0 +1,38 @@
+{
+  "$comment": "Phase6 Task14-0で追加したGolden Testの期待結果。tests/golden/sample_pdfs/2026_format_sample_20260701_synthetic.pdf（合成データ、実在の発令PDFではない）を、layouts/2026_format_sample/manifest.yamlとknowledge/配下の対応エントリを用いて中核パイプライン（Document Analyzer→Layout Detector→Section Parser→Field Extractor→Normalizer→Validator）に通した結果。src/mod_personnel_db（未改変）を実際に実行して得た値であり、手計算・推測ではない。docs/database/json_schema.mdが定める公開JSON形式（未実装、docs/reports/phase5-final-audit.md参照）とは異なる、パイプライン中間結果の記録である。",
+  "source_pdf": "2026_format_sample_20260701_synthetic.pdf",
+  "layout_detection": {
+    "layout_id": "2026_format_sample",
+    "layout_version": 1,
+    "confidence": { "score": 1.0, "band": "verified" },
+    "warnings": []
+  },
+  "section_count": 1,
+  "records": [
+    {
+      "record_index": 1,
+      "raw_fields": {
+        "column_1": "髙橋一郎",
+        "column_2": "三等陸佐",
+        "column_3": "陸上幕僚監部",
+        "column_4": "令和八年七月一日"
+      },
+      "normalized_fields": {
+        "column_1": { "value": "高橋一郎", "raw": "髙橋一郎" },
+        "column_2": { "value": "三等陸佐", "raw": "三等陸佐" },
+        "column_3": { "value": "陸上幕僚監部", "raw": "陸上幕僚監部" },
+        "column_4": { "value": "令和八年七月一日", "raw": "令和八年七月一日" }
+      },
+      "normalization_confidence": { "score": 0.825, "band": "high" },
+      "validation_status": "passed",
+      "validation_error_count": 0,
+      "validation_warning_count": 1,
+      "validation_warnings": [
+        {
+          "rule_id": "layout.unmapped_field",
+          "message": "no semantic mapping for field 'column_4'"
+        }
+      ]
+    }
+  ]
+}

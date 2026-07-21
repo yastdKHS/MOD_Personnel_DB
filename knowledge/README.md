@@ -10,6 +10,8 @@
 
 ドメイン知識は8カテゴリに分離する。各カテゴリのYAML構造・バージョン管理・検証ルール・更新ルールの詳細な定義は [`docs/knowledge/schema.md`](../docs/knowledge/schema.md) を参照（[ADR-0005](../docs/adr/0005-knowledge-base-normalization.md)）。
 
+> **現在の実データ形式について**: `docs/knowledge/schema.md`が定めるカテゴリ別のリッチなJSON Schema（`OrganizationEntry`等、`provenance`/`version`オブジェクトを持つ構造）は設計目標であり、まだ実装に橋渡しされていない。実装済みの読み込みコード（`src/mod_personnel_db/knowledge/loader.py`）は、各カテゴリディレクトリ配下のYAMLファイルを、トップレベルが`items:`（リスト）で、各要素が`item_key`・`canonical_value`・`provenance_source`（必須）と`effective_from`/`effective_to`/`version`（任意）を持つ、より単純なフラット形式として読み込む。Phase6 Task14-0で各カテゴリに追加した最小構成の実データは、この実装済みのフラット形式に従っている（詳細は各サブディレクトリの`README.md`を参照）。
+
 | ディレクトリ | `category` | 内容 |
 |---|---|---|
 | `organizations/` | `organization` | 部隊・機関名の名称期間エンティティ |

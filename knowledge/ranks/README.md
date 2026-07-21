@@ -8,7 +8,9 @@
 
 ## スキーマ
 
-エントリの形式は [`docs/knowledge/schema.md`](../../docs/knowledge/schema.md#rank) の `RankEntry` 定義（JSON Schema Draft 2020-12）に従う。ファイル名は `<id>.yaml`（例: `rank-1st-lieutenant-ground.yaml`）とする。
+エントリの目標形式は [`docs/knowledge/schema.md`](../../docs/knowledge/schema.md#rank) の `RankEntry` 定義（JSON Schema Draft 2020-12）である。ファイル名は `<id>.yaml`（例: `rank-1st-lieutenant-ground.yaml`）とする。
+
+**現在の実データ形式**: 実装済みの読み込みコード（`src/mod_personnel_db/knowledge/loader.py`）は上記のリッチな`RankEntry`をまだ解釈できず、より単純なフラット形式（`items:`直下に`item_key`/`canonical_value`/`provenance_source`等を持つリスト）を読み込む。`rank-santo-rikusa.yaml`（Phase6 Task14-0で追加）はこのフラット形式の実例である。
 
 ## 方針
 

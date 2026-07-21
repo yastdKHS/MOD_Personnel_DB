@@ -1,0 +1,27 @@
+# knowledge/layout_notes/2026_format_sample-column-mapping.yaml
+#
+# category: layout（knowledge/layout_notes/README.md）
+# Phase6 Task14-0で追加。era_id=2026_format_sampleについて、Field Extractorが
+# 生成する列位置ベースの汎用フィールド名（column_N、ADR-0038）から、
+# Normalizerが解釈する意味的フィールド名への対応付け（ADR-0039）を保持する。
+# item_key は "{era_id}.{raw_field_name}" 形式（normalizers/normalizer.py の
+# _resolve_semantic_field_name参照）。
+#
+# 読み込み実装: src/mod_personnel_db/knowledge/loader.py
+# （トップレベル items: のフラットなエントリ形式。docs/knowledge/schema.mdが
+# 定めるカテゴリ別リッチスキーマとの関係は knowledge/layout_notes/README.md
+# の「現在の実データ形式について」を参照）。
+
+items:
+  - item_key: 2026_format_sample.column_1
+    canonical_value: name
+    provenance_source: Phase6 Task14-0 Golden Testフィクスチャ（合成データ、実在の公表資料に基づかない）
+    version: 1
+  - item_key: 2026_format_sample.column_2
+    canonical_value: rank
+    provenance_source: Phase6 Task14-0 Golden Testフィクスチャ（合成データ、実在の公表資料に基づかない）
+    version: 1
+  - item_key: 2026_format_sample.column_3
+    canonical_value: organization
+    provenance_source: Phase6 Task14-0 Golden Testフィクスチャ（合成データ、実在の公表資料に基づかない）
+    version: 1
