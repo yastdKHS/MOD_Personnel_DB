@@ -1,3 +1,4 @@
+import dataclasses
 from datetime import UTC, date, datetime
 
 import pytest
@@ -10,6 +11,7 @@ from mod_personnel_db.models import (
     GoldRecordId,
     NormalizedRecord,
     NormalizedValue,
+    PersonnelRecord,
     RawRecord,
 )
 from mod_personnel_db.repositories import GoldRepository
@@ -137,4 +139,86 @@ def test_export_service_satisfies_protocol() -> None:
 def test_export_service_public_api_matches_protocol() -> None:
     public_names = {name for name in dir(RepositoryExportService) if not name.startswith("_")}
 
-    assert public_names == {"export_all", "export_since", "export_person"}
+    assert public_names == {
+        "export_all",
+        "export_since",
+        "export_person",
+        "export_all_records",
+        "export_since_records",
+        "export_person_records",
+    }
+
+
+def _assert_no_gold_record_leaks(records: tuple[PersonnelRecord, ...]) -> None:
+    for record in records:
+        assert isinstance(record, PersonnelRecord)
+        for field in dataclasses.fields(record):
+            assert not isinstance(getattr(record, field.name), GoldRecord)
+
+
+def test_export_all_records_returns_personnel_records_not_gold_records() -> None:
+    current = _make_gold_record(1, "person-1")
+    repository = StubGoldRepository(records=(current,))
+    service = RepositoryExportService(repository)
+
+    result = service.export_all_records()
+
+    assert len(result) == 1
+    assert result[0].id == "gold-00000001"
+    assert result[0].person == NormalizedValue(value="person-1", raw=None)
+    _assert_no_gold_record_leaks(result)
+
+
+def test_export_since_records_passes_as_of_to_repository() -> None:
+    record = _make_gold_record(1, "person-1")
+    repository = StubGoldRepository(records=(record,))
+    service = RepositoryExportService(repository)
+    since = datetime(2026, 6, 1, tzinfo=UTC)
+
+    result = service.export_since_records(since)
+
+    assert len(result) == 1
+    assert repository.list_current_calls == [since]
+    _assert_no_gold_record_leaks(result)
+
+
+def test_export_person_records_returns_history_for_person_key() -> None:
+    person_a = _make_gold_record(1, "person-a")
+    person_b = _make_gold_record(2, "person-b")
+    repository = StubGoldRepository(records=(person_a, person_b))
+    service = RepositoryExportService(repository)
+
+    result = service.export_person_records("person-a")
+
+    assert len(result) == 1
+    assert result[0].person == NormalizedValue(value="person-a", raw=None)
+    assert repository.get_history_calls == ["person-a"]
+    _assert_no_gold_record_leaks(result)
+
+
+def test_export_person_records_returns_empty_tuple_for_unknown_person() -> None:
+    repository = StubGoldRepository(records=(_make_gold_record(1, "person-a"),))
+    service = RepositoryExportService(repository)
+
+    result = service.export_person_records("unknown-person")
+
+    assert result == ()
+
+
+def test_repository_error_propagates_unwrapped_from_export_all_records() -> None:
+    repository = StubGoldRepository(raise_on="list_current")
+    service = RepositoryExportService(repository)
+
+    with pytest.raises(RepositoryError):
+        service.export_all_records()
+
+
+def test_export_service_protocol_exposes_personnel_record_methods() -> None:
+    typed_repository: GoldRepository = StubGoldRepository(
+        records=(_make_gold_record(1, "person-1"),)
+    )
+    service: ExportService = RepositoryExportService(typed_repository)
+
+    assert service.export_all_records() != ()
+    assert service.export_since_records(datetime(2026, 1, 1, tzinfo=UTC)) != ()
+    assert service.export_person_records("person-1") != ()
