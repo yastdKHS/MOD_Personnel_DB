@@ -23,7 +23,7 @@ from mod_personnel_db.models.enums import (
     PipelineStageName,
     RegressionStatus,
 )
-from mod_personnel_db.models.export import ExportRecord
+from mod_personnel_db.models.export import ExportRecord, PersonnelRecord, Provenance, SourcePdf
 from mod_personnel_db.models.extraction import (
     ExtractionCandidate,
     ExtractionEvidence,
@@ -144,9 +144,11 @@ __all__ = [
     "ParserVersionId",
     "PdfId",
     "PdfRecord",
+    "PersonnelRecord",
     "PersonnelSection",
     "PersonnelSectionId",
     "PipelineStageName",
+    "Provenance",
     "RawField",
     "RawRecord",
     "RegressionStatus",
@@ -157,6 +159,7 @@ __all__ = [
     "SectionCandidate",
     "SectionEvidence",
     "SectionParseResult",
+    "SourcePdf",
     "ValidationCandidate",
     "ValidationError",
     "ValidationEvidence",
