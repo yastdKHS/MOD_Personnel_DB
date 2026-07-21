@@ -1,6 +1,5 @@
 """SQLite物理スキーマ。docs/database/schema.md のDDLに対応する。
 
-learning_dataset（LearningRepository対象）は本タスクの対象外のため未収録。
 knowledge_items.provenance_source / .version は docs/api/models.md の
 KnowledgeItemモデルが要求するがdocs/database/schema.mdのDDLには存在しない
 列であり、実装時に発見した設計文書間の差分を埋めるため追加した
@@ -160,6 +159,66 @@ CREATE TABLE knowledge_items (
 );
 CREATE INDEX idx_knowledge_items_category_key ON knowledge_items (category, item_key);
 CREATE INDEX idx_knowledge_items_source_file ON knowledge_items (source_file);
+
+CREATE TABLE learning_dataset (
+    id                             INTEGER PRIMARY KEY,
+    source_candidate_record_id     INTEGER REFERENCES candidate_records (id),
+    source_review_change_id        INTEGER REFERENCES review_changes (id),
+    pipeline_stage                 TEXT NOT NULL CHECK (
+                                        pipeline_stage IN (
+                                            'layout_detector', 'section_parser',
+                                            'field_extractor', 'normalizer', 'validator'
+                                        )
+                                    ),
+    error_category                 TEXT NOT NULL CHECK (
+                                        error_category IN (
+                                            'unknown_alias', 'unknown_layout',
+                                            'knowledge_gap', 'layout_gap', 'true_exception'
+                                        )
+                                    ),
+    field_name                     TEXT,
+    wrong_value                    TEXT NOT NULL,
+    correct_value                  TEXT,
+    correction_summary             TEXT,
+    reviewer_comment                TEXT,
+    parser_version_id              INTEGER REFERENCES parser_versions (id),
+    layout_id                      INTEGER REFERENCES layouts (id),
+    confidence_score                REAL CHECK (
+                                        confidence_score IS NULL
+                                        OR (confidence_score >= 0 AND confidence_score <= 1)
+                                    ),
+    confidence_band                 TEXT CHECK (
+                                        confidence_band IS NULL
+                                        OR confidence_band IN ('verified', 'high', 'medium', 'low')
+                                    ),
+    status                          TEXT NOT NULL DEFAULT 'open'
+                                        CHECK (
+                                            status IN
+                                                ('open', 'in_review', 'reflected',
+                                                 'verified', 'wontfix')
+                                        ),
+    reflected_in_knowledge_item_id  INTEGER REFERENCES knowledge_items (id),
+    reflected_in_layout_id          INTEGER REFERENCES layouts (id),
+    git_commit_hash                 TEXT,
+    pull_request_url                TEXT,
+    regression_status               TEXT NOT NULL DEFAULT 'not_run'
+                                        CHECK (
+                                            regression_status IN ('not_run', 'passed', 'failed')
+                                        ),
+    regression_run_at               TEXT,
+    regression_details              TEXT,
+    improvement_candidate           TEXT,
+    created_at                      TEXT NOT NULL DEFAULT (STRFTIME('%Y-%m-%dT%H:%M:%SZ', 'now')),
+    resolved_at                     TEXT
+);
+CREATE INDEX idx_learning_dataset_status ON learning_dataset (status);
+CREATE INDEX idx_learning_dataset_error_category ON learning_dataset (error_category);
+CREATE INDEX idx_learning_dataset_pipeline_stage ON learning_dataset (pipeline_stage);
+CREATE INDEX idx_learning_dataset_source_candidate_record_id
+    ON learning_dataset (source_candidate_record_id);
+CREATE INDEX idx_learning_dataset_parser_version_id ON learning_dataset (parser_version_id);
+CREATE INDEX idx_learning_dataset_layout_id ON learning_dataset (layout_id);
+CREATE INDEX idx_learning_dataset_regression_status ON learning_dataset (regression_status);
 
 CREATE TABLE exports (
     id           INTEGER PRIMARY KEY,
