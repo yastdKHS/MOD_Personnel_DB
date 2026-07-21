@@ -46,7 +46,7 @@ extractor
 repository（抽象であっても）
 ```
 
-`knowledge/`, `learning/`, `features/`, `review/`, `export/`, `fetch/`, `pipeline/`等、6段階に含まれないパッケージは、一般原則どおり`repositories/`（抽象）への依存を許可する。
+`learning/`, `features/`, `review/`, `export/`, `fetch/`, `pipeline/`等、6段階に含まれないパッケージは、一般原則どおり`repositories/`（抽象）への依存を許可する。ただし`knowledge/`は例外である。`KnowledgeService`の具象実装（`FileKnowledgeService`）はYAML読込のみを責務とし、`models/`・`utils/`以外に依存しない設計を採用したため、`repositories/`（抽象含む）への依存を持たない。
 
 ---
 
@@ -109,7 +109,6 @@ flowchart TB
     repositories_sqlite --> config
 
     knowledge --> models
-    knowledge --> repositories
     learning --> models
     learning --> repositories
     features --> models
@@ -171,6 +170,7 @@ flowchart TB
 | 12 | `pipeline/runner.py`（`PipelineRunner`） → `repositories/` / `knowledge/` / `learning/` / `review/` / `export/` | `pipeline/job_runner.py`（`JobRunner`）がこれらに依存し、`PipelineRunner`へは登録済み`PipelineStage`列と`PipelineContext`のみを渡す | `PipelineRunner`は純粋なStage実行機であり、これらへの依存はJobRunnerの責務（ADR-0044、[architecture-contract.md 保証13](../architecture/architecture-contract.md#13-pipelinerunnerはrepositoryknowledgelearningreviewexportを知らない)） |
 | 13 | `knowledge/`（`KnowledgeService`）・`learning/`（`LearningService`） → `pipeline/`、`repositories/sqlite/` | `pipeline/`（`JobRunner`）が`knowledge/`・`learning/`に依存する片方向のみ許可 | データ・Learning記録は常に「注入される」側であり、パイプラインを呼び出さない。`KnowledgeService`/`LearningService`のProtocol定義自体は`models/`の型のみを参照し、`pipeline/`・`repositories/sqlite/`のいずれにも依存しない |
 | 14 | `config/` / `services/` / `pipeline/` / `repositories/`（抽象）が`repositories/sqlite/`の各具象クラス・`KnowledgeService`具象実装・`LearningService`具象実装を生成する | `cli/`（合成ルート）のみがこれらを生成し、生成済みのインスタンスを個別注入で渡す | 依存生成責務はComposition Root（`cli/`）に一本化される（ADR-0046、[architecture-contract.md 保証15](../architecture/architecture-contract.md#15-依存生成責務はcomposition-rootcliに一本化される)） |
+| 15 | `knowledge/` → `repositories/`（抽象含む） | `knowledge/`の具象実装（`FileKnowledgeService`）は`models/`・`utils/`のみに依存し、`knowledge/`配下のYAMLを直接読み込む | `KnowledgeService`はDBインデックス（`KnowledgeRepository`）を経由せず、YAML読込・`KnowledgeSnapshot`/`ValidationRuleSet`生成のみを責務とする設計を採用したため（[interfaces.md#knowledgeservice](interfaces.md#knowledgeservice)の具象実装）。`learning/`（`LearningService`）は本行の対象外であり、`repositories/`（抽象、`LearningRepository`）への依存を引き続き許可する |
 
 ---
 
