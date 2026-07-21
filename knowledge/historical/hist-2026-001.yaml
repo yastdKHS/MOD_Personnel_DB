@@ -1,0 +1,12 @@
+# knowledge/historical/hist-2026-001.yaml
+#
+# category: historical（knowledge/historical/README.md）
+# Phase6 Task14-0で追加。組織改称等の変更イベントを記録する最小構成の例。
+# knowledge/loader.pyのフラット読み込みでは他カテゴリと同じitem_key/
+# canonical_valueの形で扱う（変更イベントの識別子と要約という位置づけ）。
+
+items:
+  - item_key: hist-2026-001
+    canonical_value: 陸上幕僚監部の組織名称に変更なし（Golden Testフィクスチャ用のダミーイベント）
+    provenance_source: Phase6 Task14-0 Golden Testフィクスチャ（合成データ、実在の公表資料に基づかない）
+    version: 1

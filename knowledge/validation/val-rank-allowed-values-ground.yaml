@@ -1,0 +1,20 @@
+# knowledge/validation/val-rank-allowed-values-ground.yaml
+#
+# category: validation（knowledge/validation/README.md）
+# Phase6 Task14-0で追加。Validatorが参照する許容値ルールの最小構成の例。
+#
+# 実装済みの橋渡し（FileKnowledgeService.load_validation_rules()、
+# knowledge/service.py）は、category="validation"のKnowledgeItemを
+# そのままValidationRuleSet.rulesへ集約する。RuleEngine.evaluate_field()
+# （validators/rule_engine.py）は item_key を意味的フィールド名
+# （knowledge/layout_notesのlayoutカテゴリが対応付ける"name"/"rank"/
+# "organization"/"position"）、canonical_valueをそのフィールドで許容される
+# 値の1つとして扱う（同一item_keyの複数エントリで許容値集合を構成する）。
+# 本エントリは意味的フィールド名"rank"に対し、「三等陸佐」を許容値として
+# 登録する。
+
+items:
+  - item_key: rank
+    canonical_value: 三等陸佐
+    provenance_source: Phase6 Task14-0 Golden Testフィクスチャ（合成データ、実在の公表資料に基づかない）
+    version: 1

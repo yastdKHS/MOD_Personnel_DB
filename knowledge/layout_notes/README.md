@@ -8,7 +8,9 @@
 
 ## スキーマ
 
-エントリの形式は [`docs/knowledge/schema.md`](../../docs/knowledge/schema.md#layout) の `LayoutEntry` 定義（JSON Schema Draft 2020-12）に従う。ファイル名は `<id>.yaml`（例: `layoutnote-2022-format-b-date-typo.yaml`）とする。
+エントリの目標形式は [`docs/knowledge/schema.md`](../../docs/knowledge/schema.md#layout) の `LayoutEntry` 定義（JSON Schema Draft 2020-12）である。ファイル名は `<id>.yaml`（例: `layoutnote-2022-format-b-date-typo.yaml`）とする。
+
+**現在の実データ形式**: 実装済みの読み込みコード（`src/mod_personnel_db/knowledge/loader.py`）は上記のリッチな`LayoutEntry`をまだ解釈できず、より単純なフラット形式（`items:`直下に`item_key`/`canonical_value`/`provenance_source`等を持つリスト）を読み込む。列位置→意味的フィールド名マッピング（[ADR-0039](../../docs/adr/0039-normalizer-field-mapping-via-extended-layout-knowledge.md)）は`item_key: "{era_id}.{raw_field_name}"` / `canonical_value: <意味的フィールド名>`（`name`/`rank`/`organization`/`position`等）という規約で表現する（`normalizers/normalizer.py`の`_resolve_semantic_field_name`）。`2026_format_sample-column-mapping.yaml`（Phase6 Task14-0で追加）はこのフラット形式・規約の実例である。
 
 ## 方針
 

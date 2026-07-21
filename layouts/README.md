@@ -17,6 +17,12 @@ layouts/
 - `era_id` は様式を一意に識別する名前とする（西暦年＋様式名等、命名規則は実装時に確定）。
 - `manifest.yaml`（形式は仮）には、その様式が適用される期間、PDF内でその様式であると判定する方法、各フィールド（氏名・階級・補職・発令日等）をどう抽出するかの定義を持たせる想定。
 
+## 現在の実データ形式（実装済み）
+
+`manifest.yaml`の実際の読み込みコードは `src/mod_personnel_db/layout/definitions.py`（`load_layout_definition`）である。トップレベルに `era_id`（str）・`version`（int）・`rules`（リスト）を持ち、各ルールは `rule_id`・`kind`（`header_pattern`/`footer_pattern`/`min_page_count`/`font_name_contains`のいずれか）・`value`・`weight`（0より大きい数値）を持つ、フラットな構造である（`LayoutDefinition`/`LayoutRule`、[`docs/api/models.md`](../docs/api/models.md)）。「PDF内でその様式であると判定する方法」は`rules`が担い、フィールド抽出定義自体は`layouts/`ではなく`knowledge/layout_notes/`（列位置→意味的フィールド名マッピング、[ADR-0039](../docs/adr/0039-normalizer-field-mapping-via-extended-layout-knowledge.md)）が担う。
+
+最小構成の実例として `2026_format_sample/manifest.yaml`（Phase6 Task14-0で追加、合成テストデータ用）を収録している。対応する合成PDF・期待結果は [`tests/golden/README.md`](../tests/golden/README.md) を参照。
+
 ## 新しい様式の追加手順（概要）
 
 詳細は `CONTRIBUTING.md` の「新しいPDFレイアウトへの対応手順」、および `.github/ISSUE_TEMPLATE/pdf_format_change.md` を参照。

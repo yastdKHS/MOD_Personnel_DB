@@ -1,0 +1,14 @@
+# knowledge/aliases/alias-example-person-001.yaml
+#
+# category: alias（knowledge/aliases/README.md）
+# Phase6 Task14-0で追加。氏名の異体字（髙=はしごだかの「高」の異体字）を、
+# 現行表記へ名寄せする最小構成の例。個人情報の取り扱いはADR-0008に従う
+# 架空の人物（合成テストデータ）であり、実在の人物を指すものではない。
+#
+# 読み込み実装: src/mod_personnel_db/knowledge/loader.py（items: のフラット形式）。
+
+items:
+  - item_key: 髙橋一郎
+    canonical_value: 高橋一郎
+    provenance_source: Phase6 Task14-0 Golden Testフィクスチャ（合成データ、架空の人物であり実在しない）
+    version: 1

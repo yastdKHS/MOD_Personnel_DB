@@ -1,0 +1,12 @@
+# knowledge/organizations/org-ground-staff-office.yaml
+#
+# category: organization（knowledge/organizations/README.md）
+# Phase6 Task14-0で追加。「陸上幕僚監部」を既知の組織名として登録する
+# 最小構成の例（canonical_valueはPDF上の表記と同一、正式名称として
+# 確定済みであることを表す）。
+
+items:
+  - item_key: 陸上幕僚監部
+    canonical_value: 陸上幕僚監部
+    provenance_source: Phase6 Task14-0 Golden Testフィクスチャ（合成データ、実在の公表資料に基づかない）
+    version: 1

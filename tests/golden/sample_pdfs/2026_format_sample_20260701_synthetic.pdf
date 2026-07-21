@@ -1,0 +1,88 @@
+%PDF-1.4
+%‚„œ”
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 4 0 R >> >> /Contents 7 0 R >>
+endobj
+4 0 obj
+<< /Type /Font /Subtype /TrueType /BaseFont /IPAGothic /FirstChar 1 /LastChar 32 /Widths [500 500 500 500 500 500 500 500 500 500 500 500 500 500 500 500 500 500 500 500 500 500 500 500 500 500 500 500 500 500 500 500] /FontDescriptor 6 0 R /ToUnicode 5 0 R >>
+endobj
+5 0 obj
+<< /Length 552 >>
+stream
+/CIDInit /ProcSet findresource begin
+12 dict begin
+begincmap
+1 begincodespacerange
+<01> <20>
+endcodespacerange
+30 beginbfchar
+<01> <9632>
+<02> <885B>
+<03> <7701>
+<04> <4EBA>
+<05> <4E8B>
+<06> <7570>
+<07> <52D5>
+<08> <767A>
+<09> <4EE4>
+<0A> <9AD9>
+<0B> <6A4B>
+<0C> <4E00>
+<0D> <90CE>
+<0E> <4E09>
+<0F> <7B49>
+<10> <9678>
+<11> <4F50>
+<12> <4E0A>
+<13> <5E55>
+<14> <50DA>
+<15> <76E3>
+<16> <90E8>
+<17> <548C>
+<18> <516B>
+<19> <5E74>
+<1A> <4E03>
+<1B> <6708>
+<1C> <65E5>
+<1D> <4EE5>
+<20> <0020>
+endbfchar
+endcmap
+CMapName currentdict /CMapName exch put
+end
+end
+
+endstream
+endobj
+6 0 obj
+<< /Type /FontDescriptor /FontName /IPAGothic /Flags 32 /FontBBox [0 -200 1000 900] /ItalicAngle 0 /Ascent 900 /Descent -200 /CapHeight 700 /StemV 80 >>
+endobj
+7 0 obj
+<< /Length 173 >>
+stream
+BT /F1 14 Tf 72 780 Td <010203040506070809> Tj ET
+BT /F1 14 Tf 72 740 Td <0A0B0C0D20200E0F101120201012131415162020091718191A1B0C1C> Tj ET
+BT /F1 14 Tf 72 700 Td <1D12> Tj ET
+endstream
+endobj
+xref
+0 8
+0000000000 65535 f 
+0000000015 00000 n 
+0000000064 00000 n 
+0000000121 00000 n 
+0000000247 00000 n 
+0000000523 00000 n 
+0000001126 00000 n 
+0000001294 00000 n 
+trailer
+<< /Size 8 /Root 1 0 R >>
+startxref
+1518
+%%EOF
