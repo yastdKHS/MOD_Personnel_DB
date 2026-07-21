@@ -1,4 +1,5 @@
-"""Composition Root（合成ルート）。docs/api/package-design.md#cli, ADR-0046に対応する。
+"""Composition Root（合成ルート）とCLIエントリポイント。
+docs/api/package-design.md#cli, ADR-0046, ADR-0021に対応する。
 
 `repositories/sqlite/`の各具象クラス・`KnowledgeService`・`LearningService`の
 具象実装をimport・生成できる唯一のパッケージである
@@ -8,15 +9,33 @@
 
 生成順序（ADR-0046）: Repository具象生成 → `KnowledgeService`生成 →
 `LearningService`生成 → `JobRunnerRepositories`生成 → `JobRunner`生成。
+
+`app.py`（Task11-6）はargparseベースのCLIエントリポイントであり、
+`CLI → Composition Root（bootstrap.py） → JobRunner → Pipeline`という
+呼び出し方向のみを守る。CLIコマンド層（`app.py`・`commands.py`）自体は
+`repositories/sqlite/`・`knowledge/`・`learning/`のいずれも直接importしない。
 """
 
-from mod_personnel_db.cli.bootstrap import CompositionSettings, build_job_runner
-from mod_personnel_db.cli.commands import run_pending_command
+from mod_personnel_db.cli.app import main
+from mod_personnel_db.cli.bootstrap import Application, CompositionSettings, build_job_runner
+from mod_personnel_db.cli.commands import (
+    VersionInfo,
+    init_db_command,
+    run_job_command,
+    run_pending_command,
+    version_command,
+)
 from mod_personnel_db.cli.init import initialize_database
 
 __all__ = [
+    "Application",
     "CompositionSettings",
+    "VersionInfo",
     "build_job_runner",
+    "init_db_command",
     "initialize_database",
+    "main",
+    "run_job_command",
     "run_pending_command",
+    "version_command",
 ]

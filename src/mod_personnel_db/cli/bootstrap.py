@@ -25,6 +25,14 @@ Knowledge/Learning生成が後」という順序制約自体（ADR-0046の核心
 `UnitOfWork`・Service Locator・Singleton・グローバル可変状態・DIコンテナ
 ライブラリのいずれも用いない。DBスキーマの適用（`apply_schema`）は
 `cli/init.py`の責務であり、本モジュールは行わない。
+
+`Application`（Task11-6で追加）は、`cli/`のコマンド層（`commands.py`・
+`app.py`・`__main__.py`）が`JobRunner`に加えて必要とするごく少数の
+読み取り専用アクセス（`run-job`用のPDF解決、`version`用の最新
+ParserVersion/KnowledgeSnapshot取得）を、Repositoryオブジェクトそのもの
+を渡さずに提供するための束である。コマンド層は`Application`のメソッド
+（ドメイン値のみを返す）を通じてのみ間接的にアクセスし、`SqlitePdfRepository`
+等を直接import・保持しない。
 """
 
 import sqlite3
@@ -35,7 +43,13 @@ from pathlib import Path
 from mod_personnel_db.knowledge import FileKnowledgeService
 from mod_personnel_db.layout.definitions import load_layout_definitions
 from mod_personnel_db.learning import RepositoryLearningService
-from mod_personnel_db.models import ParserVersion, ParserVersionId
+from mod_personnel_db.models import (
+    KnowledgeSnapshot,
+    ParserVersion,
+    ParserVersionId,
+    PdfId,
+    PdfRecord,
+)
 from mod_personnel_db.pipeline.job_runner import JobRunner, JobRunnerRepositories
 from mod_personnel_db.repositories.sqlite import (
     SqliteCandidateRepository,
@@ -115,8 +129,32 @@ def _resolve_parser_version_id(
     return jobs.record_parser_version(new_version)
 
 
-def build_job_runner(settings: CompositionSettings) -> JobRunner:
-    """合成ルート本体。生成順序1〜5をこの順序でのみ実行し、JobRunnerを返す。"""
+@dataclass(frozen=True, slots=True)
+class Application:
+    """生成順序1〜5の最終成果物。`JobRunner`と、CLIコマンド層向けの
+    Repository非公開な読み取り専用アクセスを束ねる（Task11-6）。
+    """
+
+    job_runner: JobRunner
+    _pdfs: SqlitePdfRepository
+    _jobs: SqliteJobRepository
+    _knowledge_service: FileKnowledgeService
+
+    def read_pdf(self, pdf_id: PdfId) -> PdfRecord | None:
+        """`run-job`コマンドが対象PDFを解決するための読み取り専用アクセス。"""
+        return self._pdfs.get(pdf_id)
+
+    def read_latest_parser_version(self) -> ParserVersion | None:
+        """`version`コマンドが表示する最新`ParserVersion`。"""
+        return self._jobs.get_latest_parser_version()
+
+    def read_knowledge_snapshot(self) -> KnowledgeSnapshot:
+        """`version`コマンドが表示する`KnowledgeSnapshot`。"""
+        return self._knowledge_service.load_snapshot()
+
+
+def build_application(settings: CompositionSettings) -> Application:
+    """合成ルート本体。生成順序1〜5をこの順序でのみ実行し、`Application`を返す。"""
     connection = connect(settings.db_path)
     repositories = build_sqlite_repositories(connection)
     knowledge_service = build_knowledge_service(settings)
@@ -131,18 +169,31 @@ def build_job_runner(settings: CompositionSettings) -> JobRunner:
         jobs=repositories.jobs,
         candidates=candidates,
     )
-    return JobRunner(
+    job_runner = JobRunner(
         repositories=job_runner_repositories,
         knowledge=knowledge_service,
         learning=learning_service,
         parser_version_id=parser_version_id,
         layout_definitions=layout_definitions,
     )
+    return Application(
+        job_runner=job_runner,
+        _pdfs=repositories.pdfs,
+        _jobs=repositories.jobs,
+        _knowledge_service=knowledge_service,
+    )
+
+
+def build_job_runner(settings: CompositionSettings) -> JobRunner:
+    """合成ルート本体（Task11-5）。`build_application`が返す`JobRunner`を返す。"""
+    return build_application(settings).job_runner
 
 
 __all__ = [
+    "Application",
     "CompositionSettings",
     "SqliteRepositories",
+    "build_application",
     "build_job_runner",
     "build_knowledge_service",
     "build_learning_service",
