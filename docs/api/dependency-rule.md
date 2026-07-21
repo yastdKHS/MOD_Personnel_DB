@@ -50,13 +50,23 @@ repository（抽象であっても）
 
 ---
 
+## `PipelineContext`型依存
+
+上記の「6段階は`repositories/`・`knowledge/`・`learning/`・`review/`・`export/`に依存しない」という制約とは別に、`document/`, `layout/`, `sections/`, `extractors/`, `normalizers/`, `validators/`の6パッケージは、いずれも`from mod_personnel_db.pipeline import PipelineContext`をimportする。これは[`pipeline.md`](pipeline.md)が定める`PipelineStage.run(self, context: PipelineContext, input: TIn) -> TOut`というProtocol実装のために、各Stage実装のメソッドシグネチャが`PipelineContext`型を参照する必要があるという、**型シグネチャ上避けられない構造的帰結**である。
+
+- **この依存は許可する**: `PipelineContext`（`pipeline/context.py`）は不変（immutable）の値オブジェクトであり、Repository・Knowledge・Learning・Review・Exportのいずれへのアクセス手段も提供しない。6段階が参照するのは型定義のみであり、`pipeline/`の実行ロジック（`PipelineRunner.run()`・`JobRunner`）を呼び出すことはない。
+- **循環参照は発生しない**: `pipeline/__init__.py`は6段階パッケージ（`document/`〜`validators/`）・`pipeline/job_runner.py`のいずれもimportしない（`job_runner.py`が6段階に依存するため、ここでimportすると循環参照になる。`pipeline/__init__.py`のコメント参照）。したがって「6段階 → `pipeline/`（型のみ）」と「`pipeline/` → 6段階（`JobRunner`経由の実行）」は、実行時には同一方向（`pipeline/`が6段階を呼び出す）を保ったまま共存する。
+- **`package-design.md`との対応**: [`package-design.md`](package-design.md)の`document/`〜`validators/`各節・パッケージ横断の依存先サマリ表には、この依存を`pipeline/`（`PipelineContext`型のみ）と明記している。
+
+---
+
 ## 全体依存グラフ
 
 ```mermaid
 flowchart TB
     subgraph LEAF["基盤（葉）"]
         utils["utils/"]
-        config["config/"]
+        config["config/ (未実装)"]
     end
 
     subgraph MODEL["models/"]
@@ -80,16 +90,16 @@ flowchart TB
     subgraph SERVICE["サービス層"]
         knowledge["knowledge/"]
         learning["learning/"]
-        features["features/"]
-        review["review/"]
-        export_pkg["export/"]
-        ftp["ftp/"]
-        fetch["fetch/"]
+        features["features/ (未実装)"]
+        review["review/ (限定スコープ)"]
+        export_pkg["export/ (限定スコープ)"]
+        ftp["ftp/ (未実装)"]
+        fetch["fetch/ (未実装)"]
     end
 
     subgraph ORCH["オーケストレーション"]
         pipeline["pipeline/"]
-        services["services/"]
+        services["services/ (未実装)"]
         cli["cli/"]
     end
 
@@ -102,11 +112,16 @@ flowchart TB
     extractors --> models
     normalizers --> models
     validators --> models
+    document -.->|PipelineContext型のみ| pipeline
+    layout -.->|PipelineContext型のみ| pipeline
+    sections -.->|PipelineContext型のみ| pipeline
+    extractors -.->|PipelineContext型のみ| pipeline
+    normalizers -.->|PipelineContext型のみ| pipeline
+    validators -.->|PipelineContext型のみ| pipeline
 
     repositories --> models
     repositories_sqlite --> repositories
     repositories_sqlite --> models
-    repositories_sqlite --> config
 
     knowledge --> models
     learning --> models
@@ -139,14 +154,15 @@ flowchart TB
     services --> export_pkg
     services --> models
 
-    cli --> services
     cli --> review
     cli --> export_pkg
     cli --> pipeline
-    cli --> config
+    cli --> knowledge
+    cli --> learning
+    cli --> layout
 ```
 
-**読み方**: 矢印`A --> B`は「AはBに依存してよい（Aのコードから`import`してよい）」。逆方向（`B --> A`）は許可しない限り禁止。図に存在しないエッジ（例: `extractors --> repositories`）はすべて暗黙的に禁止である。
+**読み方**: 矢印`A --> B`は「AはBに依存してよい（Aのコードから`import`してよい）」。逆方向（`B --> A`）は許可しない限り禁止。図に存在しない実線エッジ（例: `extractors --> repositories`）はすべて暗黙的に禁止である。破線エッジ（`-.->`）は「型シグネチャ上の型のみの依存であり、実行ロジックへの依存ではない」ことを表す（[`PipelineContext`型依存](#pipelinecontext型依存)参照）。`config["config/ (未実装)"]`・`services["services/ (未実装)"]`・`features/`・`ftp/`・`fetch/`は未実装のため、これらを起点/終点とするエッジは現時点で実現されていない設計目標である。`repositories_sqlite → config`エッジは、`config/`が未実装であり`repositories/sqlite/`のDB接続先（`db_path`）は合成ルート（`cli/`）から単純な文字列として渡されるため、削除した。`cli/`の実際の依存は`review/`・`export/`・`pipeline/`・`knowledge/`・`learning/`・`layout/`・`repositories/sqlite/`（合成ルートとしての例外）であり、`services/`・`config/`が未実装のため、それらへの依存エッジは現時点で描かない。
 
 > **注記（`pipeline`ノードの粒度について、[ADR-0044](../adr/0044-pipelinerunner-jobrunner-boundary.md)）**: 上図の`pipeline`ノードはパッケージ単位であり、`pipeline --> repositories`・`pipeline --> knowledge`・`pipeline --> learning`の3エッジは、`pipeline/`パッケージ内の`JobRunner`（`pipeline/job_runner.py`、実装済み）が必要とする依存を表す。パッケージ内の`PipelineRunner`（`pipeline/runner.py`、実装済み）自身は、これら3エッジのいずれにも該当するimportを持たない（[architecture-contract.md 保証13](../architecture/architecture-contract.md#13-pipelinerunnerはrepositoryknowledgelearningreviewexportを知らない)）。この区別はモジュール単位の規律であり、他パッケージと粒度を揃えるため、本図ではノードを分割しない（[ADR-0044](../adr/0044-pipelinerunner-jobrunner-boundary.md)の「検討した代替案」）。
 
@@ -176,21 +192,21 @@ flowchart TB
 
 ## 合成ルート（Composition Root）
 
-「誰も`repositories/sqlite/`を直接importしない」という原則には、唯一の例外として**合成ルート**が必要である。実行時にどの`Repository`実装（SQLite/将来のPostgreSQL）を使うかを決定し、`repositories/sqlite/`・`KnowledgeService`・`LearningService`の具象実装を構築して`pipeline/`・`services/`・`review/`・`export/`に渡す箇所は、**`cli/`**が担う（[ADR-0046](../adr/0046-composition-root-dependency-injection-contract.md)）。`config/`・`services/`・`pipeline/`・`repositories/`のいずれも、これらの具象実装を自ら生成しない。
+「誰も`repositories/sqlite/`を直接importしない」という原則には、唯一の例外として**合成ルート**が必要である。実行時にどの`Repository`実装（SQLite/将来のPostgreSQL）を使うかを決定し、`repositories/sqlite/`・`KnowledgeService`・`LearningService`・`ReviewService`・`ExportService`の具象実装を構築して`JobRunner`に渡す箇所は、**`cli/bootstrap.py`**が担う（[ADR-0046](../adr/0046-composition-root-dependency-injection-contract.md)）。`config/`・`services/`・`pipeline/`・`repositories/`のいずれも、これらの具象実装を自ら生成しない（`config/`・`services/`は未実装、[`package-design.md`](package-design.md)参照）。
 
-> **設計変更の経緯**: 当初`config/`を合成ルートとする案を検討したが、[`import-graph.md`](import-graph.md)の循環参照検証により、`repositories/sqlite/ → config/`（接続情報取得のため）と`config/ → repositories/sqlite/`（合成のため）が同時に成立し**循環参照になる**ことが判明した。`config/`は「設定値を提供するだけの末端パッケージ」のままとし、合成（具象実装のimportと組み立て）は依存グラフの最上位に位置する`cli/`に一本化することで循環を解消した。詳細な検証手順は[`import-graph.md`](import-graph.md#循環参照がないことの検証)を参照。
+> **設計変更の経緯**: 当初`config/`を合成ルートとする案を検討したが、[`import-graph.md`](import-graph.md)の循環参照検証により、`repositories/sqlite/ → config/`（接続情報取得のため）と`config/ → repositories/sqlite/`（合成のため）が同時に成立し**循環参照になる**ことが判明した。`config/`は「設定値を提供するだけの末端パッケージ」のままとし、合成（具象実装のimportと組み立て）は依存グラフの最上位に位置する`cli/`に一本化することで循環を解消した。詳細な検証手順は[`import-graph.md`](import-graph.md#循環参照がないことの検証)を参照。**現状（`config/`未実装）**: `cli/bootstrap.py`内のローカルな`CompositionSettings`データクラス（`db_path`/`knowledge_root`/`layouts_root`/`parser_code_version`）が、`config/`が想定していた設定値提供の一部を暫定的に代替する。
 
-> **`pipeline/`（`JobRunner`）への注入契約（ADR-0046）**: `JobRunner`（`pipeline/job_runner.py`）は`UnitOfWork`を受け取らない。`cli/`は`JobRunnerRepositories`（`pdfs`/`jobs`/`candidates`の3種のみを束ねる）・`KnowledgeService`・`LearningService`・`ParserVersionId`・`layout_definitions`を個別にコンストラクタ注入する。`UnitOfWork`は、複数Repositoryにまたがる原子性が必要な操作（[`repositories.md`](repositories.md#unitofwork)参照）のための抽象であり、`JobRunner`はそのような操作を行わないため使用しない。
+> **`pipeline/`（`JobRunner`）への注入契約（ADR-0046）**: `JobRunner`（`pipeline/job_runner.py`）は`UnitOfWork`を受け取らない。`cli/`は`JobRunnerRepositories`（`pdfs`/`jobs`/`candidates`の3種のみを束ねる）・`KnowledgeService`・`LearningService`・`ParserVersionId`・`layout_definitions`を個別にコンストラクタ注入する。`UnitOfWork`は未実装であり（[`repositories.md#unitofwork`](repositories.md#unitofwork)参照）、`JobRunner`はそのような複数Repository原子性操作を行わないため使用しない。
 
 ```mermaid
 flowchart LR
-    cli["cli/ (合成ルート)"] -->|Settingsを取得| config["config/ (設定値の提供のみ)"]
+    cli["cli/bootstrap.py (合成ルート)"] -->|CompositionSettingsを保持| settings["CompositionSettings (cli/内のローカルデータクラス)"]
     cli -->|具象実装をimport・構築| repositories_sqlite["repositories/sqlite/"]
-    cli -->|JobRunnerRepositories等を個別注入| pipeline["pipeline/"]
-    cli -->|UnitOfWorkとして注入| services["services/"]
+    cli -->|具象実装をimport・構築| review_export["review.service / export.service"]
+    cli -->|JobRunnerRepositories等を個別注入| pipeline["pipeline/job_runner.JobRunner"]
 ```
 
-この例外は、`cli/`が「どの具象実装を選ぶか」という配線の責務を持つことの直接の帰結であり、`cli/`以外のいかなるパッケージにもこの例外を拡大しない。`config/`は`utils/`以外に一切依存せず、`repositories/sqlite/`を含むいかなる具象実装も参照しない。
+この例外は、`cli/`が「どの具象実装を選ぶか」という配線の責務を持つことの直接の帰結であり、`cli/`以外のいかなるパッケージにもこの例外を拡大しない。実装済みの`cli/bootstrap.py`は、`repositories/sqlite/`の8具象クラス・`FileKnowledgeService`・`RepositoryLearningService`・`RepositoryReviewService`・`RepositoryExportService`の生成をすべて一箇所に集約しており、他のいかなるパッケージにもこれらの生成は存在しない。
 
 ---
 

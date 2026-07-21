@@ -1,6 +1,8 @@
 # Review API
 
 > **本ドキュメントに実装はない。** すべて`typing.Protocol`/`dataclass`による型シグネチャのみ（メソッド本体は`...`）。[`docs/review/domain.md`](../review/domain.md)のドメインモデル、[`docs/review/policy.md`](../review/policy.md)のポリシーを実装可能な契約に落とし込んだもの。[`docs/api/interfaces.md`](interfaces.md)・[`docs/api/repositories.md`](repositories.md)のReviewService/ReviewRepositoryの簡略版を、本ドキュメントが正として置き換える。
+>
+> **実装状況（2026-07-21時点）**: 本ドキュメントが定める`ReviewService`（キュー・割当・差戻し・再レビュー等を含む広範な契約）は未実装である。実装済みなのは、これとは異なる**Learning Dataset固有の狭い契約**（`src/mod_personnel_db/review/__init__.py`の`ReviewService` Protocol、具象実装`RepositoryReviewService`、Phase4 Task12-0）であり、`list_pending()`/`start_review()`/`approve()`/`reject()`の4メソッドのみを持つ。本ドキュメントは将来この狭い契約を統合・拡張する際の設計目標として保持する（統合の要否・方法は将来のADRで判断する）。
 
 ## 対象
 

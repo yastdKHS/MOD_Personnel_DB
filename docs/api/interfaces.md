@@ -144,6 +144,8 @@ class Repository(Protocol[TEntity, TId]):
 ## `ReviewService`
 
 > **本節は簡略版である。** Review Domain（[`docs/review/`](../review/)）の設計に伴い、`ReviewService`の完全な契約（キュー・割当・差戻し・再レビュー等を含む）は [`docs/api/review.md`](review.md#reviewservice) を正とする。以下は最小限のコア操作のみを示す。
+>
+> **実装状況**: 本節・[`review.md`](review.md)のいずれの契約も未実装である。実際に実装されている`ReviewService`（`src/mod_personnel_db/review/__init__.py`、具象実装`RepositoryReviewService`、Phase4 Task12-0）は、本節とも`review.md`とも異なる、Learning Dataset固有のさらに狭い契約（`list_pending()`/`start_review()`/`approve()`/`reject()`）である。詳細は[`package-design.md`](package-design.md)の`review/`節を参照。
 
 ```python
 from typing import Protocol
@@ -151,7 +153,7 @@ from mod_personnel_db.models import ReviewItem, GoldRecordId, CandidateId, Revie
 
 
 class ReviewService(Protocol):
-    """人手レビューのワークフローを提供する（ADR-0021）。"""
+    """人手レビューのワークフローを提供する（ADR-0021）。未実装、上記注記参照。"""
 
     def open_session(self, reviewer: str, reason: str) -> ReviewSessionId: ...
 
@@ -178,6 +180,8 @@ class ReviewService(Protocol):
 
 ## `ExportService`
 
+> **実装状況**: 以下は未実装の設計目標である。実際に実装されている`ExportService`（`src/mod_personnel_db/export/__init__.py`、具象実装`RepositoryExportService`、Phase4 Task12-1）は、`GoldRepository`からの読み出しに責務を限定した別の契約（`export_all()`/`export_since(since)`/`export_person(person_id)`）であり、`generate()`/`get()`/`list_recent()`・JSON/CSV/Parquet変換・`ExportRepository`への記録は行わない。詳細は[`package-design.md`](package-design.md)の`export/`節を参照。
+
 ```python
 from typing import Protocol
 from datetime import datetime
@@ -185,7 +189,7 @@ from mod_personnel_db.models import ExportRecord, ExportId
 
 
 class ExportService(Protocol):
-    """公開用エクスポート（JSON/CSV/Parquet）を生成する（ADR-0016, ADR-0022）。"""
+    """公開用エクスポート（JSON/CSV/Parquet）を生成する（ADR-0016, ADR-0022）。未実装、上記注記参照。"""
 
     def generate(self, format: str, as_of: datetime | None = None) -> ExportRecord: ...
     def get(self, export_id: ExportId) -> ExportRecord | None: ...
