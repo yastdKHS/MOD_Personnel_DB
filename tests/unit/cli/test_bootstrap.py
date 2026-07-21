@@ -1,7 +1,11 @@
+from collections.abc import Callable
+
 import pytest
 
 from mod_personnel_db.cli import bootstrap
-from mod_personnel_db.cli.bootstrap import CompositionSettings, SqliteRepositories
+from mod_personnel_db.cli.bootstrap import Application, CompositionSettings, SqliteRepositories
+from mod_personnel_db.export import ExportService
+from mod_personnel_db.export.service import RepositoryExportService
 from mod_personnel_db.knowledge import FileKnowledgeService, KnowledgeService
 from mod_personnel_db.learning import LearningService, RepositoryLearningService
 from mod_personnel_db.models import LearningStatus
@@ -18,6 +22,8 @@ from mod_personnel_db.repositories.sqlite import (
     SqliteReviewRepository,
     connect,
 )
+from mod_personnel_db.review import ReviewService
+from mod_personnel_db.review.service import RepositoryReviewService
 
 
 def test_build_sqlite_repositories_creates_seven_concrete_instances(
@@ -62,65 +68,79 @@ def test_build_learning_service_injects_sqlite_learning_repository(
     assert open_records == repositories.learning.list_by_status(LearningStatus.OPEN)
 
 
+def test_build_review_service_injects_learning_and_gold_repositories(
+    settings: CompositionSettings,
+) -> None:
+    connection = connect(settings.db_path)
+    repositories = bootstrap.build_sqlite_repositories(connection)
+    learning_service = bootstrap.build_learning_service(repositories)
+
+    review_service = bootstrap.build_review_service(repositories, learning_service)
+
+    assert isinstance(review_service, RepositoryReviewService)
+    pending = review_service.list_pending()
+    assert pending == repositories.learning.list_by_status(LearningStatus.OPEN)
+
+
+def test_build_export_service_injects_gold_repository(settings: CompositionSettings) -> None:
+    connection = connect(settings.db_path)
+    repositories = bootstrap.build_sqlite_repositories(connection)
+
+    export_service = bootstrap.build_export_service(repositories)
+
+    assert isinstance(export_service, RepositoryExportService)
+    assert export_service.export_all() == repositories.gold.list_current()
+
+
+def test_build_application_holds_review_and_export_services(
+    settings: CompositionSettings,
+) -> None:
+    application = bootstrap.build_application(settings)
+
+    assert isinstance(application, Application)
+    assert isinstance(application.review_service, RepositoryReviewService)
+    assert isinstance(application.export_service, RepositoryExportService)
+
+
 def test_build_job_runner_returns_job_runner(settings: CompositionSettings) -> None:
     job_runner = bootstrap.build_job_runner(settings)
 
     assert isinstance(job_runner, JobRunner)
 
 
+def _tracer(order: list[str], label: str, real: Callable[..., object]) -> Callable[..., object]:
+    """呼び出しを`order`へ記録してから`real`へ委譲するラッパーを返す。"""
+
+    def wrapper(*args: object, **kwargs: object) -> object:
+        order.append(label)
+        return real(*args, **kwargs)
+
+    return wrapper
+
+
+_GENERATION_ORDER_TARGETS = (
+    ("build_sqlite_repositories", "repositories"),
+    ("build_knowledge_service", "knowledge"),
+    ("build_learning_service", "learning"),
+    ("build_review_service", "review"),
+    ("build_export_service", "export"),
+    ("SqliteCandidateRepository", "candidates"),
+    ("JobRunnerRepositories", "job_runner_repositories"),
+    ("JobRunner", "job_runner"),
+)
+
+
 def test_build_job_runner_generation_order(
     monkeypatch: pytest.MonkeyPatch, settings: CompositionSettings
 ) -> None:
     order: list[str] = []
-
-    real_build_repos = bootstrap.build_sqlite_repositories
-    real_build_knowledge = bootstrap.build_knowledge_service
-    real_build_learning = bootstrap.build_learning_service
-    real_candidate_repository = SqliteCandidateRepository
-    real_job_runner_repositories = JobRunnerRepositories
-    real_job_runner = JobRunner
-
-    def traced_build_repos(connection: object) -> SqliteRepositories:
-        order.append("repositories")
-        return real_build_repos(connection)  # type: ignore[arg-type]
-
-    def traced_build_knowledge(settings_arg: CompositionSettings) -> FileKnowledgeService:
-        order.append("knowledge")
-        return real_build_knowledge(settings_arg)
-
-    def traced_build_learning(repositories: SqliteRepositories) -> RepositoryLearningService:
-        order.append("learning")
-        return real_build_learning(repositories)
-
-    def traced_candidate_repository(*args: object, **kwargs: object) -> SqliteCandidateRepository:
-        order.append("candidates")
-        return real_candidate_repository(*args, **kwargs)  # type: ignore[arg-type]
-
-    def traced_job_runner_repositories(**kwargs: object) -> JobRunnerRepositories:
-        order.append("job_runner_repositories")
-        return real_job_runner_repositories(**kwargs)  # type: ignore[arg-type]
-
-    def traced_job_runner(**kwargs: object) -> JobRunner:
-        order.append("job_runner")
-        return real_job_runner(**kwargs)  # type: ignore[arg-type]
-
-    monkeypatch.setattr(bootstrap, "build_sqlite_repositories", traced_build_repos)
-    monkeypatch.setattr(bootstrap, "build_knowledge_service", traced_build_knowledge)
-    monkeypatch.setattr(bootstrap, "build_learning_service", traced_build_learning)
-    monkeypatch.setattr(bootstrap, "SqliteCandidateRepository", traced_candidate_repository)
-    monkeypatch.setattr(bootstrap, "JobRunnerRepositories", traced_job_runner_repositories)
-    monkeypatch.setattr(bootstrap, "JobRunner", traced_job_runner)
+    for attr_name, label in _GENERATION_ORDER_TARGETS:
+        real = getattr(bootstrap, attr_name)
+        monkeypatch.setattr(bootstrap, attr_name, _tracer(order, label, real))
 
     bootstrap.build_job_runner(settings)
 
-    assert order == [
-        "repositories",
-        "knowledge",
-        "learning",
-        "candidates",
-        "job_runner_repositories",
-        "job_runner",
-    ]
+    assert order == [label for _, label in _GENERATION_ORDER_TARGETS]
 
 
 def test_job_runner_dependencies_are_protocol_typed(settings: CompositionSettings) -> None:
@@ -152,3 +172,14 @@ def test_job_runner_dependencies_are_protocol_typed(settings: CompositionSetting
     )
 
     assert isinstance(job_runner, JobRunner)
+
+
+def test_application_services_are_protocol_typed(settings: CompositionSettings) -> None:
+    """`review_service`/`export_service`がProtocol型のみで保持可能であることをmypyで確認する。"""
+    application = bootstrap.build_application(settings)
+
+    review_protocol: ReviewService = application.review_service
+    export_protocol: ExportService = application.export_service
+
+    assert review_protocol.list_pending() == ()
+    assert export_protocol.export_all() == ()
