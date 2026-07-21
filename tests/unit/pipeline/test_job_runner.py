@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from datetime import UTC, date, datetime
 
 import pytest
@@ -8,20 +9,16 @@ from mod_personnel_db.pipeline.job_runner import JobRunner, JobRunnerRepositorie
 from mod_personnel_db.pipeline.runner import PipelineRunner
 
 from ._job_runner_stubs import (
+    StubCandidateRepository,
     StubJobRepository,
     StubKnowledgeService,
     StubLearningService,
     StubPDFRepository,
+    make_field_extractor_stub_class,
+    make_normalizer_stub_class,
+    make_section_parser_stub_class,
     make_stub_stage_class,
-)
-
-_STAGE_NAMES = (
-    "document_analyzer",
-    "layout_detector",
-    "section_parser",
-    "field_extractor",
-    "normalizer",
-    "validator",
+    make_validator_stub_class,
 )
 
 
@@ -38,32 +35,57 @@ def _make_pdf(pdf_id: int = 1, *, status: str = "fetched") -> PdfRecord:
     )
 
 
-def _patch_all_stages_as_recording_stubs(monkeypatch: pytest.MonkeyPatch, calls: list[str]) -> None:
-    for name in _STAGE_NAMES:
-        class_name = "".join(part.title() for part in name.split("_"))
-        monkeypatch.setattr(job_runner_module, class_name, make_stub_stage_class(name, calls))
+@dataclass(frozen=True)
+class _FailureConfig:
+    """`_patch_stages`の失敗シナリオ指定（引数個数削減のための集約）。"""
+
+    sections: frozenset[int] = frozenset()
+    normalizer_records: frozenset[int] = frozenset()
+    validator_records: frozenset[int] = frozenset()
 
 
-def _patch_failing_stage(monkeypatch: pytest.MonkeyPatch, calls: list[str], name: str) -> None:
-    """`name`のStageだけPipelineExceptionを送出するStubに差し替える。"""
-    from mod_personnel_db.pipeline.exceptions import PipelineException
-
-    class _FailingStub:
-        def __init__(self, *args: object, **kwargs: object) -> None:
-            del args, kwargs
-
-        def run(self, context: object, input: object) -> object:
-            del input
-            calls.append(name)
-            raise PipelineException(stage_name=name, context=context, message=f"{name} failed")  # type: ignore[arg-type]
-
-    _patch_all_stages_as_recording_stubs(monkeypatch, calls)
-    class_name = "".join(part.title() for part in name.split("_"))
-    monkeypatch.setattr(job_runner_module, class_name, _FailingStub)
+def _patch_stages(
+    monkeypatch: pytest.MonkeyPatch,
+    calls: list[str],
+    *,
+    section_count: int = 1,
+    records_per_section: dict[int, int] | None = None,
+    failures: _FailureConfig | None = None,
+) -> None:
+    failures = failures if failures is not None else _FailureConfig()
+    monkeypatch.setattr(
+        job_runner_module, "DocumentAnalyzer", make_stub_stage_class("document_analyzer", calls)
+    )
+    monkeypatch.setattr(
+        job_runner_module, "LayoutDetector", make_stub_stage_class("layout_detector", calls)
+    )
+    monkeypatch.setattr(
+        job_runner_module,
+        "SectionParser",
+        make_section_parser_stub_class(calls, section_count),
+    )
+    monkeypatch.setattr(
+        job_runner_module,
+        "FieldExtractor",
+        make_field_extractor_stub_class(calls, records_per_section, failures.sections),
+    )
+    monkeypatch.setattr(
+        job_runner_module,
+        "Normalizer",
+        make_normalizer_stub_class(calls, failures.normalizer_records),
+    )
+    monkeypatch.setattr(
+        job_runner_module, "Validator", make_validator_stub_class(calls, failures.validator_records)
+    )
 
 
 _JobRunnerFixture = tuple[
-    JobRunner, StubJobRepository, StubPDFRepository, StubKnowledgeService, StubLearningService
+    JobRunner,
+    StubJobRepository,
+    StubPDFRepository,
+    StubCandidateRepository,
+    StubKnowledgeService,
+    StubLearningService,
 ]
 
 
@@ -71,36 +93,50 @@ def _make_job_runner(
     *,
     jobs: StubJobRepository | None = None,
     pdfs: StubPDFRepository | None = None,
+    candidates: StubCandidateRepository | None = None,
     knowledge: StubKnowledgeService | None = None,
     learning: StubLearningService | None = None,
 ) -> _JobRunnerFixture:
     jobs = jobs if jobs is not None else StubJobRepository()
     pdfs = pdfs if pdfs is not None else StubPDFRepository()
+    candidates = candidates if candidates is not None else StubCandidateRepository()
     knowledge = knowledge if knowledge is not None else StubKnowledgeService()
     learning = learning if learning is not None else StubLearningService()
     runner = JobRunner(
-        repositories=JobRunnerRepositories(pdfs=pdfs, jobs=jobs),
+        repositories=JobRunnerRepositories(pdfs=pdfs, jobs=jobs, candidates=candidates),
         knowledge=knowledge,
         learning=learning,
         parser_version_id=ParserVersionId(1),
     )
-    return runner, jobs, pdfs, knowledge, learning
+    return runner, jobs, pdfs, candidates, knowledge, learning
 
 
-def test_stages_registered_and_run_in_correct_order(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_stages_run_in_correct_order_for_single_section_single_record(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     calls: list[str] = []
-    _patch_all_stages_as_recording_stubs(monkeypatch, calls)
+    _patch_stages(monkeypatch, calls, section_count=1, records_per_section={0: 1})
     runner, *_ = _make_job_runner()
 
-    runner.run_for_pdf(_make_pdf())
+    result = runner.run_for_pdf(_make_pdf())
 
-    assert calls == list(_STAGE_NAMES)
+    assert calls == [
+        "document_analyzer",
+        "layout_detector",
+        "section_parser",
+        "field_extractor",
+        "normalizer",
+        "validator",
+    ]
+    assert result.succeeded is True
+    assert result.job.processed_count == 1
+    assert result.job.failed_count == 0
 
 
 def test_knowledge_service_snapshot_and_rules_fetched(monkeypatch: pytest.MonkeyPatch) -> None:
     calls: list[str] = []
-    _patch_all_stages_as_recording_stubs(monkeypatch, calls)
-    runner, _, _, knowledge, _ = _make_job_runner()
+    _patch_stages(monkeypatch, calls)
+    runner, _, _, _, knowledge, _ = _make_job_runner()
 
     runner.run_for_pdf(_make_pdf())
 
@@ -108,9 +144,55 @@ def test_knowledge_service_snapshot_and_rules_fetched(monkeypatch: pytest.Monkey
     assert knowledge.load_validation_rules_calls == 1
 
 
-def test_pipeline_runner_run_called_exactly_once(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_multiple_sections_call_field_extractor_once_per_section(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     calls: list[str] = []
-    _patch_all_stages_as_recording_stubs(monkeypatch, calls)
+    _patch_stages(monkeypatch, calls, section_count=3, records_per_section={0: 1, 1: 1, 2: 1})
+    runner, *_ = _make_job_runner()
+
+    result = runner.run_for_pdf(_make_pdf())
+
+    assert calls.count("section_parser") == 1
+    assert calls.count("field_extractor") == 3
+    assert result.job.processed_count == 3
+
+
+def test_multiple_records_call_normalizer_and_validator_once_per_record(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[str] = []
+    _patch_stages(monkeypatch, calls, section_count=1, records_per_section={0: 4})
+    runner, *_ = _make_job_runner()
+
+    result = runner.run_for_pdf(_make_pdf())
+
+    assert calls.count("field_extractor") == 1
+    assert calls.count("normalizer") == 4
+    assert calls.count("validator") == 4
+    assert result.job.processed_count == 4
+
+
+def test_candidate_repository_call_counts(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[str] = []
+    _patch_stages(monkeypatch, calls, section_count=2, records_per_section={0: 2, 1: 1})
+    candidates = StubCandidateRepository()
+    runner, *_ = _make_job_runner(candidates=candidates)
+
+    runner.run_for_pdf(_make_pdf())
+
+    assert len(candidates.add_section_calls) == 2
+    assert len(candidates.add_raw_calls) == 3
+    assert len(candidates.attach_normalized_calls) == 3
+    assert len(candidates.update_validation_calls) == 3
+
+
+def test_pipeline_runner_call_count_matches_coordinator_model(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """文書レベル1回 + Section単位2回 + Record単位(Normalizer/Validator)6回 = 9回。"""
+    calls: list[str] = []
+    _patch_stages(monkeypatch, calls, section_count=2, records_per_section={0: 2, 1: 1})
     runner, *_ = _make_job_runner()
 
     original_run = PipelineRunner.run
@@ -127,12 +209,35 @@ def test_pipeline_runner_run_called_exactly_once(monkeypatch: pytest.MonkeyPatch
 
     runner.run_for_pdf(_make_pdf())
 
-    assert run_call_count == 1
+    # 1 (document-level) + 2 (field_extractor, per section) + 3*2 (normalizer+validator, per record)
+    assert run_call_count == 1 + 2 + 3 * 2
+
+
+def test_candidate_repository_order_matches_artifact_flow(monkeypatch: pytest.MonkeyPatch) -> None:
+    order: list[str] = []
+    _patch_stages(monkeypatch, order, section_count=1, records_per_section={0: 1})
+    candidates = StubCandidateRepository(order_log=order)
+    runner, *_ = _make_job_runner(candidates=candidates)
+
+    runner.run_for_pdf(_make_pdf())
+
+    assert order == [
+        "document_analyzer",
+        "layout_detector",
+        "section_parser",
+        "add_section",
+        "field_extractor",
+        "add_raw",
+        "normalizer",
+        "attach_normalized",
+        "validator",
+        "update_validation",
+    ]
 
 
 def test_repository_receives_pipeline_result(monkeypatch: pytest.MonkeyPatch) -> None:
     calls: list[str] = []
-    _patch_all_stages_as_recording_stubs(monkeypatch, calls)
+    _patch_stages(monkeypatch, calls, section_count=1, records_per_section={0: 1})
     runner, jobs, *_ = _make_job_runner()
 
     result = runner.run_for_pdf(_make_pdf())
@@ -148,37 +253,139 @@ def test_repository_receives_pipeline_result(monkeypatch: pytest.MonkeyPatch) ->
     assert jobs.jobs[int(job_id)].status == "succeeded"
 
 
-def test_learning_service_delegated_on_stage_failure(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_learning_service_delegated_on_section_failure_isolates_other_sections(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     calls: list[str] = []
-    _patch_failing_stage(monkeypatch, calls, "validator")
-    runner, jobs, _, _, learning = _make_job_runner()
+    _patch_stages(
+        monkeypatch,
+        calls,
+        section_count=2,
+        records_per_section={1: 1},
+        failures=_FailureConfig(sections=frozenset({0})),
+    )
+    runner, jobs, _, candidates, _, learning = _make_job_runner()
+
+    result = runner.run_for_pdf(_make_pdf())
+
+    assert result.succeeded is False
+    assert len(learning.recorded) == 1
+    assert learning.recorded[0].pipeline_stage == PipelineStageName.FIELD_EXTRACTOR
+    # section 0は失敗、section 1は処理が継続される（ADR-0045: 失敗の非波及）
+    assert len(candidates.add_section_calls) == 2
+    assert len(candidates.add_raw_calls) == 1
+    assert result.job.processed_count == 1
+    assert result.job.failed_count == 1
+    assert jobs.updates[0][1] == "failed"
+
+
+def test_learning_service_delegated_on_record_failure_isolates_other_records(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[str] = []
+    _patch_stages(
+        monkeypatch,
+        calls,
+        section_count=1,
+        records_per_section={0: 2},
+        failures=_FailureConfig(normalizer_records=frozenset({0})),
+    )
+    runner, _, _, candidates, _, learning = _make_job_runner()
+
+    result = runner.run_for_pdf(_make_pdf())
+
+    assert result.succeeded is False
+    assert len(learning.recorded) == 1
+    assert learning.recorded[0].pipeline_stage == PipelineStageName.NORMALIZER
+    # record 0は失敗、record 1は処理が継続される
+    assert len(candidates.add_raw_calls) == 2
+    assert len(candidates.attach_normalized_calls) == 1
+    assert len(candidates.update_validation_calls) == 1
+    assert result.job.processed_count == 1
+    assert result.job.failed_count == 1
+
+
+def test_learning_service_delegated_on_validator_failure(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[str] = []
+    _patch_stages(
+        monkeypatch,
+        calls,
+        section_count=1,
+        records_per_section={0: 1},
+        failures=_FailureConfig(validator_records=frozenset({0})),
+    )
+    runner, _, _, candidates, _, learning = _make_job_runner()
 
     result = runner.run_for_pdf(_make_pdf())
 
     assert result.succeeded is False
     assert len(learning.recorded) == 1
     assert learning.recorded[0].pipeline_stage == PipelineStageName.VALIDATOR
-    assert jobs.updates[0][1] == "failed"
+    assert len(candidates.attach_normalized_calls) == 1
+    assert len(candidates.update_validation_calls) == 0
 
 
 def test_learning_service_not_called_on_success(monkeypatch: pytest.MonkeyPatch) -> None:
     calls: list[str] = []
-    _patch_all_stages_as_recording_stubs(monkeypatch, calls)
-    runner, _, _, _, learning = _make_job_runner()
+    _patch_stages(monkeypatch, calls, section_count=1, records_per_section={0: 1})
+    runner, _, _, _, _, learning = _make_job_runner()
 
     runner.run_for_pdf(_make_pdf())
 
     assert learning.recorded == []
 
 
+def test_document_level_failure_stops_all_processing(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[str] = []
+    _patch_stages(monkeypatch, calls, section_count=2, records_per_section={0: 1, 1: 1})
+
+    from mod_personnel_db.pipeline.exceptions import PipelineException
+
+    class _FailingSectionParser:
+        def __init__(self, *args: object, **kwargs: object) -> None:
+            del args, kwargs
+
+        def run(self, context: object, input: object) -> object:
+            del input
+            calls.append("section_parser")
+            raise PipelineException(
+                stage_name="section_parser",
+                context=context,  # type: ignore[arg-type]
+                message="section_parser failed",
+            )
+
+    monkeypatch.setattr(job_runner_module, "SectionParser", _FailingSectionParser)
+    candidates = StubCandidateRepository()
+    runner, jobs, _, _, _, learning = _make_job_runner(candidates=candidates)
+
+    result = runner.run_for_pdf(_make_pdf())
+
+    assert result.succeeded is False
+    assert "field_extractor" not in calls
+    assert "normalizer" not in calls
+    assert "validator" not in calls
+    assert candidates.add_section_calls == []
+    assert len(learning.recorded) == 1
+    assert learning.recorded[0].pipeline_stage.value == "section_parser"
+    assert result.job.processed_count == 0
+    assert result.job.failed_count == 1
+    assert jobs.updates[0][1] == "failed"
+
+
 def test_pipeline_exception_does_not_propagate_out_of_run_for_pdf(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """PipelineExceptionはPipelineRunner内部で捕捉されPipelineResult.errorへ格納される
-    （docs/api/pipeline.md#pipelineexception）。JobRunnerErrorへの変換は行わず、
-    run_for_pdf()から例外として送出されることもない。"""
+    """PipelineExceptionは各PipelineRunner呼び出し内で捕捉されPipelineResult.errorへ
+    格納される（docs/api/pipeline.md#pipelineexception）。JobRunnerErrorへの変換は
+    行わず、run_for_pdf()から例外として送出されることもない。"""
     calls: list[str] = []
-    _patch_failing_stage(monkeypatch, calls, "normalizer")
+    _patch_stages(
+        monkeypatch,
+        calls,
+        section_count=1,
+        records_per_section={0: 1},
+        failures=_FailureConfig(normalizer_records=frozenset({0})),
+    )
     runner, *_ = _make_job_runner()
 
     result = runner.run_for_pdf(_make_pdf())
@@ -189,7 +396,7 @@ def test_pipeline_exception_does_not_propagate_out_of_run_for_pdf(
 
 def test_run_pending_processes_all_pending_pdfs(monkeypatch: pytest.MonkeyPatch) -> None:
     calls: list[str] = []
-    _patch_all_stages_as_recording_stubs(monkeypatch, calls)
+    _patch_stages(monkeypatch, calls, section_count=1, records_per_section={0: 1})
     pending = (_make_pdf(1), _make_pdf(2), _make_pdf(3))
     pdfs = StubPDFRepository(pending=pending)
     runner, jobs, *_ = _make_job_runner(pdfs=pdfs)
@@ -224,7 +431,7 @@ def _running_job_for_lookup() -> Job:
 
 def test_knowledge_service_failure_propagates(monkeypatch: pytest.MonkeyPatch) -> None:
     calls: list[str] = []
-    _patch_all_stages_as_recording_stubs(monkeypatch, calls)
+    _patch_stages(monkeypatch, calls)
     knowledge = StubKnowledgeService(fail=True)
     runner, jobs, *_ = _make_job_runner(knowledge=knowledge)
 
@@ -239,7 +446,7 @@ def test_knowledge_service_failure_propagates(monkeypatch: pytest.MonkeyPatch) -
 
 def test_job_repository_add_failure_propagates(monkeypatch: pytest.MonkeyPatch) -> None:
     calls: list[str] = []
-    _patch_all_stages_as_recording_stubs(monkeypatch, calls)
+    _patch_stages(monkeypatch, calls)
     jobs = StubJobRepository(add_should_fail=True)
     runner, *_ = _make_job_runner(jobs=jobs)
 
@@ -255,8 +462,25 @@ def test_learning_service_not_called_for_unmapped_stage_name(
     """`document_analyzer`は`PipelineStageName`に対応する値を持たないため
     （models/enums.py）、失敗してもLearning記録は行わない。"""
     calls: list[str] = []
-    _patch_failing_stage(monkeypatch, calls, "document_analyzer")
-    runner, jobs, _, _, learning = _make_job_runner()
+    _patch_stages(monkeypatch, calls)
+
+    from mod_personnel_db.pipeline.exceptions import PipelineException
+
+    class _FailingDocumentAnalyzer:
+        def __init__(self, *args: object, **kwargs: object) -> None:
+            del args, kwargs
+
+        def run(self, context: object, input: object) -> object:
+            del input
+            calls.append("document_analyzer")
+            raise PipelineException(
+                stage_name="document_analyzer",
+                context=context,  # type: ignore[arg-type]
+                message="document_analyzer failed",
+            )
+
+    monkeypatch.setattr(job_runner_module, "DocumentAnalyzer", _FailingDocumentAnalyzer)
+    runner, jobs, _, _, _, learning = _make_job_runner()
 
     result = runner.run_for_pdf(_make_pdf())
 
