@@ -198,8 +198,8 @@ src/mod_personnel_db/
 
 ### `cli/`
 
-- **目的**: 人間が操作するコマンドラインエントリポイント（[ADR-0021](../adr/0021-review-ui-strategy.md)のレビューCLI等）であり、かつ**アプリケーション全体の合成ルート（Composition Root）**を担う。
-- **責務**: コマンドライン引数の解析、`services/`・`review/`・`export/`等のAPI呼び出しに加え、起動時に`config/`から設定値を読み込み、それに基づいて`repositories/sqlite/`（将来は`repositories/postgres/`も）の具象実装を構築し、`UnitOfWork`として`pipeline/`・`services/`・`review/`・`export/`に注入する。
+- **目的**: 人間が操作するコマンドラインエントリポイント（[ADR-0021](../adr/0021-review-ui-strategy.md)のレビューCLI等）であり、かつ**アプリケーション全体の合成ルート（Composition Root）**を担う。他のいかなるパッケージ（`config/`・`services/`・`pipeline/`・`repositories/`を含む）も具象実装を生成しない（[ADR-0046](../adr/0046-composition-root-dependency-injection-contract.md)、[architecture-contract.md 保証15](../architecture/architecture-contract.md#15-依存生成責務はcomposition-rootcliに一本化される)）。
+- **責務**: コマンドライン引数の解析、`services/`・`review/`・`export/`等のAPI呼び出しに加え、起動時に`config/`から設定値を読み込み、それに基づいて`repositories/sqlite/`（将来は`repositories/postgres/`も）・`KnowledgeService`・`LearningService`の具象実装を、Repository具象生成→`KnowledgeService`生成→`LearningService`生成→`JobRunner`生成→CLI Command生成の順に構築する（ADR-0046）。`JobRunner`（`pipeline/job_runner.py`）へは`JobRunnerRepositories`・`KnowledgeService`・`LearningService`・`ParserVersionId`・`layout_definitions`を個別に注入する。`UnitOfWork`（`repositories/`が定める8リポジトリ集約Protocol）は`JobRunner`へは注入しない（`JobRunner`が必要とするRepositoryは`pdfs`/`jobs`/`candidates`の3種のみであり、`UnitOfWork`は複数Repositoryにまたがる原子性が必要な操作向けの抽象のため）。パイプライン実行（`run_pending()`）・Review（[ADR-0021](../adr/0021-review-ui-strategy.md)）・Exportは、それぞれ独立したCLIサブコマンドとして提供し、`cli/`がこれらを1プロセス内で自動的に直列実行することはない。
 - **依存先**: `services/`, `review/`, `export/`, `pipeline/`, `config/`, `models/`, **`repositories/sqlite/`（合成ルートとしての唯一の例外、[`dependency-rule.md`](dependency-rule.md#合成ルートcomposition-root)）**。
 - **依存禁止**: `document/`〜`validators/`（直接は呼ばない、`pipeline/`経由）。`repositories/sqlite/`への依存は`cli/`にのみ許される例外であり、他のいかなるパッケージにも拡大しない。
 

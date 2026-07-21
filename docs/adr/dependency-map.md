@@ -1,6 +1,6 @@
 # ADR Dependency Map
 
-> `A --> B` は「AはBを参照・前提としている（Aを理解するにはBの決定を先に理解する必要がある）」ことを表す。矢印の向きは各ADR本文中の「関連ADR」節・コンテキスト中の参照から機械的に抽出したもの（抽出方法は[品質チェックレポート](quality-check.md#依存関係の抽出方法)を参照）。新規ADR（0018〜0026）の依存関係は、[`gap-analysis.md`](gap-analysis.md)での検討過程に基づき設計時点で付与したもの。ADR-0027（Review Domainの中核化）・ADR-0028（設定管理へのPydantic Settings採用）・ADR-0029（公開成果物の完全性保証と監査ログ方針）・ADR-0030（Enum実装方針をenum.StrEnumに統一する）・ADR-0031（PipelineMetricsのフィールド構成を確定する）・ADR-0032（Redefine Document Analyzer Responsibility）・ADR-0033（Document Analyzer出力型のフィールド構成を確定する）・ADR-0034（Document Analyzerの実装にpypdfを採用する）・ADR-0035（Layout Detector Owns PDF Content Access）・ADR-0036（LayoutDefinitionの実装にPyYAMLを採用する）・ADR-0037（Layout Detector Produces Layout Artifact）・ADR-0038（Field Extractor Produces FieldExtractionResult）・ADR-0039（Normalizer Field Mapping via Extended Layout Knowledge）・ADR-0040（Normalizer Produces NormalizationResult）・ADR-0041（Validator Constructor-Injects ValidationRuleSet）・ADR-0042（Python Version Target Realignment）・ADR-0043（Validator Produces ValidationResult with RuleEngine）・ADR-0044（PipelineRunner / JobRunner Boundary）・ADR-0045（JobRunnerによる集約Artifact展開モデル）の依存関係は、当該ADR本文の「コンテキスト」節・「関連ADR」節に基づき付与した。ADR-0041が「関連ADR」節にADR-0043への参照を追記しているが、これは後継ADRを示す情報リンクであり「理解の前提」ではないため、グラフ上の逆エッジ（`ADR0041 --> ADR0043`）は付与しない（循環を作らないための意図的な非対称、[品質チェックレポート](quality-check.md#依存関係の抽出方法)参照）。
+> `A --> B` は「AはBを参照・前提としている（Aを理解するにはBの決定を先に理解する必要がある）」ことを表す。矢印の向きは各ADR本文中の「関連ADR」節・コンテキスト中の参照から機械的に抽出したもの（抽出方法は[品質チェックレポート](quality-check.md#依存関係の抽出方法)を参照）。新規ADR（0018〜0026）の依存関係は、[`gap-analysis.md`](gap-analysis.md)での検討過程に基づき設計時点で付与したもの。ADR-0027（Review Domainの中核化）・ADR-0028（設定管理へのPydantic Settings採用）・ADR-0029（公開成果物の完全性保証と監査ログ方針）・ADR-0030（Enum実装方針をenum.StrEnumに統一する）・ADR-0031（PipelineMetricsのフィールド構成を確定する）・ADR-0032（Redefine Document Analyzer Responsibility）・ADR-0033（Document Analyzer出力型のフィールド構成を確定する）・ADR-0034（Document Analyzerの実装にpypdfを採用する）・ADR-0035（Layout Detector Owns PDF Content Access）・ADR-0036（LayoutDefinitionの実装にPyYAMLを採用する）・ADR-0037（Layout Detector Produces Layout Artifact）・ADR-0038（Field Extractor Produces FieldExtractionResult）・ADR-0039（Normalizer Field Mapping via Extended Layout Knowledge）・ADR-0040（Normalizer Produces NormalizationResult）・ADR-0041（Validator Constructor-Injects ValidationRuleSet）・ADR-0042（Python Version Target Realignment）・ADR-0043（Validator Produces ValidationResult with RuleEngine）・ADR-0044（PipelineRunner / JobRunner Boundary）・ADR-0045（JobRunnerによる集約Artifact展開モデル）・ADR-0046（Composition Rootの依存注入契約）の依存関係は、当該ADR本文の「コンテキスト」節・「関連ADR」節に基づき付与した。ADR-0041が「関連ADR」節にADR-0043への参照を追記しているが、これは後継ADRを示す情報リンクであり「理解の前提」ではないため、グラフ上の逆エッジ（`ADR0041 --> ADR0043`）は付与しない（循環を作らないための意図的な非対称、[品質チェックレポート](quality-check.md#依存関係の抽出方法)参照）。
 
 ## 全体図（テーマ別クラスタ）
 
@@ -52,6 +52,7 @@ flowchart LR
         ADR0043["0043 Validator Produces ValidationResult with RuleEngine"]
         ADR0044["0044 PipelineRunner / JobRunner Boundary"]
         ADR0045["0045 JobRunnerによる集約Artifact展開モデル"]
+        ADR0046["0046 Composition Rootの依存注入契約"]
     end
 
     subgraph QUALITY["品質・テスト"]
@@ -237,6 +238,12 @@ flowchart LR
     ADR0045 --> ADR0040
     ADR0045 --> ADR0043
     ADR0045 --> ADR0044
+
+    ADR0046 --> ADR0011
+    ADR0046 --> ADR0019
+    ADR0046 --> ADR0021
+    ADR0046 --> ADR0044
+    ADR0046 --> ADR0045
 ```
 
 ## 読み方の例
@@ -247,21 +254,21 @@ flowchart LR
 
 ## 被参照数（in-degree）ランキング（上位、実測値）
 
-以下は本ファイルの全145エッジ（ADR-0045追加後）を実際に集計した値である（[品質チェックレポート](quality-check.md#依存関係の抽出方法)で検証済み。0034追加時点からの増分はADR-0035の新規4エッジ・ADR-0036の新規5エッジ・ADR-0037の新規3エッジ・ADR-0038の新規3エッジ・ADR-0039の新規6エッジ・ADR-0040の新規5エッジ・ADR-0041の新規6エッジ・ADR-0042の新規5エッジ・ADR-0043の新規7エッジ・ADR-0044の新規7エッジ・ADR-0045の新規7エッジ）。
+以下は本ファイルの全150エッジ（ADR-0046追加後）を実際に集計した値である（[品質チェックレポート](quality-check.md#依存関係の抽出方法)で検証済み。0034追加時点からの増分はADR-0035の新規4エッジ・ADR-0036の新規5エッジ・ADR-0037の新規3エッジ・ADR-0038の新規3エッジ・ADR-0039の新規6エッジ・ADR-0040の新規5エッジ・ADR-0041の新規6エッジ・ADR-0042の新規5エッジ・ADR-0043の新規7エッジ・ADR-0044の新規7エッジ・ADR-0045の新規7エッジ・ADR-0046の新規5エッジ）。
 
 | ADR | 被参照数 | 参照数 | 備考 |
 |---|---|---|---|
-| 0011 | 18 | 5 | 中核パイプライン固定化（ADR-0035追加により+1、ADR-0037追加により+1、ADR-0038追加により+1、ADR-0039追加により+1、ADR-0040追加により+1、ADR-0041追加により+1、ADR-0043追加により+1、ADR-0044追加により+1、ADR-0045追加により+1） |
+| 0011 | 19 | 5 | 中核パイプライン固定化（ADR-0035追加により+1、ADR-0037追加により+1、ADR-0038追加により+1、ADR-0039追加により+1、ADR-0040追加により+1、ADR-0041追加により+1、ADR-0043追加により+1、ADR-0044追加により+1、ADR-0045追加により+1、ADR-0046追加により+1） |
 | 0006 | 14 | 2 | 来歴管理方針。データモデル全体の前提（ADR-0035追加により+1、ADR-0041追加により+1、ADR-0043追加により+1） |
 | 0012 | 8 | 3 | 未知パターンへの対応優先順位（ADR-0039追加により被参照数が7→8に） |
 | 0005 | 8 | 3 | Knowledge Base正規化（ADR-0036追加により被参照数が4→5に、ADR-0039追加により5→6に、ADR-0040追加により6→7に、ADR-0041追加により7→8に） |
 | 0014 | 8 | 4 | 開発規律（ADR-0041追加により被参照数が5→6に、ADR-0043追加により6→7に、ADR-0044追加により7→8に） |
 | 0013 | 7 | 4 | Learning Dataset方針（ADR-0044がJobRunnerのLearning記録責務の前提として初めて参照、被参照数が6→7に） |
 | 0010 | 6 | 1 | CI/CD・公開戦略（ADR-0042追加により被参照数が5→6に） |
+| 0019 | 6 | 3 | Workflow Orchestration（ADR-0044がJobRunnerのPDF単位失敗独立方針の前提として参照、被参照数が3→4に、ADR-0045がsection・record単位への拡張の前提として参照、4→5に、ADR-0046がrun_pending()の起動契機の前提として参照、5→6に） |
 | 0037 | 6 | 3 | Layout Detector Produces Layout Artifact（ADR-0039追加により被参照数が1→2に、ADR-0040追加により2→3に、ADR-0041追加により3→4に、ADR-0044追加により4→5に、ADR-0045追加により5→6に） |
 | 0001 | 5 | 0 | Pythonパッケージング（ADR-0036追加により被参照数が3→4に、ADR-0042追加により4→5に） |
 | 0003 | 5 | 3 | Layout外部データ定義（ADR-0039追加により被参照数が4→5に） |
-| 0019 | 5 | 3 | Workflow Orchestration（ADR-0044がJobRunnerのPDF単位失敗独立方針の前提として参照、被参照数が3→4に、ADR-0045がsection・record単位への拡張の前提として参照、4→5に） |
 | 0002 | 4 | 0 | Lint/Format/型チェックツールの選定（ADR-0042追加により被参照数が3→4に） |
 | 0026 | 4 | 2 | セキュリティポリシー（ADR-0036追加により被参照数が3→4に） |
 | 0032 | 4 | 5 | Document Analyzer責務再定義（ADR-0037追加により被参照数が3→4に） |
@@ -273,8 +280,8 @@ flowchart LR
 | 0017 | 3 | 3 | Learning Dataset拡張 |
 | 0035 | 3 | 4 | Layout Detector PDF独占（ADR-0038追加により被参照数が2→3に） |
 
-被参照数0のADR（`0018`, `0020`, `0024`, `0027`, `0029`, `0036`, `0042`, `0045`）については [`quality-check.md`](quality-check.md#孤立したadr) で個別に評価している。いずれも参照数（out-degree）は1以上あり、グラフ上完全に孤立したノード（in=0 かつ out=0）は存在しない（45ノード・145エッジで再検証済み）。`0021`は`0027`（Review Domainの中核化）から、`0026`は`0028`（Pydantic Settings採用）から、`0022`は`0029`（公開成果物の完全性保証と監査ログ方針）から、`0028`は`0030`（Enum実装方針をenum.StrEnumに統一する）から新たに参照されたため、この一覧から外れた。`0023`（Parser Versioning）・`0030`（StrEnum採用）は、いずれもADR-0032（Document Analyzer責務再定義）から、`0031`・`0032`はADR-0033（Document Analyzer出力型のフィールド構成を確定する）から、`0033`・`0034`はADR-0035（Layout Detector Owns PDF Content Access）から、`0037`はADR-0038（Field Extractor Produces FieldExtractionResult）から、`0038`はADR-0039（Normalizer Field Mapping via Extended Layout Knowledge）から、`0039`はADR-0040（Normalizer Produces NormalizationResult）から、`0040`・`0041`はADR-0043（Validator Produces ValidationResult with RuleEngine）・ADR-0044（PipelineRunner / JobRunner Boundary）から、`0043`・`0044`はADR-0045（JobRunnerによる集約Artifact展開モデル）から新たに参照されたため、それぞれの一覧から外れた。従来「既存の`0009`」として被参照数0の一覧に含めていたが、ADR-0042がAIエージェント運用方針（ADR-0009）を初めて参照したため、`0009`は被参照数1となりこの一覧から外れた。`0042`・`0045`は追加されたばかりで、まだどのADRからも参照されていない（被参照数0、本対応完了時点で自然な状態）。
+被参照数0のADR（`0018`, `0020`, `0024`, `0027`, `0029`, `0036`, `0042`, `0046`）については [`quality-check.md`](quality-check.md#孤立したadr) で個別に評価している。いずれも参照数（out-degree）は1以上あり、グラフ上完全に孤立したノード（in=0 かつ out=0）は存在しない（46ノード・150エッジで再検証済み）。`0021`は`0027`（Review Domainの中核化）・`0046`（Composition Rootの依存注入契約、Reviewが独立CLIエントリポイントであることの根拠として参照）から、`0026`は`0028`（Pydantic Settings採用）から、`0022`は`0029`（公開成果物の完全性保証と監査ログ方針）から、`0028`は`0030`（Enum実装方針をenum.StrEnumに統一する）から新たに参照されたため、この一覧から外れた。`0023`（Parser Versioning）・`0030`（StrEnum採用）は、いずれもADR-0032（Document Analyzer責務再定義）から、`0031`・`0032`はADR-0033（Document Analyzer出力型のフィールド構成を確定する）から、`0033`・`0034`はADR-0035（Layout Detector Owns PDF Content Access）から、`0037`はADR-0038（Field Extractor Produces FieldExtractionResult）から、`0038`はADR-0039（Normalizer Field Mapping via Extended Layout Knowledge）から、`0039`はADR-0040（Normalizer Produces NormalizationResult）から、`0040`・`0041`はADR-0043（Validator Produces ValidationResult with RuleEngine）・ADR-0044（PipelineRunner / JobRunner Boundary）から、`0043`・`0044`はADR-0045（JobRunnerによる集約Artifact展開モデル）から、`0044`・`0045`はADR-0046（Composition Rootの依存注入契約）から新たに参照されたため、それぞれの一覧から外れた。従来「既存の`0009`」として被参照数0の一覧に含めていたが、ADR-0042がAIエージェント運用方針（ADR-0009）を初めて参照したため、`0009`は被参照数1となりこの一覧から外れた。`0042`・`0046`は追加されたばかりで、まだどのADRからも参照されていない（被参照数0、本対応完了時点で自然な状態）。
 
-**注記（発見した既知の問題、本Task5の範囲外）**: 上記の非巡回性の実測検証において、`ADR-0003`・`ADR-0005`・`ADR-0006`・`ADR-0011`の間に相互参照（例: `ADR-0003 --> ADR-0011`と`ADR-0011 --> ADR-0003`が同時に存在）による循環が複数存在することを確認した（Phase2 Task5でのDFSベースの機械検証により発見）。`git log`で確認したところ、これらの循環はADR統治基盤の最初のコミット（`dependency-map.md`初版）から存在しており、Phase2 Task5で新規に導入されたものではない。[`docs/design-freeze.md`](../design-freeze.md)が「DFS彩色法・Kahnのアルゴリズムの双方でグラフ全体が非巡回であることを検証済み」と述べているが、本Task5時点の機械検証では非巡回性が成立していないことが判明した。本ADR体系全体の再検証・整理は本Task5の責務範囲外（無関係なADRの実質的な書き換えを伴うため）であり、別タスクとして起票することを推奨する（詳細はPhase2 Task5 Review ReportのTODO参照）。Task6・Task7・Task8-0・Task8・Task9-0・Python Version Target Realignment・Task9・Task10-0.1・Task10-3.1完了時点でも同じ既知の循環が残存しており（ADR-0037・ADR-0038・ADR-0039・ADR-0040・ADR-0041・ADR-0042・ADR-0043・ADR-0044・ADR-0045の追加による新規循環はない、上記の機械検証で確認済み）、引き続き別タスクでの対応を推奨する。
+**注記（発見した既知の問題、本Task5の範囲外）**: 上記の非巡回性の実測検証において、`ADR-0003`・`ADR-0005`・`ADR-0006`・`ADR-0011`の間に相互参照（例: `ADR-0003 --> ADR-0011`と`ADR-0011 --> ADR-0003`が同時に存在）による循環が複数存在することを確認した（Phase2 Task5でのDFSベースの機械検証により発見）。`git log`で確認したところ、これらの循環はADR統治基盤の最初のコミット（`dependency-map.md`初版）から存在しており、Phase2 Task5で新規に導入されたものではない。[`docs/design-freeze.md`](../design-freeze.md)が「DFS彩色法・Kahnのアルゴリズムの双方でグラフ全体が非巡回であることを検証済み」と述べているが、本Task5時点の機械検証では非巡回性が成立していないことが判明した。本ADR体系全体の再検証・整理は本Task5の責務範囲外（無関係なADRの実質的な書き換えを伴うため）であり、別タスクとして起票することを推奨する（詳細はPhase2 Task5 Review ReportのTODO参照）。Task6・Task7・Task8-0・Task8・Task9-0・Python Version Target Realignment・Task9・Task10-0.1・Task10-3.1・Task11-1完了時点でも同じ既知の循環が残存しており（ADR-0037・ADR-0038・ADR-0039・ADR-0040・ADR-0041・ADR-0042・ADR-0043・ADR-0044・ADR-0045・ADR-0046の追加による新規循環はない、上記の機械検証で確認済み）、引き続き別タスクでの対応を推奨する。
 
-**検証スクリプトの再現性修正**: Python Version Target Realignment対応時に、DFS彩色法の起点ノードをPythonの`set`反復順（非決定的）で選んでいたため、検出される循環の列挙件数が実行のたびに12〜15件とばらつくバグを発見した。起点ノードをソート済みリストから選ぶよう修正した結果、**一意な循環は13件**であり、いずれも既知のクラスタ（`0003`/`0005`/`0006`/`0011`/`0012`/`0013`/`0014`/`0015`/`0017`）内に閉じていることを再現可能な形で確認した（`0037`〜`0045`を含む新しいノードは1件も循環に関与しない、Task10-3.1でのADR-0045追加後の45ノード・145エッジでの再検証でも同一の13件を確認済み）。過去のTask5〜Task9-0のレビューで報告した「12件」という件数はこの非決定性の影響を受けた可能性があるが、循環が既知クラスタの外に広がっていないという結論自体に変わりはない。
+**検証スクリプトの再現性修正**: Python Version Target Realignment対応時に、DFS彩色法の起点ノードをPythonの`set`反復順（非決定的）で選んでいたため、検出される循環の列挙件数が実行のたびに12〜15件とばらつくバグを発見した。起点ノードをソート済みリストから選ぶよう修正した結果、**一意な循環は13件**であり、いずれも既知のクラスタ（`0003`/`0005`/`0006`/`0011`/`0012`/`0013`/`0014`/`0015`/`0017`）内に閉じていることを再現可能な形で確認した（`0037`〜`0046`を含む新しいノードは1件も循環に関与しない、Task11-1でのADR-0046追加後の46ノード・150エッジでの再検証でも同一の13件を確認済み）。過去のTask5〜Task9-0のレビューで報告した「12件」という件数はこの非決定性の影響を受けた可能性があるが、循環が既知クラスタの外に広がっていないという結論自体に変わりはない。

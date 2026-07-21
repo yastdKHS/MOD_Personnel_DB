@@ -61,6 +61,7 @@
 | [0043](0043-validator-produces-validation-result-with-rule-engine.md) | Validator Produces ValidationResult with RuleEngine | Accepted | 2026-07-20 | 2026-07-20 | 0006, 0011, 0014, 0038, 0039, 0040, 0041 | api/models.md, api/interfaces.md, api/package-design.md |
 | [0044](0044-pipelinerunner-jobrunner-boundary.md) | PipelineRunner / JobRunner Boundary | Accepted | 2026-07-20 | 2026-07-20 | 0011, 0013, 0014, 0019, 0037, 0040, 0041 | architecture/architecture-contract.md, api/pipeline.md, api/package-design.md, api/dependency-rule.md |
 | [0045](0045-job-runner-aggregate-artifact-coordinator.md) | JobRunnerによる集約Artifact展開モデル（Coordinatorパターン） | Accepted | 2026-07-20 | 2026-07-20 | 0011, 0019, 0037, 0038, 0040, 0043, 0044 | architecture/architecture-contract.md, api/pipeline.md, api/package-design.md |
+| [0046](0046-composition-root-dependency-injection-contract.md) | Composition Root（CLI）の依存注入契約 | Accepted | 2026-07-21 | 2026-07-21 | 0011, 0019, 0021, 0044, 0045 | architecture/architecture-contract.md, api/package-design.md, api/dependency-rule.md, api/interfaces.md |
 
 ## 検討したが採用しなかった候補
 
