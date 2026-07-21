@@ -14,6 +14,11 @@ from mod_personnel_db.pipeline.result import PipelineResult
 from mod_personnel_db.pipeline.runner import NamedStage, PipelineRunner
 from mod_personnel_db.pipeline.stage import PipelineStage
 
+# job_runnerはここでは再エクスポートしない。中核パイプライン6段階
+# （document/〜validators/）が本モジュールからPipelineContextをimportするため
+# （各Stageの実装）、job_runner（6段階をimportする）を本ファイルで読み込むと
+# 循環参照になる。JobRunnerは`mod_personnel_db.pipeline.job_runner`から直接importする。
+
 __all__ = [
     "NamedStage",
     "PipelineBuilder",

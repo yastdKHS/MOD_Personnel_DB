@@ -2,7 +2,7 @@
 
 > **本ドキュメントに実装はない。** すべてのコードブロックは`typing.Protocol`による**型シグネチャのみ**（メソッド本体は`...`）であり、`.pyi`スタブファイルと同等の位置づけである。ロジックは一切含まない。実際の実装は将来のタスクで別途行う。
 >
-> **例外（Phase3 Task10-0.2）**: `KnowledgeService`（[`src/mod_personnel_db/knowledge/__init__.py`](../../src/mod_personnel_db/knowledge/__init__.py)）・`LearningService`（[`src/mod_personnel_db/learning/__init__.py`](../../src/mod_personnel_db/learning/__init__.py)）は、ADR-0044が前提とする`JobRunner`の依存契約（Dependency Injection用の抽象型）を先行整備するため、Protocol定義のみを`src/`に実装済みである。ロジック（YAML読み込み・LearningRepositoryへの永続化）を伴う具象実装は引き続き将来のタスクの対象であり、本ドキュメントの「実装はない」という性質そのものは変わらない（Protocol定義自体は元々ロジックを持たないため）。
+> **例外**: `KnowledgeService`（[`src/mod_personnel_db/knowledge/__init__.py`](../../src/mod_personnel_db/knowledge/__init__.py)）・`LearningService`（[`src/mod_personnel_db/learning/__init__.py`](../../src/mod_personnel_db/learning/__init__.py)）は、ADR-0044が定める`JobRunner`の依存契約（Dependency Injection用の抽象型）として、Protocol定義のみを`src/`に実装している。YAML読み込み・`LearningRepository`への永続化を伴う具象実装は本ドキュメントの対象外であり、Protocol定義自体がロジックを持たない点は他のコンポーネントと変わらない。
 >
 > 型は[`models.md`](models.md)で定義するモデル・値オブジェクトを用いる。パッケージ境界は[`package-design.md`](package-design.md)、依存ルールは[`dependency-rule.md`](dependency-rule.md)を参照。Protocol/ABC使い分けの方針は[`python-contract.md`](python-contract.md)を参照。
 
@@ -212,7 +212,7 @@ class FTPService(Protocol):
 
 ## `KnowledgeService`
 
-> 本Protocolは[`src/mod_personnel_db/knowledge/__init__.py`](../../src/mod_personnel_db/knowledge/__init__.py)に実装済み（Phase3 Task10-0.2）。`load_validation_rules()`は、`Validator`のコンストラクタ注入（ADR-0041, ADR-0043）が要求する`ValidationRuleSet`を`JobRunner`（ADR-0044）が取得するための追加メソッドとして本タスクで補った（既存メソッドの変更はない）。
+> 本Protocolは[`src/mod_personnel_db/knowledge/__init__.py`](../../src/mod_personnel_db/knowledge/__init__.py)に実装している。`KnowledgeService`はKnowledgeSnapshotに加えValidationRuleSetも提供する。`load_validation_rules()`は、`Validator`のコンストラクタ注入（ADR-0041, ADR-0043）が要求する`ValidationRuleSet`を、`JobRunner`（ADR-0044）が`KnowledgeService`経由で取得できるようにするためのメソッドであり、Knowledge取得責務を`KnowledgeService`へ集約する設計判断に基づく。
 
 ```python
 from typing import Protocol
@@ -237,7 +237,7 @@ class KnowledgeService(Protocol):
 
 ## `LearningService`
 
-> 本Protocolは[`src/mod_personnel_db/learning/__init__.py`](../../src/mod_personnel_db/learning/__init__.py)に実装済み（Phase3 Task10-0.2、シグネチャは変更なし）。
+> 本Protocolは[`src/mod_personnel_db/learning/__init__.py`](../../src/mod_personnel_db/learning/__init__.py)に実装している。`JobRunner`（ADR-0044）はLearning記録責務を`LearningService`へ委譲し、状態遷移ロジック・`LearningRepository`との連携の詳細を知らない。
 
 ```python
 from typing import Protocol
@@ -297,6 +297,8 @@ class Scheduler(Protocol):
 ---
 
 ## `JobRunner`
+
+> 本Protocolを実装する`JobRunner`クラスは[`src/mod_personnel_db/pipeline/job_runner.py`](../../src/mod_personnel_db/pipeline/job_runner.py)に実装している（ADR-0044）。`PipelineRunner`の呼び出し元として、`PipelineContext`生成・Stage生成（コンストラクタ注入）・`PipelineBuilder`経由での登録・Repository永続化・Learning記録への委譲を行う。
 
 ```python
 from typing import Protocol
