@@ -2,9 +2,8 @@
 #
 # 設計方針: docs/adr/0010-ci-cd-and-publish-strategy.md
 #
-# 現在 src/ にはまだ実装コードが存在しない（設計フェーズ）。
-# そのためコード対象が存在しないジョブはスキップし、CIを恒常的に赤くしない。
-# 実装が src/ に追加され次第、自動的にチェック対象となる。
+# src/・tests/ は実装済み（現状はdocs/reports/phase5-final-audit.mdを参照）。
+# 各ジョブは常にlint・型チェック・テストを実行する。
 
 name: CI
 
@@ -24,29 +23,16 @@ jobs:
         with:
           python-version: "3.13"
 
-      - name: Check if source code exists yet
-        id: has_code
-        run: |
-          if [ -n "$(find src -name '*.py' 2>/dev/null)" ]; then
-            echo "present=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "present=false" >> "$GITHUB_OUTPUT"
-          fi
-
       - name: Install dev dependencies
-        if: steps.has_code.outputs.present == 'true'
         run: pip install -e ".[dev]"
 
       - name: Ruff lint
-        if: steps.has_code.outputs.present == 'true'
         run: ruff check .
 
       - name: Ruff format check
-        if: steps.has_code.outputs.present == 'true'
         run: ruff format --check .
 
       - name: mypy
-        if: steps.has_code.outputs.present == 'true'
         run: mypy
 
   test:
@@ -59,19 +45,8 @@ jobs:
         with:
           python-version: "3.13"
 
-      - name: Check if tests exist yet
-        id: has_tests
-        run: |
-          if [ -n "$(find tests -name 'test_*.py' 2>/dev/null)" ]; then
-            echo "present=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "present=false" >> "$GITHUB_OUTPUT"
-          fi
-
       - name: Install package with dev dependencies
-        if: steps.has_tests.outputs.present == 'true'
         run: pip install -e ".[dev]"
 
       - name: Run pytest
-        if: steps.has_tests.outputs.present == 'true'
         run: pytest --cov

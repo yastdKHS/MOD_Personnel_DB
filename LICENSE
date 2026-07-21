@@ -1,0 +1,27 @@
+Copyright (c) 2026 MOD Personnel DB Maintainers
+
+All Rights Reserved.
+
+This repository and its contents (including but not limited to source
+code, documentation, architecture decision records, configuration data,
+and any data files) are made available for viewing purposes only.
+
+No permission is granted to any person to use, copy, modify, merge,
+publish, distribute, sublicense, and/or sell copies of this repository
+or any part of it, except with the prior written permission of the
+copyright holders.
+
+This restriction applies regardless of the visibility of the repository
+(public or private). The public visibility of this repository, if any,
+is solely for transparency and review purposes and does not constitute
+a grant of any license under copyright law.
+
+Personnel data derived from publicly disclosed Ministry of Defense
+(Japan) appointment records is handled separately under the data
+handling policy described in `docs/adr/0008-data-ethics-policy.md`;
+that policy governs the treatment of such data and does not itself
+grant any license to the source code or other contents of this
+repository.
+
+For licensing inquiries, contact the project maintainers listed in
+`CODEOWNERS`.
