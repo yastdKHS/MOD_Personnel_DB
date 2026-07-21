@@ -299,6 +299,8 @@ class Scheduler(Protocol):
 ## `JobRunner`
 
 > 本Protocolを実装する`JobRunner`クラスは[`src/mod_personnel_db/pipeline/job_runner.py`](../../src/mod_personnel_db/pipeline/job_runner.py)に実装している（ADR-0044）。`PipelineRunner`の呼び出し元として、`PipelineContext`生成・Stage生成（コンストラクタ注入）・`PipelineBuilder`経由での登録・Repository永続化・Learning記録への委譲を行う。
+>
+> **依存注入契約（ADR-0046）**: `JobRunner`のコンストラクタは`JobRunnerRepositories`（`pdfs`/`jobs`/`candidates`を束ねるdataclass）・`KnowledgeService`・`LearningService`・`ParserVersionId`・`layout_definitions`を個別に受け取る。`UnitOfWork`（`repositories.md`が定める8リポジトリ集約Protocol）は受け取らない。これらの具象実装は`cli/`（Composition Root）以外のいかなる箇所からも生成されない（[architecture-contract.md 保証15](../architecture/architecture-contract.md#15-依存生成責務はcomposition-rootcliに一本化される)）。
 
 ```python
 from typing import Protocol

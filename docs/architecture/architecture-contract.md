@@ -2,7 +2,7 @@
 
 > 本ドキュメントは[`docs/constitution.md`](../constitution.md)（Project Constitution）に従属する。両者が矛盾する場合はConstitutionが優先される。
 >
-> 本ドキュメントは、Interface & Package設計（[`docs/api/`](../api/)）全体が満たすべき14の分離保証を定義する（保証10は[ADR-0032](../adr/0032-redefine-document-analyzer-responsibility.md)、保証11は[ADR-0035](../adr/0035-layout-detector-owns-pdf-content-access.md)、保証12は[ADR-0037](../adr/0037-layout-detector-produces-layout-artifact.md)、保証13は[ADR-0044](../adr/0044-pipelinerunner-jobrunner-boundary.md)、保証14は[ADR-0045](../adr/0045-job-runner-aggregate-artifact-coordinator.md)により追加）。個々の保証は[`package-design.md`](../api/package-design.md)（依存関係）・[`dependency-rule.md`](../api/dependency-rule.md)（禁止/許可パターン）・[`pipeline.md`](../api/pipeline.md)（`run()`のみの公開）・[`docs/review/`](../review/)（Review Domain）の設計によって、**構造的に**（レビューや申し合わせだけでなく、依存グラフ上の事実として）実現される。曖昧な保証は解釈を明記し、将来の実装者が異なる解釈をしないようにする。
+> 本ドキュメントは、Interface & Package設計（[`docs/api/`](../api/)）全体が満たすべき15の分離保証を定義する（保証10は[ADR-0032](../adr/0032-redefine-document-analyzer-responsibility.md)、保証11は[ADR-0035](../adr/0035-layout-detector-owns-pdf-content-access.md)、保証12は[ADR-0037](../adr/0037-layout-detector-produces-layout-artifact.md)、保証13は[ADR-0044](../adr/0044-pipelinerunner-jobrunner-boundary.md)、保証14は[ADR-0045](../adr/0045-job-runner-aggregate-artifact-coordinator.md)、保証15は[ADR-0046](../adr/0046-composition-root-dependency-injection-contract.md)により追加）。個々の保証は[`package-design.md`](../api/package-design.md)（依存関係）・[`dependency-rule.md`](../api/dependency-rule.md)（禁止/許可パターン）・[`pipeline.md`](../api/pipeline.md)（`run()`のみの公開）・[`docs/review/`](../review/)（Review Domain）の設計によって、**構造的に**（レビューや申し合わせだけでなく、依存グラフ上の事実として）実現される。曖昧な保証は解釈を明記し、将来の実装者が異なる解釈をしないようにする。
 >
 > **本ドキュメントに実装はない。**
 
@@ -24,8 +24,9 @@
 | 12 | Section ParserはLayoutArtifact経由でのみPDFのテキストを得られる | `sections/`はPDFファイル・PDF解析ライブラリに依存せず、`LayoutArtifact.pages`のみを入力とする |
 | 13 | PipelineRunnerはRepository・Knowledge・Learning・Review・Exportを知らない | `pipeline/runner.py`（`PipelineRunner`）は`repositories/`・`knowledge/`・`learning/`・`review/`・`export/`のいずれにも依存しない |
 | 14 | PipelineRunnerは集約Artifactを展開しない | `pipeline/runner.py`（`PipelineRunner`）はStage出力の型・属性を一切解釈せず、`object`として不透明に次段へ渡すのみ |
+| 15 | 依存生成責務はComposition Root（`cli/`）に一本化される | `repositories/sqlite/`の各具象クラス、`KnowledgeService`の具象実装、`LearningService`の具象実装は`cli/`以外のいかなる箇所からも生成されない |
 
-（`⊥`は「依存しない」を表す。保証8と9は同じ設計判断を異なる向きから述べたものであり、[9節](#9-reviewだけがgold_recordsgold-databaseを書き換えられる)で統合的に扱う。保証10は[ADR-0032](../adr/0032-redefine-document-analyzer-responsibility.md)（Document Analyzer責務再定義）に伴い、保証11は[ADR-0035](../adr/0035-layout-detector-owns-pdf-content-access.md)（Layout Detector Owns PDF Content Access）に伴い、保証12は[ADR-0037](../adr/0037-layout-detector-produces-layout-artifact.md)（Layout Detector Produces Layout Artifact）に伴い、保証13は[ADR-0044](../adr/0044-pipelinerunner-jobrunner-boundary.md)（PipelineRunner / JobRunner Boundary）に伴い、保証14は[ADR-0045](../adr/0045-job-runner-aggregate-artifact-coordinator.md)（JobRunnerによる集約Artifact展開モデル）に伴い追加した）
+（`⊥`は「依存しない」を表す。保証8と9は同じ設計判断を異なる向きから述べたものであり、[9節](#9-reviewだけがgold_recordsgold-databaseを書き換えられる)で統合的に扱う。保証10は[ADR-0032](../adr/0032-redefine-document-analyzer-responsibility.md)（Document Analyzer責務再定義）に伴い、保証11は[ADR-0035](../adr/0035-layout-detector-owns-pdf-content-access.md)（Layout Detector Owns PDF Content Access）に伴い、保証12は[ADR-0037](../adr/0037-layout-detector-produces-layout-artifact.md)（Layout Detector Produces Layout Artifact）に伴い、保証13は[ADR-0044](../adr/0044-pipelinerunner-jobrunner-boundary.md)（PipelineRunner / JobRunner Boundary）に伴い、保証14は[ADR-0045](../adr/0045-job-runner-aggregate-artifact-coordinator.md)（JobRunnerによる集約Artifact展開モデル）に伴い、保証15は[ADR-0046](../adr/0046-composition-root-dependency-injection-contract.md)（Composition Rootの依存注入契約）に伴い追加した）
 
 ---
 
@@ -160,11 +161,19 @@
 
 **実現方法**: 集約Artifactの反復処理（文書レベル・Section単位・Record単位でそれぞれ何回`PipelineRunner`を構築・呼び出すか）は、すべて`JobRunner`（[ADR-0045](../adr/0045-job-runner-aggregate-artifact-coordinator.md)）が担う。`JobRunner`は集約Artifactの`tuple`フィールドから要素を取り出し、それを次の`PipelineRunner.run()`呼び出しの`initial_input`として渡すのみで、`PipelineRunner`自身のコード（`src/mod_personnel_db/pipeline/runner.py`）に集約Artifactの型を参照する箇所がないことは、実装のimport文・型シグネチャ（`PipelineStage[object, object]`）で機械的に確認できる。
 
+## 15. 依存生成責務はComposition Root（`cli/`）に一本化される
+
+**保証の内容**: `repositories/sqlite/`の各具象クラス（`SqlitePDFRepository`等）、`KnowledgeService`の具象実装、`LearningService`の具象実装は、`cli/`配下のComposition Root以外のいかなる箇所からも生成（インスタンス化）されない。`config/`・`services/`・`pipeline/`・`repositories/`のいずれも、これらの具象実装を自ら生成しない（[ADR-0046](../adr/0046-composition-root-dependency-injection-contract.md)）。
+
+**理由**: 「誰も`repositories/sqlite/`を直接importしない」という原則（[`dependency-rule.md`](../api/dependency-rule.md#合成ルートcomposition-root)）は、パッケージの`import`文だけでは「具象実装を実際にインスタンス化する箇所が1つに保たれているか」までは保証できない。`KnowledgeService`/`LearningService`の具象実装についても同様に、生成箇所が分散すると、設定値の読み込み・接続管理・具象実装の選択（将来のPostgreSQL移行等）が複数箇所に重複し、`cli/`が担う「どの具象実装を選ぶか」という配線の一貫性が崩れる。
+
+**実現方法**: `cli/`配下のComposition Rootは、Repository具象生成→`KnowledgeService`生成→`LearningService`生成→`JobRunner`生成→CLI Command生成、の順序でのみ具象実装を構築する（[ADR-0046](../adr/0046-composition-root-dependency-injection-contract.md)）。`JobRunner`（`pipeline/job_runner.py`）は`JobRunnerRepositories`・`KnowledgeService`・`LearningService`・`ParserVersionId`・`layout_definitions`を個別にコンストラクタ注入で受け取るのみで、これらを自ら生成しない。`UnitOfWork`は`JobRunner`へは注入されない。
+
 ---
 
 ## この契約の検証方法
 
-本ドキュメントの14保証はいずれも「特定パッケージ（またはパッケージ内の特定モジュール）が特定パッケージに依存しない」「特定の出力型を生成できるパッケージが1つに限られる」「特定の外部リソース（PDF本文）へアクセスできるパッケージが1つに限られる」または「特定モジュールが特定の型の内部構造を解釈しない」という形に還元できる（[`dependency-rule.md`](../api/dependency-rule.md)の全体依存グラフ）。したがって、実装着手後にこの契約が破られていないかは、以下の方法で検証可能である。
+本ドキュメントの15保証はいずれも「特定パッケージ（またはパッケージ内の特定モジュール）が特定パッケージに依存しない」「特定の出力型を生成できるパッケージが1つに限られる」「特定の外部リソース（PDF本文）へアクセスできるパッケージが1つに限られる」「特定モジュールが特定の型の内部構造を解釈しない」または「特定の具象実装を生成できるパッケージが1つに限られる」という形に還元できる（[`dependency-rule.md`](../api/dependency-rule.md)の全体依存グラフ）。したがって、実装着手後にこの契約が破られていないかは、以下の方法で検証可能である。
 
 1. **静的解析**: `import-linter`等によるパッケージ間import制約の機械的検証（[`dependency-rule.md`](../api/dependency-rule.md#機械的な検証将来の推奨事項)）。
 2. **型検査**: `Validator.run()`の戻り値型に修正後の値が含まれないこと等は、`mypy --strict`（[`python-contract.md`](../api/python-contract.md)）による型シグネチャの検証で担保される。
