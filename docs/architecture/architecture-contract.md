@@ -96,6 +96,8 @@
 
 **実現方法**: [`package-design.md`](../api/package-design.md)の`review/`節・依存先サマリ表で、`GoldRepository`への書き込みメソッド（`add_version`, `supersede`、[`repositories.md`](../api/repositories.md#goldrepository)）を実際に呼び出すのは`review/`パッケージの`ReviewService.promote_to_gold()`（[`interfaces.md`](../api/interfaces.md#reviewservice)）のみとする設計上の取り決めとする。`pipeline/`は`GoldRepository`に依存しない（[`package-design.md`](../api/package-design.md)の`pipeline/`節の依存先一覧に`GoldRepository`は含まれない）。
 
+> **現在の実装（Phase4 Task12-0）における対応関係**: 実装済みの`RepositoryReviewService`（`review/service.py`）は、上記`promote_to_gold()`に相当する処理を非公開メソッド`_promote_to_gold()`として持ち、これは公開メソッド`approve()`が`GoldPromotion`引数を伴って呼ばれた場合にのみ内部から呼び出す。書き込み経路が単一である（`GoldRepository.add_version()`を呼ぶコードパスが`_promote_to_gold()`一箇所のみ）という本保証の実体は成立しているが、メソッド名は本節が定める`promote_to_gold()`と完全には一致しない。両者の命名統一は将来のADRに委ねる。
+
 ## 9. Reviewだけがgold_records（Gold Database）を書き換えられる
 
 **保証の内容**: 保証8が「`review/`はGoldRepository以外を書き換えない」という**`review/`側の制約**を述べたのに対し、本保証は「`GoldRepository`は`review/`以外から書き換えられない」という**`GoldRepository`側の排他性**を述べる。両者は同一の設計（`GoldRepository`への書き込み経路を`review/`に一本化する）の裏表であり、Human Reviewを「システムの中核」（[`docs/review/`](../review/)）として設計する上で、最も基本的な不変条件として独立に明記する。
@@ -106,7 +108,7 @@
 
 **実現方法**:
 1. **パッケージ境界**（構造的な保証）: [`dependency-rule.md`](../api/dependency-rule.md)の全体依存グラフ・[`import-graph.md`](../api/import-graph.md)の検証済みグラフにおいて、`GoldRepository`（`repositories/`が定義する抽象、[`repositories.md`](../api/repositories.md#goldrepository)）への依存を持つのは`review/`のみである。`pipeline/`・`validators/`・`knowledge/`・`export/`はいずれも`GoldRepository`に依存しない（[`package-design.md`](../api/package-design.md)の依存先サマリ表）。
-2. **メソッド粒度の保証**（`review/`パッケージ内部）: `review/`パッケージ内でも、`GoldRepository.add_version()` / `supersede()`（[`repositories.md`](../api/repositories.md#goldrepository)）を呼び出すのは`ReviewService.promote_to_gold()`（[`docs/api/review.md`](../api/review.md#reviewservice)）のみとする。`ReviewService`の他のメソッド（`submit_field_change()`, `decide()`, `add_comment()`等）はいずれも`GoldRepository`を呼び出さない。
+2. **メソッド粒度の保証**（`review/`パッケージ内部）: `review/`パッケージ内でも、`GoldRepository.add_version()` / `supersede()`（[`repositories.md`](../api/repositories.md#goldrepository)）を呼び出すのは`ReviewService.promote_to_gold()`（[`docs/api/review.md`](../api/review.md#reviewservice)）のみとする。`ReviewService`の他のメソッド（`submit_field_change()`, `decide()`, `add_comment()`等）はいずれも`GoldRepository`を呼び出さない。**現在実装済みの`RepositoryReviewService`（`review/service.py`）ではこれらのメソッドの代わりに`list_pending()`/`start_review()`/`approve()`/`reject()`のみを持ち、`GoldRepository`を呼び出すのは`approve()`から呼ばれる非公開メソッド`_promote_to_gold()`一箇所のみである**（保証8の対応関係注記を参照）。
 3. **ライフサイクル上の保証**: [`docs/review/domain.md`](../review/domain.md#review-lifecycle状態遷移図)の状態遷移図において、`GoldDatabase`状態に到達する経路は`Approved --> GoldDatabase`の1本のみであり、`Approved`は`ReviewDecision.decision == "approve"`が確定した場合にのみ到達する。
 
 **この保証が破られていないことの確認**: 実装着手後、`grep -r "GoldRepository" src/`のような単純な静的検索で、`repositories/sqlite/`の実装クラス自体を除けば`review/`パッケージ内にしか出現しないことを確認できる。将来的には[`dependency-rule.md`](../api/dependency-rule.md#機械的な検証将来の推奨事項)が推奨する`import-linter`の契約に、「`GoldRepository`への依存は`review/`のみ許可」というルールを追加することで、この確認を自動化する。

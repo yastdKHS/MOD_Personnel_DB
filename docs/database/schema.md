@@ -2,7 +2,7 @@
 
 > **位置づけ**: 本ドキュメントは [`docs/data_model.md`](../data_model.md) の概念設計を、実装可能な物理設計（テーブル定義・主キー・外部キー・インデックス・マイグレーション方針）まで具体化したものです。[ADR-0015](../adr/0015-sqlite-schema-finalization.md) により正式決定として承認されています。
 >
-> **コードはまだ実装していません。** 本ドキュメント内のSQL DDLは「設計仕様」であり、実行可能なマイグレーションファイルは `src/` 実装着手時に本仕様に基づいて作成します（配置予定パスは [Migration方針](#migration方針) を参照）。
+> **実装状況（2026-07-21時点）**: 本ドキュメントが定める12業務テーブル（`pdfs`, `layouts`, `parser_versions`, `personnel_sections`, `candidate_records`, `gold_records`, `review_sessions`, `review_changes`, `knowledge_items`, `learning_dataset`, `exports`, `jobs`）は、`src/mod_personnel_db/repositories/sqlite/_schema.py`のDDLとして実装済みであり、本ドキュメントのDDLと一致する（`knowledge_items.provenance_source`/`.version`列など、実装時に発見した非破壊的な差分の追加は`_schema.py`冒頭のコメントに記載）。**ただし[Migration方針](#migration方針)が定める`schema_migrations`管理テーブル・`PRAGMA user_version`によるバージョン管理は未実装であり、現状は`apply_schema()`による単発DDL適用のみである。** マイグレーション基盤は今後の実装対象として残る（詳細は[バージョン管理](#バージョン管理)節を参照）。
 
 ## 目次
 
@@ -691,6 +691,8 @@ CREATE INDEX idx_jobs_pdf_id ON jobs (pdf_id);
 2. **データ生成バージョン**: どの**コード・知識ベース**でデータが生成されたか。[`parser_versions`](#10-parser_versions) テーブルで管理する（業務データの再現性のため、[ADR-0006](../adr/0006-pipeline-provenance.md)）。
 
 ### スキーマバージョンの管理方法
+
+> **実装状況**: 本節が定める`schema_migrations`テーブル・`PRAGMA user_version`によるバージョン管理は**未実装**である。実装済みの`apply_schema()`（`src/mod_personnel_db/repositories/sqlite/_schema.py`）は、12業務テーブルのDDLを1回の`executescript()`で適用する単発スクリプトであり、マイグレーション履歴の記録・スキーマバージョンの追跡は行わない。複数バージョン間の差分適用が必要になった時点で、本節の設計に基づき実装する。
 
 - SQLite組み込みの `PRAGMA user_version = N;` を用いて、DBファイル自体に現在のスキーマバージョン番号（整数、マイグレーション適用ごとに+1）を保持する。どのツールからでも `PRAGMA user_version;` だけで即座にバージョンを確認できるようにするため。
 - 加えて、適用済みマイグレーションの詳細な履歴を管理用テーブル `schema_migrations` に記録する。
