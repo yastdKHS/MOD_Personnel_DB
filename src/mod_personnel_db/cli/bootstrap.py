@@ -2,15 +2,20 @@
 ADR-0046に対応する。
 
 `repositories/sqlite/`の各具象クラス・`FileKnowledgeService`・
-`RepositoryLearningService`を生成し、`JobRunner`へ個別にコンストラクタ注入
+`RepositoryLearningService`・`RepositoryReviewService`・
+`RepositoryExportService`を生成し、`JobRunner`へ個別にコンストラクタ注入
 （Protocol型）する唯一の場所である。以下の順序でのみ依存を構築する
-（ADR-0046「Composition Rootの責務チェーン」）。
+（ADR-0046「Composition Rootの責務チェーン」、Task12-2でReview/Export生成
+を追加）。
 
 1. SQLite Repository具象生成
 2. `KnowledgeService`生成（Repositoryは渡さない、Task11-2）
 3. `LearningService`生成（`LearningRepository`のみ注入、Task11-4）
-4. `JobRunnerRepositories`生成
-5. `JobRunner`生成
+4. `ReviewService`生成（`LearningRepository`・`GoldRepository`・
+   `LearningService`のみ注入、Task12-0）
+5. `ExportService`生成（`GoldRepository`のみ注入、Task12-1）
+6. `JobRunnerRepositories`生成
+7. `JobRunner`生成
 
 `SqliteCandidateRepository`は（本タスクより前のTaskで確定した既存実装として）
 コンストラクタで`ParserVersionId`を要求するため、8 Repositoryのうち
@@ -40,6 +45,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
+from mod_personnel_db.export.service import RepositoryExportService
 from mod_personnel_db.knowledge import FileKnowledgeService
 from mod_personnel_db.layout.definitions import load_layout_definitions
 from mod_personnel_db.learning import RepositoryLearningService
@@ -62,6 +68,7 @@ from mod_personnel_db.repositories.sqlite import (
     SqliteReviewRepository,
     connect,
 )
+from mod_personnel_db.review.service import RepositoryReviewService
 
 
 @dataclass(frozen=True, slots=True)
@@ -110,6 +117,20 @@ def build_learning_service(repositories: SqliteRepositories) -> RepositoryLearni
     return RepositoryLearningService(repositories.learning)
 
 
+def build_review_service(
+    repositories: SqliteRepositories, learning_service: RepositoryLearningService
+) -> RepositoryReviewService:
+    """生成順序4: ReviewServiceを生成する。LearningRepository・GoldRepository・
+    LearningServiceのみを注入する（Task12-0）。Repository具象は自ら生成しない。
+    """
+    return RepositoryReviewService(repositories.learning, repositories.gold, learning_service)
+
+
+def build_export_service(repositories: SqliteRepositories) -> RepositoryExportService:
+    """生成順序5: ExportServiceを生成する。GoldRepositoryのみを注入する（Task12-1）。"""
+    return RepositoryExportService(repositories.gold)
+
+
 def _resolve_parser_version_id(
     jobs: SqliteJobRepository,
     knowledge_service: FileKnowledgeService,
@@ -131,11 +152,18 @@ def _resolve_parser_version_id(
 
 @dataclass(frozen=True, slots=True)
 class Application:
-    """生成順序1〜5の最終成果物。`JobRunner`と、CLIコマンド層向けの
-    Repository非公開な読み取り専用アクセスを束ねる（Task11-6）。
+    """生成順序1〜7の最終成果物。`JobRunner`・`ReviewService`・`ExportService`と、
+    CLIコマンド層向けのRepository非公開な読み取り専用アクセスを束ねる
+    （Task11-6、Task12-2でreview_service/export_serviceを追加）。
+
+    `review_service`・`export_service`はそれ自身が既にRepository内部構造を
+    公開しない安全な公開APIであるため（Task12-0/Task12-1）、
+    `read_pdf`等とは異なり公開属性としてそのまま保持する。
     """
 
     job_runner: JobRunner
+    review_service: RepositoryReviewService
+    export_service: RepositoryExportService
     _pdfs: SqlitePdfRepository
     _jobs: SqliteJobRepository
     _knowledge_service: FileKnowledgeService
@@ -154,11 +182,13 @@ class Application:
 
 
 def build_application(settings: CompositionSettings) -> Application:
-    """合成ルート本体。生成順序1〜5をこの順序でのみ実行し、`Application`を返す。"""
+    """合成ルート本体。生成順序1〜7をこの順序でのみ実行し、`Application`を返す。"""
     connection = connect(settings.db_path)
     repositories = build_sqlite_repositories(connection)
     knowledge_service = build_knowledge_service(settings)
     learning_service = build_learning_service(repositories)
+    review_service = build_review_service(repositories, learning_service)
+    export_service = build_export_service(repositories)
     parser_version_id = _resolve_parser_version_id(
         repositories.jobs, knowledge_service, settings.parser_code_version
     )
@@ -178,6 +208,8 @@ def build_application(settings: CompositionSettings) -> Application:
     )
     return Application(
         job_runner=job_runner,
+        review_service=review_service,
+        export_service=export_service,
         _pdfs=repositories.pdfs,
         _jobs=repositories.jobs,
         _knowledge_service=knowledge_service,
@@ -194,8 +226,10 @@ __all__ = [
     "CompositionSettings",
     "SqliteRepositories",
     "build_application",
+    "build_export_service",
     "build_job_runner",
     "build_knowledge_service",
     "build_learning_service",
+    "build_review_service",
     "build_sqlite_repositories",
 ]
