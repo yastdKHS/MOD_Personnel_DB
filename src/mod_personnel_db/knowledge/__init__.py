@@ -1,14 +1,15 @@
-"""KnowledgeService契約（Protocol）。docs/api/interfaces.md#knowledgeservice に対応する。
+"""KnowledgeService契約（Protocol）と具象実装。docs/api/interfaces.md#knowledgeservice に対応する。
 
-Phase3 Task10-0.2（契約整備のみ）の対象。Dependency Injection用の抽象型のみを
-提供し、YAML読み込み・KnowledgeRepositoryへの反映を行う具象実装は含まない
-（具象実装は将来のタスクでknowledge/配下に追加する、docs/api/package-design.md
-のknowledge/節）。
+Dependency Injection用の抽象型（`KnowledgeService` Protocol）に加え、
+`knowledge/`配下のYAMLを読み込むファイルベースの具象実装（`FileKnowledgeService`）
+を提供する（docs/api/package-design.md のknowledge/節）。具象実装の生成は
+Composition Root（`cli/`、ADR-0046）にのみ許可される。
 """
 
 from datetime import date
 from typing import Protocol
 
+from mod_personnel_db.knowledge.service import FileKnowledgeService
 from mod_personnel_db.models import KnowledgeItem, KnowledgeSnapshot, ValidationRuleSet
 
 
@@ -28,4 +29,4 @@ class KnowledgeService(Protocol):
         ...
 
 
-__all__ = ["KnowledgeService"]
+__all__ = ["FileKnowledgeService", "KnowledgeService"]
