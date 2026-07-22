@@ -180,7 +180,14 @@ class ReviewService(Protocol):
 
 ## `ExportService`
 
-> **実装状況**: 以下は未実装の設計目標である。実際に実装されている`ExportService`（`src/mod_personnel_db/export/__init__.py`、具象実装`RepositoryExportService`、Phase4 Task12-1）は、`GoldRepository`からの読み出しに責務を限定した別の契約（`export_all()`/`export_since(since)`/`export_person(person_id)`）であり、`generate()`/`get()`/`list_recent()`・JSON/CSV/Parquet変換・`ExportRepository`への記録は行わない。詳細は[`package-design.md`](package-design.md)の`export/`節を参照。
+> **実装状況**: 以下のコード例が示す`generate()`/`get()`/`list_recent()`・`ExportRepository`への記録は依然未実装の設計目標である。実際に実装されている`ExportService`（`src/mod_personnel_db/export/__init__.py`、具象実装`RepositoryExportService`）は、`GoldRepository`からの読み出しに責務を限定した別の契約であり、これらのメソッド・`ExportRepository`への記録は行わない。ただし、JSON/CSV/Parquetへの変換・完全性/監査情報の付与自体は、この狭い契約の範囲内で実装済みである。
+>
+> - `export_all()` / `export_since(since)` / `export_person(person_id)`: `GoldRecord`をそのまま返す（Phase4 Task12-1）
+> - `export_all_records()` / `export_since_records(since)` / `export_person_records(person_id)`: ADR-0016が定める公開JSON契約に対応する`PersonnelRecord`を返す（Phase6 Task14-2）
+> - `export_all_csv(destination)` / `export_all_parquet(destination)`: ADR-0022が定めるCSV/Parquetファイルとして書き出す（Phase6 Task14-3）
+> - `export_all_with_metadata(format, destination)` / `export_since_with_metadata(since, format, destination)` / `export_person_with_metadata(person_id, format, destination)`: ADR-0029が定める完全性・監査情報（`ExportArtifact`: `export_id` / `exported_at` / `format` / `record_count` / `sha256`）を伴うメタデータ付きエクスポート（JSON/CSV/Parquetいずれの形式にも対応、Phase6 Task14-4）
+>
+> `ExportRepository`を用いた広い契約（`generate()`/`get()`/`list_recent()`によるエクスポート実行記録の管理）は未実装のままである。詳細は[`package-design.md`](package-design.md)の`export/`節を参照。
 
 ```python
 from typing import Protocol

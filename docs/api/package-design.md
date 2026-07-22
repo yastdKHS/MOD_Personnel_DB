@@ -4,7 +4,7 @@
 >
 > 本ドキュメントが定める構成は、[`src/README.md`](../../src/README.md)（初期設計時のラフスケッチ）を置き換える、より詳細な正式設計である。`src/README.md`は本ドキュメントへのポインタとして更新する。
 >
-> **実装状況（[`docs/reports/phase5-final-audit.md`](../reports/phase5-final-audit.md)、2026-07-21時点）**: 本ドキュメント作成時点では実装未着手だったが、現在は`config/`・`features/`・`ftp/`・`fetch/`・`services/`を除く全パッケージが実装済みである。各パッケージ節の冒頭に実装状況（実装済み／未実装）を明記する。未実装パッケージの節は、将来実装する際の設計目標として保持する（削除しない）。
+> **実装状況**: [`docs/reports/phase5-final-audit.md`](../reports/phase5-final-audit.md)（2026-07-21時点）作成時は`config/`・`features/`・`ftp/`・`fetch/`・`services/`が未実装だったが、Phase6 Task14-5で`config/`パッケージ（[ADR-0028](../adr/0028-pydantic-settings-for-configuration.md)採用）が実装され、現在は`features/`・`ftp/`・`fetch/`・`services/`を除く全パッケージ（`config/`を含む）が実装済みである。各パッケージ節の冒頭に実装状況（実装済み／未実装）を明記する。未実装パッケージの節は、将来実装する際の設計目標として保持する（削除しない）。
 
 ## 実装状況の凡例
 
@@ -62,13 +62,13 @@ src/mod_personnel_db/
 
 ## 各パッケージの詳細
 
-### `config/`（**未実装**）
+### `config/`（**実装済み**）
 
 - **目的**: 実行環境ごとの設定（DB接続情報、ストレージパス、外部サービス認証情報の参照先）を一箇所に集約する。
 - **責務**: 環境変数・設定ファイルの読み込みと、型付き設定オブジェクト（`Settings`。実装はPydantic Settings、[ADR-0028](../adr/0028-pydantic-settings-for-configuration.md)、詳細は[`docs/configuration.md`](../configuration.md)）への変換。どのRepository実装（SQLite/将来のPostgreSQL）を使うかは、`config/`は文字列・enum等の**値**として提供するに留まり、実際にその実装クラスを`import`して組み立てる**配線**は行わない（配線は`cli/`が合成ルートとして担う、下記および[`dependency-rule.md`](dependency-rule.md#合成ルートcomposition-root)参照）。
-- **依存先**: `utils/`のみ。**例外なし。**
+- **依存先**: `utils/`のみ。**例外なし。**（現在の実装は`utils/`への実際のimportすら持たず、外部ライブラリ`pydantic-settings`のみに依存する最小構成である）
 - **依存禁止**: `utils/`以外の全パッケージ（`models/`を含む）。`config/`は誰からも依存されるが、他のいかなるパッケージにも依存しない、依存関係グラフの絶対的な末端である。`repositories/sqlite/`への依存は持たない——これを`config/`に許すと`repositories/sqlite/ → config/ → repositories/sqlite/`という循環（[`import-graph.md`](import-graph.md)で検出・修正済み）を生むため、合成ルートの役割は`cli/`に一本化する。
-- **現状**: `pydantic`/`pydantic-settings`は`pyproject.toml`に依存追加されておらず、`config/`パッケージ自体が`src/mod_personnel_db/`配下に存在しない。現在は`cli/bootstrap.py`内のローカルな`CompositionSettings`データクラス（`db_path`/`knowledge_root`/`layouts_root`/`parser_code_version`の4フィールド）が、本節が想定する設定値の一部を暫定的に代替している。ADR-0028自体は撤回されておらず、`config/`パッケージ化は今後の実装対象として残る。
+- **現状**: Phase6 Task14-5で実装済み。`config/settings.py`の`AppSettings`（`pydantic_settings.BaseSettings`）が、環境変数（`MOD_PERSONNEL_DB_`プレフィックス）・`.env`ファイル・コンストラクタ引数から設定値を読み込む（読み込み優先順位: コンストラクタ引数 > 環境変数 > `.env`ファイル > フィールドのデフォルト値、pydantic-settingsの既定動作）。フィールド構成（`db_path`/`knowledge_root`/`layouts_root`/`parser_code_version`）は、Task14-5より前に`cli/bootstrap.py`が保持していたローカルな`CompositionSettings`データクラスと等価である。`cli/bootstrap.py`は現在`CompositionSettings = AppSettings`という別名でこれを参照し、既存の呼び出し元（`cli/commands.py`・`cli/app.py`）は後方互換のまま同じ名前でimportし続けられる。`AppSettings`の生成（`AppSettings(...)`の呼び出し）は`cli/bootstrap.py`の`build_settings()`一箇所に限定される（[architecture-contract.md 保証15](../architecture/architecture-contract.md#15-依存生成責務はcomposition-rootcliに一本化される)）。`pydantic`・`pydantic-settings`は`pyproject.toml`に依存追加済み。`docs/configuration.md`が設計する`DatabaseSettings`/`FtpSettings`等のネスト構造・`Environment`・`SecretStr`は本Taskの対象外のままであり、未実装として残る。
 
 ### `utils/`
 
@@ -96,7 +96,7 @@ src/mod_personnel_db/
 
 - **目的**: `repositories/`が定義する8つのProtocolのSQLite実装を提供する。
 - **責務**: `sqlite3`モジュールを用いたCRUD操作の実装。[`docs/database/schema.md`](../database/schema.md)のDDLに対応するSQL文を保持する。
-- **依存先**: `repositories/`（実装するProtocol）、`models/`、`utils/`。**`config/`には依存しない**（`config/`が未実装のため。DB接続先は`connect(db_path: str)`のように呼び出し元＝合成ルートの`cli/`から単純な文字列として渡され、`repositories/sqlite/`自身が設定オブジェクトを参照することはない）。
+- **依存先**: `repositories/`（実装するProtocol）、`models/`、`utils/`。**`config/`には依存しない**（`config/`は実装済みだが、DB接続先は`connect(db_path: str)`のように呼び出し元＝合成ルートの`cli/`から単純な文字列として渡され、`repositories/sqlite/`自身が設定オブジェクトを参照することはない、という設計判断による）。
 - **依存禁止**: `document/`〜`validators/`, `knowledge/`, `learning/`, `features/`, `review/`, `export/`, `ftp/`, `pipeline/`, `services/`。**`repositories/sqlite/`は誰からも直接importされてはならない**（合成ルート以外）。これが[Task 3](repositories.md)の「SQLite依存禁止・PostgreSQL移行可能」を実現する境界である。将来`repositories/postgres/`を追加する場合も同じ境界規則に従う。
 
 > **`PipelineContext`型依存について（中核6段階共通）**: `document/`〜`validators/`の6パッケージはいずれも、`PipelineStage.run(self, context: PipelineContext, input: TIn) -> TOut`（[`pipeline.md`](pipeline.md)）というProtocol実装のため、`from mod_personnel_db.pipeline import PipelineContext`をimportする。これは**型シグネチャ上必要な型参照のみ**であり、`repositories/`・`knowledge/`・`learning/`・`review/`・`export/`へのアクセスや`pipeline/`の実行ロジックへの依存を一切伴わない。`pipeline/__init__.py`が`job_runner.py`・6段階パッケージ自体をimportしないため、実行時の循環importは発生しない（詳細は[`dependency-rule.md#pipelinecontext型依存`](dependency-rule.md#pipelinecontext型依存)）。以下各節の「依存先」には、この型のみの依存を`pipeline/`（`PipelineContext`型のみ）と明記する。
@@ -216,7 +216,7 @@ src/mod_personnel_db/
 
 - **目的**: 人間が操作するコマンドラインエントリポイント（[ADR-0021](../adr/0021-review-ui-strategy.md)のレビューCLI等）であり、かつ**アプリケーション全体の合成ルート（Composition Root）**を担う。他のいかなるパッケージ（`pipeline/`・`repositories/`を含む）も具象実装を生成しない（[ADR-0046](../adr/0046-composition-root-dependency-injection-contract.md)、[architecture-contract.md 保証15](../architecture/architecture-contract.md#15-依存生成責務はcomposition-rootcliに一本化される)）。
 - **責務**: コマンドライン引数の解析、`review/`・`export/`等のAPI呼び出しに加え、起動時に`repositories/sqlite/`（将来は`repositories/postgres/`も）・`KnowledgeService`・`LearningService`・`ReviewService`・`ExportService`の具象実装を、Repository具象生成→`KnowledgeService`生成→`LearningService`生成→`ReviewService`生成→`ExportService`生成→`JobRunner`生成の順に構築する（ADR-0046）。`JobRunner`（`pipeline/job_runner.py`）へは`JobRunnerRepositories`・`KnowledgeService`・`LearningService`・`ParserVersionId`・`layout_definitions`を個別に注入する。`UnitOfWork`（未実装、上記`repositories/`節参照）は`JobRunner`へは注入しない（`JobRunner`が必要とするRepositoryは`pdfs`/`jobs`/`candidates`の3種のみであり、複数Repositoryにまたがる原子性が必要な操作を現時点で行わないため）。パイプライン実行（`run-pending`/`run-job`）・Review（`review list`/`start`/`approve`/`reject`）・Export（`export all`/`person`/`since`）は、それぞれ独立したCLIサブコマンドとして提供し、`cli/`がこれらを1プロセス内で自動的に直列実行することはない。
-- **依存先**: `review/`, `export/`, `pipeline/`, `models/`, **`repositories/sqlite/`（合成ルートとしての唯一の例外、[`dependency-rule.md`](dependency-rule.md#合成ルートcomposition-root)）**, `knowledge/`, `learning/`, `layout/`（`layouts/<era_id>/manifest.yaml`の読み込みに`layout.definitions.load_layout_definitions`を利用するため）。**`services/`・`config/`は未実装のため現時点では依存しない**（`services/`が実装された場合、`cli/`はその配下の`pipeline/`・`review/`・`export/`直接呼び出しを`services/`経由に置き換えることを検討する）。
+- **依存先**: `review/`, `export/`, `pipeline/`, `models/`, **`repositories/sqlite/`（合成ルートとしての唯一の例外、[`dependency-rule.md`](dependency-rule.md#合成ルートcomposition-root)）**, `knowledge/`, `learning/`, `layout/`（`layouts/<era_id>/manifest.yaml`の読み込みに`layout.definitions.load_layout_definitions`を利用するため）, `config/`（Phase6 Task14-5で追加。`cli/bootstrap.py`が`AppSettings`を`build_settings()`経由で生成する唯一の箇所、上記`config/`節参照）。**`services/`は未実装のため現時点では依存しない**（`services/`が実装された場合、`cli/`はその配下の`pipeline/`・`review/`・`export/`直接呼び出しを`services/`経由に置き換えることを検討する）。
 - **依存禁止**: `document/`〜`validators/`（`layout/`を除き直接は呼ばない、`pipeline/`経由）。`repositories/sqlite/`への依存は`cli/`にのみ許される例外であり、他のいかなるパッケージにも拡大しない。
 
 ---
@@ -225,11 +225,11 @@ src/mod_personnel_db/
 
 | パッケージ | 実装状況 | 依存してよい | 依存してはならない（代表例） |
 |---|---|---|---|
-| `config/` | 未実装 | `utils/` | ビジネスロジック全般、`repositories/sqlite/`（合成の配線は`cli/`が担う。`config/`自身が担うと循環参照を生むため） |
+| `config/` | 実装済み | `utils/` | ビジネスロジック全般、`repositories/sqlite/`（合成の配線は`cli/`が担う。`config/`自身が担うと循環参照を生むため） |
 | `utils/` | 実装済み | （なし） | プロジェクト内の全パッケージ |
 | `models/` | 実装済み | `utils/` | ビジネスロジック全般、`repositories/` |
 | `repositories/` | 実装済み | `models/` | `sqlite3`等の具体DBドライバ、`config/` |
-| `repositories/sqlite/` | 実装済み | `repositories/`, `models/`, `utils/`（`config/`は未実装のため依存しない） | 中核パイプライン6段階、サービス層 |
+| `repositories/sqlite/` | 実装済み | `repositories/`, `models/`, `utils/`（`config/`には依存しない。DB接続先は合成ルート`cli/`から単純な文字列として渡される設計のため） | 中核パイプライン6段階、サービス層 |
 | `document/`〜`validators/` | 実装済み | `models/`, `utils/`, `pipeline/`（`PipelineContext`型のみ） | `repositories/`（抽象含む）, `knowledge/`, 他段階間の直接依存 |
 | `knowledge/` | 実装済み | `models/`, `utils/` | 中核パイプライン6段階, `repositories/`（抽象含む）, `repositories/sqlite/` |
 | `learning/` | 実装済み | `models/`, `repositories/`（抽象）, `utils/` | 中核パイプライン6段階, `repositories/sqlite/` |
@@ -240,8 +240,8 @@ src/mod_personnel_db/
 | `fetch/` | 未実装 | `models/`, `repositories/`（抽象）, `ftp/`, `utils/` | 中核パイプライン6段階 |
 | `pipeline/`（パッケージ全体・`JobRunner`分を含む） | 実装済み | `models/`, `repositories/`（抽象）, 中核パイプライン6段階, `knowledge/`, `learning/`, `utils/` | `repositories/sqlite/`, `review/`, `export/`, `ftp/` |
 | `services/` | 未実装 | `pipeline/`, `review/`, `export/`, `models/`, `utils/` | `repositories/sqlite/`, 中核パイプライン6段階（直接） |
-| `cli/` | 実装済み | `review/`, `export/`, `pipeline/`, `models/`, `knowledge/`, `learning/`, `layout/`, `repositories/sqlite/`（合成ルートとしての例外） | 中核パイプライン6段階（直接、`layout/`を除く） |
+| `cli/` | 実装済み | `review/`, `export/`, `pipeline/`, `models/`, `knowledge/`, `learning/`, `layout/`, `config/`, `repositories/sqlite/`（合成ルートとしての例外） | 中核パイプライン6段階（直接、`layout/`を除く） |
 
-上記`pipeline/`行はパッケージ全体（`JobRunner`が必要とする依存を含む）のサマリである。`PipelineRunner`（`pipeline/runner.py`）自身は`repositories/`, `knowledge/`, `learning/`のいずれにも依存しない（[ADR-0044](../adr/0044-pipelinerunner-jobrunner-boundary.md)、[architecture-contract.md 保証13](../architecture/architecture-contract.md#13-pipelinerunnerはrepositoryknowledgelearningreviewexportを知らない)）。この区別はパッケージ単位の本表では表現できないモジュール単位の規律であり、[`dependency-rule.md`](dependency-rule.md)の注記を参照。`document/`〜`validators/`行の`pipeline/`（`PipelineContext`型のみ）は、実行ロジックへの依存ではなく型シグネチャ上の参照であることに注意（上記「`PipelineContext`型依存について」参照）。`cli/`行の`services/`・`config/`は、両パッケージが未実装のため現時点では依存先に含まれない（実装後は`cli/`の直接依存の一部を置き換える想定）。
+上記`pipeline/`行はパッケージ全体（`JobRunner`が必要とする依存を含む）のサマリである。`PipelineRunner`（`pipeline/runner.py`）自身は`repositories/`, `knowledge/`, `learning/`のいずれにも依存しない（[ADR-0044](../adr/0044-pipelinerunner-jobrunner-boundary.md)、[architecture-contract.md 保証13](../architecture/architecture-contract.md#13-pipelinerunnerはrepositoryknowledgelearningreviewexportを知らない)）。この区別はパッケージ単位の本表では表現できないモジュール単位の規律であり、[`dependency-rule.md`](dependency-rule.md)の注記を参照。`document/`〜`validators/`行の`pipeline/`（`PipelineContext`型のみ）は、実行ロジックへの依存ではなく型シグネチャ上の参照であることに注意（上記「`PipelineContext`型依存について」参照）。`cli/`行の`services/`は未実装のため現時点では依存先に含まれない（実装後は`cli/`の直接依存の一部を置き換える想定）。`config/`はPhase6 Task14-5で実装済みとなり、`cli/`の依存先に含まれる。
 
 完全な依存グラフ（Mermaid）は[`dependency-rule.md`](dependency-rule.md)を参照。

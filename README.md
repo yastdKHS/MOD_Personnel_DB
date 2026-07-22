@@ -122,7 +122,7 @@ python -m mod_personnel_db.cli help
 | `src/mod_personnel_db/` | 本体実装（Pythonパッケージ）。下記「主要パッケージ」を参照 |
 | `tests/unit/` | 単体テスト（53ファイル、対象パッケージ全域） |
 | `tests/integration/` | 結合テスト（`cli/`配下、CLI全体のE2Eテスト） |
-| `tests/golden/` | ゴールデンファイルテスト（[ADR-0007](docs/adr/0007-golden-file-testing.md)、未整備） |
+| `tests/golden/` | ゴールデンファイルテスト用フィクスチャ（[ADR-0007](docs/adr/0007-golden-file-testing.md)、合成PDF1件。テストコードは`tests/integration/golden/test_golden.py`） |
 | `scripts/` | 定型化されていない運用・保守スクリプト |
 | `sample_pdfs/` | テスト用の代表的なサンプルPDF（現時点では未投入） |
 | `sample_outputs/` | `sample_pdfs/` に対応する期待出力・ゴールデンファイル（現時点では未投入） |
@@ -201,7 +201,7 @@ mypy --strict src/ tests/
 pytest --cov
 ```
 
-`pyproject.toml`の`[tool.coverage.report]`が定めるCoverage閾値（`fail_under = 80`）を満たす必要がある。現在の実測値は`docs/reports/phase5-final-audit.md`のTest Summaryを参照。テスト種別ごとの目的・実行タイミング・Coverage目標は[`docs/testing/test-policy.md`](docs/testing/test-policy.md)が定める8種別（Unit/Integration/Golden/Regression/Performance/Acceptance/Benchmark/Mutation）を正とする。Golden/Regression/Performance/Acceptance/Benchmark Testは未着手である。
+`pyproject.toml`の`[tool.coverage.report]`が定めるCoverage閾値（`fail_under = 80`）を満たす必要がある。現在の実測値は`docs/reports/phase5-final-audit.md`のTest Summaryを参照。テスト種別ごとの目的・実行タイミング・Coverage目標は[`docs/testing/test-policy.md`](docs/testing/test-policy.md)が定める8種別（Unit/Integration/Golden/Regression/Performance/Acceptance/Benchmark/Mutation）を正とする。Golden Testは`tests/integration/golden/test_golden.py`（Phase6 Task14-1）として実装済み。Regression/Performance/Acceptance/Benchmark Testは未着手である。
 
 ## データの出典と利用方針
 
