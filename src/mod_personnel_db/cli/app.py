@@ -12,7 +12,7 @@ from collections.abc import Sequence
 from datetime import datetime
 from pathlib import Path
 
-from mod_personnel_db.cli.bootstrap import CompositionSettings
+from mod_personnel_db.cli.bootstrap import CompositionSettings, build_settings
 from mod_personnel_db.cli.commands import (
     VersionInfo,
     export_all_command,
@@ -92,7 +92,7 @@ def _require_settings(args: argparse.Namespace) -> CompositionSettings:
     ]
     if missing:
         raise CliCommandError(f"missing required option(s): {', '.join(missing)}")
-    return CompositionSettings(
+    return build_settings(
         db_path=args.db_path,
         knowledge_root=args.knowledge_root,
         layouts_root=args.layouts_root,
