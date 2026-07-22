@@ -2,7 +2,7 @@
 
 本プロジェクトの設計・実装上の重要な変更を記録する。[Keep a Changelog](https://keepachangelog.com/) の形式に準拠する。
 
-本プロジェクトはまだセマンティックバージョニングによるリリースタグを持たない（`pyproject.toml`の`version`は`0.0.0`のまま）。そのため、リリースバージョンの代わりに開発フェーズ（Phase1〜Phase5）ごとに変更履歴をグルーピングする。最初のリリースタグを打つ時点で、本ファイルの形式をバージョン番号ベースに移行する。
+本プロジェクトはまだセマンティックバージョニングによるリリースタグを持たない（`pyproject.toml`の`version`は`0.0.0`のまま）。そのため、リリースバージョンの代わりに開発フェーズ（Phase1〜Phase6）ごとに変更履歴をグルーピングする。最初のリリースタグ（`v1.0.0`、[ADR-0023](docs/adr/0023-parser-versioning-policy.md)のSemVer規則）を打つ時点で、本ファイルの形式をバージョン番号ベースに移行する。
 
 新しいエントリを追加する際は、対応するADR・更新したドキュメントへのリンクを必ず含める（[CLAUDE.md](CLAUDE.md)の「Single Source of Truth」原則、[ADR-0014](docs/adr/0014-development-discipline.md)の開発規律）。
 
@@ -11,7 +11,26 @@
 ### Added
 
 - Phase5 Task13-2: リリース準備（README.md全面更新、本CHANGELOG.mdの整理、`LICENSE`新設、`.github/`配下の初期フェーズ記述更新）。
-- Phase6 Task14-6: GitHub Actionsによる Workflow Orchestration（[ADR-0019](docs/adr/0019-workflow-orchestration.md)）を実装。`.github/workflows/release.yml`（`workflow_dispatch`・`v*`タグpushで起動する明示的リリース操作時の品質ゲート、[ADR-0010](docs/adr/0010-ci-cd-and-publish-strategy.md)）・`.github/workflows/nightly.yml`（`schedule`によるcron定期実行・`workflow_dispatch`）を新規追加。`.github/workflows/README.md`を3ワークフロー体制に合わせて更新。
+
+## Phase6 — v1.0.0 Release Candidate
+
+Phase5完了後、公開JSON契約・CSV/Parquetエクスポート・Export完全性保証・Pydantic Settings採用・GitHub Actions Workflow Orchestrationを実装し、v1.0.0 Release Candidateとしての最終監査・ドキュメント整備を行った。
+
+### Added
+
+- Task14-0: `layouts/`・`knowledge/`に最小限の実データ（様式1件、8カテゴリ各1件）を整備。
+- Task14-1: Golden Test自動実行スイート（[`tests/integration/golden/test_golden.py`](tests/integration/golden/test_golden.py)、[ADR-0007](docs/adr/0007-golden-file-testing.md)）を追加。`tests/golden/`に合成PDF・期待結果JSONを1件配置。
+- Task14-2: [ADR-0016](docs/adr/0016-public-json-format.md)が定める公開JSON契約に対応する`PersonnelRecord`/`Provenance`/`SourcePdf`（`models/export.py`）・`export/mapper.py`・`export/serialization.py`を実装。`ExportService`へ`export_all_records()`等を追加（既存API不変）。
+- Task14-3: [ADR-0022](docs/adr/0022-export-policy.md)が定めるCSV/Parquetエクスポートを実装（`export/csv_writer.py`, `export/parquet_writer.py`, `export/tabular.py`）。依存に`pyarrow`を追加。
+- Task14-4: [ADR-0029](docs/adr/0029-export-integrity-and-audit-log-policy.md)が定める完全性・監査情報（`ExportArtifact`: `export_id`/`exported_at`/`format`/`record_count`/`sha256`）を実装（`export/integrity.py`, `export/json_writer.py`）。`ExportService`へ`export_all_with_metadata()`等を追加。
+- Task14-5: [ADR-0028](docs/adr/0028-pydantic-settings-for-configuration.md)が定めるPydantic Settings採用により`config/`パッケージを新設（`config/settings.py`の`AppSettings`）。`cli/bootstrap.py`の`CompositionSettings`を`AppSettings`の別名とし、環境変数・`.env`・コンストラクタ引数からの設定読み込みに対応（優先順位: コンストラクタ引数 > 環境変数 > `.env` > デフォルト値）。依存に`pydantic-settings`を追加。
+- Task14-6: GitHub Actionsによる Workflow Orchestration（[ADR-0019](docs/adr/0019-workflow-orchestration.md)）を実装。`.github/workflows/release.yml`（`workflow_dispatch`・`v*`タグpushで起動する明示的リリース操作時の品質ゲート、[ADR-0010](docs/adr/0010-ci-cd-and-publish-strategy.md)）・`.github/workflows/nightly.yml`（`schedule`によるcron定期実行・`workflow_dispatch`）を新規追加。`.github/workflows/README.md`を3ワークフロー体制に合わせて更新。
+
+### Changed
+
+- Task15-0: v1.0.0 Release Candidateとしての最終監査を実施（読み取り専用、コード・テスト・ドキュメントの変更を伴わない）。
+- Task15-1: Task15-0監査で検出したDocument Drift（`config/`実装状況・`ExportService`の実装状況注記・Golden Test配置説明）を是正（`docs/api/package-design.md`, `docs/api/dependency-rule.md`, `docs/api/interfaces.md`, `docs/testing/test-policy.md`, README.md）。
+- Task15-2: v1.0.0 Release Candidateの最終ドキュメント整備。README/CHANGELOGのバージョン整合、Remaining Known LimitationsをREADMEへ反映、`docs/README.md`索引の到達性確保、`docs/operations/release.md`のRelease Flowを`release.yml`の実装範囲（品質ゲートのみ）に一致させた。
 
 ## Phase5 — 最終監査・ドキュメント同期・リリース準備
 
