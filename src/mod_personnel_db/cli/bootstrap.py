@@ -38,6 +38,14 @@ ParserVersion/KnowledgeSnapshot取得）を、Repositoryオブジェクトその
 を渡さずに提供するための束である。コマンド層は`Application`のメソッド
 （ドメイン値のみを返す）を通じてのみ間接的にアクセスし、`SqlitePdfRepository`
 等を直接import・保持しない。
+
+`CompositionSettings`（合成ルートが依存生成に必要とする設定値）は、
+Phase6 Task14-5以降`config.AppSettings`（Pydantic Settings、ADR-0028）の
+別名である。フィールド構成（`db_path`/`knowledge_root`/`layouts_root`/
+`parser_code_version`）はTask14-5より前のローカルdataclass実装と等価
+だが、環境変数・`.env`ファイルからの読み込みにも対応する。`AppSettings`の
+生成は本モジュールの`build_settings()`経由のみに限定し、`cli/app.py`等の
+呼び出し元は`build_settings()`を呼ぶのみで自らSettingsを生成しない。
 """
 
 import sqlite3
@@ -45,6 +53,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
+from mod_personnel_db.config import AppSettings
 from mod_personnel_db.export.service import RepositoryExportService
 from mod_personnel_db.knowledge import FileKnowledgeService
 from mod_personnel_db.layout.definitions import load_layout_definitions
@@ -70,15 +79,32 @@ from mod_personnel_db.repositories.sqlite import (
 )
 from mod_personnel_db.review.service import RepositoryReviewService
 
+#: 合成ルートが依存生成に必要とする設定値の型。Phase6 Task14-5以降
+#: `config.AppSettings`（Pydantic Settings、ADR-0028）の別名であり、
+#: `cli/commands.py`・`cli/app.py`・既存テストは変更なしに継続して
+#: この名前をimportできる。
+CompositionSettings = AppSettings
 
-@dataclass(frozen=True, slots=True)
-class CompositionSettings:
-    """合成ルートが依存生成に必要とする最小限の設定値。"""
 
-    db_path: str
-    knowledge_root: Path
-    layouts_root: Path
-    parser_code_version: str
+def build_settings(
+    *,
+    db_path: str,
+    knowledge_root: Path,
+    layouts_root: Path,
+    parser_code_version: str,
+) -> AppSettings:
+    """CLI引数から`AppSettings`を生成する唯一の入り口（合成ルート、ADR-0028）。
+
+    `AppSettings`の生成は本関数経由のみに限定する。`cli/app.py`はこの
+    関数を呼び出すのみで、`AppSettings`/`CompositionSettings`を自ら
+    構築しない。
+    """
+    return AppSettings(
+        db_path=db_path,
+        knowledge_root=knowledge_root,
+        layouts_root=layouts_root,
+        parser_code_version=parser_code_version,
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -231,5 +257,6 @@ __all__ = [
     "build_knowledge_service",
     "build_learning_service",
     "build_review_service",
+    "build_settings",
     "build_sqlite_repositories",
 ]
