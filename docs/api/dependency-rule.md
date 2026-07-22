@@ -90,16 +90,16 @@ flowchart TB
     subgraph SERVICE["サービス層"]
         knowledge["knowledge/"]
         learning["learning/"]
-        features["features/ (未実装・設計確定)"]
+        features["features/ (JobRunner未統合)"]
         review["review/ (限定スコープ)"]
         export_pkg["export/ (限定スコープ)"]
-        ftp["ftp/ (未実装・設計確定)"]
-        fetch["fetch/ (未実装・設計確定)"]
+        ftp["ftp/"]
+        fetch["fetch/ (HTTP取得機構に限定)"]
     end
 
     subgraph ORCH["オーケストレーション"]
         pipeline["pipeline/"]
-        services["services/ (未実装・設計確定)"]
+        services["services/ (cli/未配線)"]
         cli["cli/"]
     end
 
@@ -128,14 +128,13 @@ flowchart TB
     learning --> repositories
     features --> models
     features --> learning
+    features --> utils
     review --> models
     review --> repositories
     review --> learning
     export_pkg --> models
     export_pkg --> repositories
-    fetch --> models
-    fetch --> repositories
-    fetch --> ftp
+    fetch --> utils
     ftp --> utils
 
     pipeline --> models
@@ -148,13 +147,13 @@ flowchart TB
     pipeline --> validators
     pipeline --> knowledge
     pipeline --> learning
-    pipeline -.->|JobRunnerがFeatureVectorを計算しNormalizer/Validatorへ注入| features
 
     services --> pipeline
     services --> review
     services --> export_pkg
     services --> fetch
     services --> ftp
+    services --> repositories
     services --> models
 
     cli --> review
@@ -166,7 +165,7 @@ flowchart TB
     cli --> config
 ```
 
-**読み方**: 矢印`A --> B`は「AはBに依存してよい（Aのコードから`import`してよい）」。逆方向（`B --> A`）は許可しない限り禁止。図に存在しない実線エッジ（例: `extractors --> repositories`）はすべて暗黙的に禁止である。破線エッジ（`-.->`）は「型シグネチャ上の型のみの依存」（[`PipelineContext`型依存](#pipelinecontext型依存)参照）、または「値オブジェクトの注入のみで実行ロジックへの依存ではない」ことを表す。`pipeline -.-> features`の破線エッジは後者であり、`Normalizer`/`Validator`が`features/`を直接importするのではなく、`JobRunner`（`pipeline/job_runner.py`）が`features/`を呼び出して計算した`FeatureVector`を`Normalizer`/`Validator`のコンストラクタへ注入する設計（[`package-design.md`](package-design.md)の`features/`節、Phase7 Task16-0で確定）を表す。`config["config/"]`はPhase6 Task14-5で実装済みとなった（[ADR-0028](../adr/0028-pydantic-settings-for-configuration.md)）。`services["services/ (未実装・設計確定)"]`・`features/`・`ftp/`・`fetch/`は依然未実装のため、これらを起点/終点とするエッジは現時点で実現されていない設計目標である（Phase7 Task16-0で依存方向を確定済み。実装順序は[`docs/phase7-implementation-roadmap.md`](../phase7-implementation-roadmap.md)を参照）。`repositories_sqlite → config`エッジは、`config/`が実装済みの現在も存在しない。`repositories/sqlite/`のDB接続先（`db_path`）は合成ルート（`cli/`）から単純な文字列として渡される設計であり、`repositories/sqlite/`自身が`config/`の型付き設定オブジェクトを参照することはないため（構造上の設計判断であり、`config/`の実装状況とは無関係）。`cli/`の実際の依存は`review/`・`export/`・`pipeline/`・`knowledge/`・`learning/`・`layout/`・`config/`・`repositories/sqlite/`（合成ルートとしての例外）であり、`services/`は未実装のため、それへの依存エッジのみ現時点で描かない。
+**読み方**: 矢印`A --> B`は「AはBに依存してよい（Aのコードから`import`してよい）」。逆方向（`B --> A`）は許可しない限り禁止。図に存在しない実線エッジ（例: `extractors --> repositories`）はすべて暗黙的に禁止である。破線エッジ（`-.->`）は「型シグネチャ上の型のみの依存」（[`PipelineContext`型依存](#pipelinecontext型依存)参照）を表す。`config["config/"]`はPhase6 Task14-5で実装済みとなった（[ADR-0028](../adr/0028-pydantic-settings-for-configuration.md)）。`features/`・`ftp/`・`fetch/`・`services/`はPhase7 Task16-1〜16-4で実装済みとなり、上図のエッジは実装時点のimportを反映している（`fetch/`は`utils/`のみに依存し、Task16-0計画時点の`repositories/`・`ftp/`への依存は実装されなかった。`services/`は計画通り`repositories/`（抽象、`PDFRepository`のみ）へ依存する一方、計画にあった`utils/`への依存は実装上不要であった。詳細は[`package-design.md`](package-design.md)の各節参照）。`pipeline --> features`（`JobRunner`が`FeatureVector`を計算しNormalizer/Validatorへ注入する統合）は設計方針のみ確定しており未実装のため、上図にエッジとして描かない（`features/`は現時点でどのコンポーネントからも呼び出されない独立パッケージ、[`package-design.md`](package-design.md)の`features/`節参照）。`cli --> services`も同様に、`cli/bootstrap.py`が`services/`を一切参照していないため描かない。`repositories_sqlite → config`エッジは、`config/`が実装済みの現在も存在しない。`repositories/sqlite/`のDB接続先（`db_path`）は合成ルート（`cli/`）から単純な文字列として渡される設計であり、`repositories/sqlite/`自身が`config/`の型付き設定オブジェクトを参照することはないため（構造上の設計判断であり、`config/`の実装状況とは無関係）。`cli/`の実際の依存は`review/`・`export/`・`pipeline/`・`knowledge/`・`learning/`・`layout/`・`config/`・`repositories/sqlite/`（合成ルートとしての例外）であり、`services/`・`ftp/`・`fetch/`・`features/`は実装済みだが`cli/`から一切参照されていないため、それらへの依存エッジは描かない。
 
 > **注記（`pipeline`ノードの粒度について、[ADR-0044](../adr/0044-pipelinerunner-jobrunner-boundary.md)）**: 上図の`pipeline`ノードはパッケージ単位であり、`pipeline --> repositories`・`pipeline --> knowledge`・`pipeline --> learning`の3エッジは、`pipeline/`パッケージ内の`JobRunner`（`pipeline/job_runner.py`、実装済み）が必要とする依存を表す。パッケージ内の`PipelineRunner`（`pipeline/runner.py`、実装済み）自身は、これら3エッジのいずれにも該当するimportを持たない（[architecture-contract.md 保証13](../architecture/architecture-contract.md#13-pipelinerunnerはrepositoryknowledgelearningreviewexportを知らない)）。この区別はモジュール単位の規律であり、他パッケージと粒度を揃えるため、本図ではノードを分割しない（[ADR-0044](../adr/0044-pipelinerunner-jobrunner-boundary.md)の「検討した代替案」）。
 
@@ -191,14 +190,14 @@ flowchart TB
 | 13 | `knowledge/`（`KnowledgeService`）・`learning/`（`LearningService`） → `pipeline/`、`repositories/sqlite/` | `pipeline/`（`JobRunner`）が`knowledge/`・`learning/`に依存する片方向のみ許可 | データ・Learning記録は常に「注入される」側であり、パイプラインを呼び出さない。`KnowledgeService`/`LearningService`のProtocol定義自体は`models/`の型のみを参照し、`pipeline/`・`repositories/sqlite/`のいずれにも依存しない |
 | 14 | `config/` / `services/` / `pipeline/` / `repositories/`（抽象）が`repositories/sqlite/`の各具象クラス・`KnowledgeService`具象実装・`LearningService`具象実装を生成する | `cli/`（合成ルート）のみがこれらを生成し、生成済みのインスタンスを個別注入で渡す | 依存生成責務はComposition Root（`cli/`）に一本化される（ADR-0046、[architecture-contract.md 保証15](../architecture/architecture-contract.md#15-依存生成責務はcomposition-rootcliに一本化される)） |
 | 15 | `knowledge/` → `repositories/`（抽象含む） | `knowledge/`の具象実装（`FileKnowledgeService`）は`models/`・`utils/`のみに依存し、`knowledge/`配下のYAMLを直接読み込む | `KnowledgeService`はDBインデックス（`KnowledgeRepository`）を経由せず、YAML読込・`KnowledgeSnapshot`/`ValidationRuleSet`生成のみを責務とする設計を採用したため（[interfaces.md#knowledgeservice](interfaces.md#knowledgeservice)の具象実装）。`learning/`（`LearningService`）は本行の対象外であり、`repositories/`（抽象、`LearningRepository`）への依存を引き続き許可する |
-| 16 | `normalizers/` → `features/`、`validators/` → `features/`（未実装、Phase7 Task16-0で設計確定） | `pipeline/`（`JobRunner`）が`features/`を呼び出して`FeatureVector`を計算し、`Normalizer`/`Validator`のコンストラクタに注入する（行6・行11と対称のパターン） | `features/`は「6段階から直接参照されないユーティリティ」のままとし、`FeatureVector`は値オブジェクトとしてのみStage実装へ届く（[`package-design.md`](package-design.md)の`features/`節） |
-| 17 | `fetch/`（未実装、Phase7 Task16-0で設計確定） → `document/`〜`validators/`（PDF本文の解析） | `fetch/`はPDFバイト列の取得・汎用ファイルハッシュ（`content_hash`）の計算のみを行い、本文解析は行わない。パイプライン実行時に`layout/`（Layout Detector）が改めてPDF本文へアクセスする | 「Layout DetectorだけがPDF本文にアクセスできる」（[architecture-contract.md 保証11](../architecture/architecture-contract.md#11-layout-detectorだけがpdf本文にアクセスできる)）を`fetch/`にも適用するため |
+| 16 | `normalizers/` → `features/`、`validators/` → `features/`（`features/`は実装済み、Phase7 Task16-2） | `pipeline/`（`JobRunner`）が`features/`を呼び出して`FeatureVector`を計算し、`Normalizer`/`Validator`のコンストラクタに注入する設計（行6・行11と対称のパターン、Phase7 Task16-0で設計方針のみ確定）だが、この統合自体は未実装であり、`features/`は現時点でどのコンポーネントからも呼び出されない | `features/`は「6段階から直接参照されないユーティリティ」のままとし、`FeatureVector`は値オブジェクトとしてのみStage実装へ届く設計とする（[`package-design.md`](package-design.md)の`features/`節） |
+| 17 | `fetch/` → `document/`〜`validators/`（PDF本文の解析） | `fetch/`はPDFバイト列の取得のみを行い、本文解析は行わない（実装確認済み、`pypdf`等のPDF専用ライブラリを一切importしない）。パイプライン実行時に`layout/`（Layout Detector）が改めてPDF本文へアクセスする | 「Layout DetectorだけがPDF本文にアクセスできる」（[architecture-contract.md 保証11](../architecture/architecture-contract.md#11-layout-detectorだけがpdf本文にアクセスできる)）を`fetch/`にも適用するため |
 
 ---
 
 ## 合成ルート（Composition Root）
 
-「誰も`repositories/sqlite/`を直接importしない」という原則には、唯一の例外として**合成ルート**が必要である。実行時にどの`Repository`実装（SQLite/将来のPostgreSQL）を使うかを決定し、`repositories/sqlite/`・`KnowledgeService`・`LearningService`・`ReviewService`・`ExportService`の具象実装を構築して`JobRunner`に渡す箇所は、**`cli/bootstrap.py`**が担う（[ADR-0046](../adr/0046-composition-root-dependency-injection-contract.md)）。`config/`・`services/`・`pipeline/`・`repositories/`のいずれも、これらの具象実装を自ら生成しない（`config/`は実装済みだが値の提供に責務を限定し合成を行わない設計、`services/`は未実装、[`package-design.md`](package-design.md)参照）。
+「誰も`repositories/sqlite/`を直接importしない」という原則には、唯一の例外として**合成ルート**が必要である。実行時にどの`Repository`実装（SQLite/将来のPostgreSQL）を使うかを決定し、`repositories/sqlite/`・`KnowledgeService`・`LearningService`・`ReviewService`・`ExportService`の具象実装を構築して`JobRunner`に渡す箇所は、**`cli/bootstrap.py`**が担う（[ADR-0046](../adr/0046-composition-root-dependency-injection-contract.md)）。`config/`・`services/`・`pipeline/`・`repositories/`のいずれも、これらの具象実装を自ら生成しない（`config/`は値の提供に責務を限定し合成を行わない設計、`services/`はPhase7 Task16-4で実装済みだが同様に構築済みインスタンスの注入のみを行い自ら具象実装を生成しない設計、[`package-design.md`](package-design.md)参照）。`services/`は`cli/bootstrap.py`から一切参照されておらず、現時点で合成ルートの一部を構成していない。
 
 > **設計変更の経緯**: 当初`config/`を合成ルートとする案を検討したが、[`import-graph.md`](import-graph.md)の循環参照検証により、`repositories/sqlite/ → config/`（接続情報取得のため）と`config/ → repositories/sqlite/`（合成のため）が同時に成立し**循環参照になる**ことが判明した。`config/`は「設定値を提供するだけの末端パッケージ」のままとし、合成（具象実装のimportと組み立て）は依存グラフの最上位に位置する`cli/`に一本化することで循環を解消した。詳細な検証手順は[`import-graph.md`](import-graph.md#循環参照がないことの検証)を参照。**現状（Phase6 Task14-5で`config/`実装済み）**: `config/settings.py`の`AppSettings`（`pydantic_settings.BaseSettings`、`db_path`/`knowledge_root`/`layouts_root`/`parser_code_version`）が、本節が想定する設定値提供を実現する。`cli/bootstrap.py`の`CompositionSettings`は`AppSettings`の別名（`CompositionSettings = AppSettings`）であり、`AppSettings`の生成（`AppSettings(...)`の呼び出し）は`cli/bootstrap.py`の`build_settings()`一箇所に限定される。上記の循環参照回避策（合成は`cli/`に一本化）自体は変更していない。
 

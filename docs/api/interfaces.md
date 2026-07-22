@@ -12,7 +12,7 @@
 
 永続化: `Repository`（総称）
 
-サービス層: `ReviewService`, `ExportService`, `FTPService`, `KnowledgeService`, `LearningService`, `FeatureStore`, `Scheduler`, `JobRunner`
+サービス層: `ReviewService`, `ExportService`, `FTPService`, `FetchClient`, `KnowledgeService`, `LearningService`, `FeatureStore`, `Scheduler`, `JobRunner`, `JobOrchestrator`
 
 ---
 
@@ -207,6 +207,8 @@ class ExportService(Protocol):
 
 ## `FTPService`
 
+> Phase7 Task16-1で、本Protocolに接続ライフサイクル（`connect()`/`disconnect()`）を加えた`FTPClient`が[`src/mod_personnel_db/ftp/__init__.py`](../../src/mod_personnel_db/ftp/__init__.py)に実装されている。`FTPService`（本節、`upload`/`download`/`list_remote`のみ）と`FTPClient`（`connect`/`upload`/`download`/`list_remote`/`disconnect`）は別の型であり、両者の統合・命名整理は将来のADRに委ねる（`review/`・`export/`の狭い契約と広い契約の関係と同様の扱い、[`package-design.md`](package-design.md)の`ftp/`節参照）。具象実装`StandardFTPClient`（`ftplib`ベース）・テスト用モック実装`InMemoryFTPClient`も同パッケージが提供する。
+
 ```python
 from typing import Protocol
 
@@ -217,6 +219,25 @@ class FTPService(Protocol):
     def upload(self, local_path: str, remote_path: str) -> None: ...
     def download(self, remote_path: str, local_path: str) -> None: ...
     def list_remote(self, remote_dir: str) -> tuple[str, ...]: ...
+```
+
+---
+
+## `FetchClient`
+
+> 本Protocolは[`src/mod_personnel_db/fetch/__init__.py`](../../src/mod_personnel_db/fetch/__init__.py)にPhase7 Task16-3で実装している。`docs/api/package-design.md`のfetch/節（Task16-0）が設計した広い契約（`PDFRepository`登録・`content_hash`重複排除・`ftp/`経由の取得を含む）のうち、Task16-3が実装したのは**HTTP経由の取得機構（転送層）のみ**である。`PDFRepository`への登録・重複排除は`services/`の`JobOrchestrator.fetch_and_stage()`が担う（下記参照）。具象実装`HTTPFetchClient`（標準ライブラリの`urllib`ベース）・テスト用モック実装`MockFetchClient`も同パッケージが提供する。詳細は[`package-design.md`](package-design.md)の`fetch/`節を参照。
+
+```python
+from typing import Protocol
+from mod_personnel_db.fetch import FetchRequest, FetchResult
+
+
+class FetchClient(Protocol):
+    """PDF等のファイルをURLから取得するプロトコル層（バイト列のみを扱う）。"""
+
+    def fetch(self, request: FetchRequest) -> FetchResult:
+        """`request`が指すリソースを取得する（ダウンロードAPI）。"""
+        ...
 ```
 
 ---
@@ -274,6 +295,10 @@ class LearningService(Protocol):
 
 ## `FeatureStore`
 
+> 本Protocolは[`src/mod_personnel_db/features/__init__.py`](../../src/mod_personnel_db/features/__init__.py)にPhase7 Task16-2で実装している。シグネチャは本節と完全に一致する（`compute(subject: RawRecord | NormalizedRecord) -> FeatureVector`）。具象実装`DefaultFeatureStore`（`features.store`）・テスト用モック実装`MockFeatureStore`（`features.mock`）も同パッケージが提供する。
+>
+> **統合状況**: `pipeline/job_runner.py`は本パッケージを呼び出していない（実装上も参照なし）。`JobRunner`が`FeatureStore`を呼び出し、計算結果を`Normalizer`/`Validator`のコンストラクタへ注入する設計はTask16-0時点の計画のまま残っており、現時点では未接続である。詳細は[`package-design.md`](package-design.md)の`features/`節を参照。
+
 ```python
 from typing import Protocol
 from mod_personnel_db.models import FeatureVector, RawRecord, NormalizedRecord
@@ -290,6 +315,8 @@ class FeatureStore(Protocol):
 ---
 
 ## `Scheduler`
+
+> 本Protocolは未実装である（`src/`に対応する実装は存在しない）。Phase7 Task16-4で実装した`JobOrchestrator`（後述）は、`fetch/`・`ftp/`・`pipeline/`・`review/`・`export/`を横断的に調整する別契約であり、本節が定める「パイプライン実行のトリガー管理」（cron等の定期実行スケジュール管理）とは責務が異なる。両者の統合は行っていない。
 
 ```python
 from typing import Protocol
@@ -327,6 +354,65 @@ class JobRunner(Protocol):
         """未処理のPDF（PDFRepository経由で取得）をすべて処理する。"""
         ...
     def get_job(self, job_id: JobId) -> Job | None: ...
+```
+
+---
+
+## `JobOrchestrator`
+
+> 本Protocolは[`src/mod_personnel_db/services/__init__.py`](../../src/mod_personnel_db/services/__init__.py)にPhase7 Task16-4で実装している。`fetch/`・`ftp/`・`pipeline/`（`JobRunner`）・`review/`・`export/`を横断的に調整するアプリケーションサービス層であり、`Scheduler`（前掲）とは別契約である。具象実装`DefaultJobOrchestrator`は、依存をコンストラクタインジェクション（`OrchestratorDependencies`、`services.orchestrator`）のみで受け取り、`fetch/`・`ftp/`・`pipeline/`・`review/`・`export/`の具象実装を自ら生成しない（[architecture-contract.md 保証15](../architecture/architecture-contract.md#15-依存生成責務はcomposition-rootcliに一本化される)）。`cli/bootstrap.py`は本パッケージを一切参照しておらず、Composition Rootへの配線は未実施である。詳細は[`package-design.md`](package-design.md)の`services/`節を参照。
+
+```python
+from datetime import date
+from pathlib import Path
+from typing import Protocol
+from mod_personnel_db.fetch import FetchRequest
+from mod_personnel_db.models import ExportArtifact, ExportFormat, LearningRecord, PdfId, PdfRecord
+from mod_personnel_db.pipeline import PipelineResult
+from mod_personnel_db.services.messages import FetchWorkItem, WorkflowResult
+
+
+class JobOrchestrator(Protocol):
+    """`fetch/`・`ftp/`・`pipeline/`・`review/`・`export/`を横断的に調整する。"""
+
+    def fetch_and_stage(
+        self, request: FetchRequest, *, destination_path: str, published_date: date
+    ) -> PdfId | None:
+        """PDFを取得し保存する。`content_hash`が既存レコードと重複する場合は`None`を返す。"""
+        ...
+
+    def run_job(self, pdf: PdfRecord) -> PipelineResult:
+        """指定した1件のPDFを中核パイプラインで処理する。"""
+        ...
+
+    def run_pending_pipeline(self) -> tuple[PipelineResult, ...]:
+        """未処理PDF（`status='fetched'`）を中核パイプラインで一括処理する。"""
+        ...
+
+    def list_pending_reviews(self) -> tuple[LearningRecord, ...]:
+        """レビュー待ちのLearning Datasetエントリを返す。"""
+        ...
+
+    def export_and_publish(
+        self,
+        export_format: ExportFormat,
+        destination: str | Path,
+        *,
+        remote_path: str | None = None,
+    ) -> ExportArtifact:
+        """エクスポートを生成する。`remote_path`が指定されていればFTPでアップロードする。"""
+        ...
+
+    def run_workflow(
+        self,
+        fetch_items: list[FetchWorkItem],
+        export_format: ExportFormat,
+        export_destination: str | Path,
+        *,
+        remote_path: str | None = None,
+    ) -> WorkflowResult:
+        """Fetch→Pipeline→Review→Exportの一連のワークフローを実行する。"""
+        ...
 ```
 
 ---

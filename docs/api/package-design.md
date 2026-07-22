@@ -4,7 +4,7 @@
 >
 > 本ドキュメントが定める構成は、[`src/README.md`](../../src/README.md)（初期設計時のラフスケッチ）を置き換える、より詳細な正式設計である。`src/README.md`は本ドキュメントへのポインタとして更新する。
 >
-> **実装状況**: [`docs/reports/phase5-final-audit.md`](../reports/phase5-final-audit.md)（2026-07-21時点）作成時は`config/`・`features/`・`ftp/`・`fetch/`・`services/`が未実装だったが、Phase6 Task14-5で`config/`パッケージ（[ADR-0028](../adr/0028-pydantic-settings-for-configuration.md)採用）が実装され、現在は`features/`・`ftp/`・`fetch/`・`services/`を除く全パッケージ（`config/`を含む）が実装済みである。各パッケージ節の冒頭に実装状況（実装済み／未実装）を明記する。未実装パッケージの節は、将来実装する際の設計目標として保持する（削除しない）。
+> **実装状況**: [`docs/reports/phase5-final-audit.md`](../reports/phase5-final-audit.md)（2026-07-21時点）作成時は`config/`・`features/`・`ftp/`・`fetch/`・`services/`が未実装だったが、Phase6 Task14-5で`config/`パッケージ（[ADR-0028](../adr/0028-pydantic-settings-for-configuration.md)採用）が実装され、さらにPhase7 Task16-1〜16-4で`ftp/`・`features/`・`fetch/`・`services/`が実装されたことで、現在は全19パッケージが実装済みである。ただし`features/`（`JobRunner`からの呼び出しなし）・`fetch/`（`PDFRepository`登録は`services/`側が担う設計）・`services/`（`cli/`のComposition Rootに未配線）は、実装済みであっても他コンポーネントからの統合が一部未了である（各節の「統合状況」参照）。各パッケージ節の冒頭に実装状況（実装済み／未実装）を明記する。
 
 ## 実装状況の凡例
 
@@ -158,15 +158,14 @@ src/mod_personnel_db/
 - **依存先**: `models/`, `repositories/`（抽象、`LearningRepository`のみ）, `utils/`。
 - **依存禁止**: `document/`〜`validators/`, `repositories/sqlite/`。
 
-### `features/`（FeatureStore、**未実装、Phase7 Task16-0で設計確定**）
+### `features/`（FeatureStore、**実装済み、Phase7 Task16-2**）
 
 - **目的**: `Confidence`算出等に用いる派生特徴量（`FeatureVector`）を計算・提供する。
-- **責務**: `RawRecord`/`NormalizedRecord`等から特徴量（OCR品質シグナル、layout判定信頼度、過去の誤り発生率等）を計算する。**V2.0時点では永続ストレージを持たず、都度計算（on-demand）とする**（専用の`FeatureRepository`は[Task 3](repositories.md)の8リポジトリに含まれておらず、過剰設計を避けるため。将来キャッシュ性能が必要になった場合、非破壊的な拡張として`FeatureRepository`＋DBテーブルを追加検討する）。
-- **統合方式（Phase7 Task16-0で確定）**: `normalizers/`・`validators/`は`features/`を直接importしない（下記「依存禁止」参照）。`KnowledgeSnapshot`/`ValidationRuleSet`が`pipeline/job_runner.py`（`JobRunner`）からコンストラクタ注入される既存パターン（ADR-0040, ADR-0041）と同様に、`JobRunner`が`features/`を呼び出して`FeatureVector`を計算し、`Normalizer`/`Validator`のコンストラクタへ値オブジェクトとして注入する。これにより`features/`は「6段階から直接参照されないユーティリティ」のまま、実際の特徴量はStage実装へ届く。この注入は`JobRunner`の責務であり、`PipelineRunner`（`pipeline/runner.py`）は関与しない（[architecture-contract.md 保証13](../architecture/architecture-contract.md#13-pipelinerunnerはrepositoryknowledgelearningreviewexportを知らない)の「Repository・Knowledge・Learning・Review・Exportを知らない」という列挙に`features/`は含まれないが、同じ設計原則（`PipelineRunner`はドメイン固有の外部サービスを一切知らない）を`features/`にも適用する）。
-- **依存先**: `models/`, `learning/`（過去の誤り発生率等の特徴量計算に`LearningService`の集計結果を使うため）, `utils/`。新たに`pipeline/`（`JobRunner`のみが`features/`を呼び出す。`PipelineRunner`は呼び出さない）からの依存を受ける側になる。
-- **依存禁止**: `document/`〜`validators/`（中核パイプラインへの逆依存はしない。6段階が`features/`を直接importすることも禁止——注入は常に`JobRunner`経由）, `repositories/`（直接のDB永続化を持たないため）。
+- **責務**: `src/mod_personnel_db/features/__init__.py`が`FeatureStore` Protocol（`compute(subject: RawRecord | NormalizedRecord) -> FeatureVector`、[interfaces.md#featurestore](interfaces.md)とシグネチャ一致）を定義する。具象実装`DefaultFeatureStore`（`features/store.py`）は、`RawRecord`/`NormalizedRecord`の内容のみから決定的に計算できる特徴量（`raw_field_fill_rate`：非空フィールド比率、`ocr_suspicious_char_rate`：疑わしい文字の混入率、`normalization_change_rate`：正規化による変化率、`NormalizedRecord`入力時のみ）を計算する。コンストラクタで`LearningService`（Protocol、オプション）を受け取った場合は`learning_open_error_count`（未解決Learning Dataset件数）を補助特徴量として追加する。`subject_ref`（`CandidateId`）は、`compute()`呼び出し時点でまだ永続化されていない入力に実DB主キーが存在しないため、`layout_id`・`section_ref`・`record_index`から決定的に導出した代理識別子とする。`*_confidence`/`*_rate`接尾辞の`float`特徴量は`features/validation.py`の`validate_feature_ranges()`が`0.0`〜`1.0`の値域を検証し、範囲外の場合`FeatureRangeError`を送出する（`models/feature.py`の`FeatureVector`docstringが`features/`パッケージへ委譲していた値域検証責務）。テスト用モック実装`MockFeatureStore`・既定値ヘルパー`default_feature_vector()`を`features/mock.py`が提供する。**V2.0時点では永続ストレージを持たず、都度計算（on-demand）とする**（専用の`FeatureRepository`は[Task 3](repositories.md)の8リポジトリに含まれておらず、過剰設計を避けるため）。
+- **統合状況（Phase7 Task16-2時点）**: `pipeline/job_runner.py`（`JobRunner`）は`features/`を一切import・呼び出ししていない（確認済み）。`normalizers/`・`validators/`のコンストラクタへ`FeatureVector`を注入する統合（`KnowledgeSnapshot`/`ValidationRuleSet`のADR-0040/ADR-0041パターンに準じる計画）は、Phase7 Task16-0で設計方針のみ確定しており、**実装はまだ行われていない**。したがって`features/`は現時点でどのコンポーネントからも呼び出されない、独立した未接続のユーティリティパッケージである。この統合を実装する場合は、[ADR-0040](../adr/0040-normalizer-produces-normalization-result.md)/[ADR-0041](../adr/0041-validator-constructor-injects-validation-rule-set.md)に準じる新規ADRの起票と、`Normalizer`/`Validator`のコンストラクタ引数追加（後方互換に影響しうる変更）が前提となる。
+- **依存先（実装確認済み）**: `models/`（`FeatureVector`, `NormalizedRecord`, `RawRecord`, `CandidateId`）, `learning/`（`LearningService` Protocolの型参照のみ、`DefaultFeatureStore`へのオプション注入用）, `utils/`（`features/exceptions.py`が`MODPersonnelDBError`を参照）。
+- **依存禁止**: `document/`〜`validators/`（中核パイプラインへの逆依存はしない）, `repositories/`, `pipeline/`, `ftp/`, `fetch/`, `services/`, `cli/`（`tests/unit/features/test_dependency_ownership.py`がAST走査で機械的に検証）。
 - **既存判断との関係**: [`gap-analysis.md`](../adr/gap-analysis.md#feature-store)は「機械学習の学習・推論を行わないため」Feature Store関連のADRを不要と判定した。本パッケージはその判断と矛盾しない。ここでの`FeatureStore`は機械学習モデルの学習用データストアではなく、Validator/Confidence算出（[`docs/database/json_schema.md`](../database/json_schema.md#confidenceの算出ルール)）を補助する**決定的な特徴量計算ユーティリティ**である。詳細な位置づけの整理は[`gap-analysis.md`](../adr/gap-analysis.md)末尾の追記を参照。
-- **実装時の前提**: 本節が定める統合方式（`JobRunner`経由の注入）は設計確定であり、実装着手時は[ADR-0040](../adr/0040-normalizer-produces-normalization-result.md)/[ADR-0041](../adr/0041-validator-constructor-injects-validation-rule-set.md)に準じる形で新規ADRを起票し、`Normalizer`/`Validator`のコンストラクタ引数追加という後方互換に影響しうる変更を正式決定する（[`docs/phase7-implementation-roadmap.md`](../phase7-implementation-roadmap.md)参照）。
 
 ### `review/`（ReviewService、**実装済み・下記の限定スコープで**）
 
@@ -184,22 +183,24 @@ src/mod_personnel_db/
 - **依存先（実装済みの狭い契約）**: `models/`, `repositories/`（抽象、`GoldRepository`のみ。`ExportRepository`は使用しない）, `utils/`。
 - **依存禁止**: `document/`〜`validators/`, `repositories/sqlite/`。
 
-### `ftp/`（FTPService、**未実装、Phase7 Task16-0で設計確定**）
+### `ftp/`（**実装済み、Phase7 Task16-1**）
 
-- **目的**: FTP/SFTP経由でのファイル配信・取得（既存の配布慣行がある場合の代替搬送路）。
-- **責務**: `export/`が生成した成果物のFTPアップロード、または将来的な取得元がFTPを要求する場合のダウンロード。バイト列・パス文字列のみを扱う、プロトコル層に徹する（ドメインモデルを一切知らない）。
-- **認証情報の扱い（Phase7 Task16-0で確定）**: `ftp/`は`config/`に直接依存しない。接続先ホスト・ポート・ユーザー名・パスワード（または鍵）は、呼び出し側（`fetch/`または`services/`）がプレーンな引数として渡す。これは上記[`repositories/sqlite/`](#repositoriessqlite実装済み)が`config/`に直接依存せず、DB接続文字列を合成ルート`cli/`から単純な文字列として受け取る既存の設計判断と同じ理由による——秘匿情報の読み込み・解決は合成ルート（`cli/`、将来は`services/`が仲介する場合もこれに準じる）の責務であり、`ftp/`自身が環境変数や設定ファイルを読みに行くことはない。
-- **依存先**: `utils/`のみ。
-- **依存禁止**: `repositories/`, `models/`のドメインモデルへの依存はしない（バイト列・パス文字列のみを扱う、プロトコル層に徹する）。`config/`（上記「認証情報の扱い」参照）。`export/`・`fetch/`から呼び出される側であり、逆方向の依存はしない。
+- **目的**: FTP経由でのファイル配信・取得（既存の配布慣行がある場合の代替搬送路）。
+- **責務**: `src/mod_personnel_db/ftp/__init__.py`が`FTPClient` Protocol（`connect()`/`upload(local_path, remote_path)`/`download(remote_path, local_path)`/`list_remote(remote_dir)`/`disconnect()`）を定義する。これは[interfaces.md#ftpservice](interfaces.md)が定める`FTPService`Protocol（`upload`/`download`/`list_remote`のみ）に、明示的な接続ライフサイクル管理（`connect`/`disconnect`）を加えた別の型であり、両者の統合・命名整理は将来のADRに委ねる（`review/`・`export/`の狭い契約と広い契約の関係と同様の扱い）。具象実装`StandardFTPClient`（`ftp/client.py`）は標準ライブラリ`ftplib`のみに依存し（新規の外部依存を追加しない）、接続・アップロード・ダウンロード・一覧取得・切断の各操作で`OSError`/`ftplib.Error`を`FTPConnectionError`/`FTPTransferError`（`ftp/exceptions.py`）へ変換する。テスト用モック実装`InMemoryFTPClient`（`ftp/mock.py`）を提供する。バイト列・パス文字列のみを扱う、プロトコル層に徹する（ドメインモデルを一切知らない）。
+- **認証情報の扱い（実装確認済み）**: `ftp/`は`config/`に依存しない（実装上も参照なし）。接続先ホスト・ポート・ユーザー名・パスワード・タイムアウト・パッシブモードは`FTPConnectionConfig`（`ftp/config.py`、frozen dataclass）として、呼び出し側がプレーンな引数で渡す。これは上記[`repositories/sqlite/`](#repositoriessqlite実装済み)が`config/`に直接依存せず、DB接続文字列を合成ルート`cli/`から単純な文字列として受け取る既存の設計判断と同じ理由による。
+- **依存先（実装確認済み）**: `utils/`のみ（`ftp/exceptions.py`が`MODPersonnelDBError`を参照）。
+- **依存禁止**: `repositories/`, `models/`のドメインモデル, `config/`（実装上も参照なし、`tests/unit/ftp/test_dependency_ownership.py`がAST走査で機械的に検証）。
+- **統合状況**: `export/`・`fetch/`は`ftp/`を呼び出していない（実装上も参照なし）。現時点で`ftp/`を実際に呼び出すのは`services/`（`DefaultJobOrchestrator.export_and_publish()`が`remote_path`指定時に`connect`/`upload`/`disconnect`を呼び出す）のみである。
 
-### `fetch/`（**未実装、Phase7 Task16-0で設計確定**）
+### `fetch/`（**実装済み、Phase7 Task16-3、HTTP経由の取得機構に限定**）
 
 - **目的**: 発令PDFを取得する（中核パイプラインの外側、[ADR-0006](../adr/0006-pipeline-provenance.md)）。
-- **責務**: HTTPまたは`ftp/`経由でPDFを取得し、`PDFRepository`に記録する。取得したファイルの重複排除のため`content_hash`を計算し、`PDFRepository`への登録前に既存レコードと照合する。
-- **PDF本文へのアクセスに関する制約（Phase7 Task16-0で確定）**: `fetch/`はPDFファイルのバイト列を取得・保存するのみであり、**PDF本文（テキスト・レイアウト構造）を解析・読み取りしてはならない**。これは「Layout DetectorだけがPDF本文にアクセスできる」という[architecture-contract.md 保証11](../architecture/architecture-contract.md#11-layout-detectorだけがpdf本文にアクセスできる)を`fetch/`にも適用したものである。`content_hash`の算出はPDF構造を解釈しない汎用のファイルハッシュ関数（`utils/`が提供、例: SHA-256のバイト列ハッシュ）で行い、PDF専用ライブラリ（`pypdf`等）を`fetch/`から利用しない。
-- **起動契機（Phase7 Task16-0で確定）**: `fetch/`は`JobRunner`・`pipeline/`から直接呼び出されない。PDF取得（`fetch/`の責務）は中核パイプライン実行（`run-pending`が`pdfs`テーブルの未処理レコードを消費する）よりも**前に**行われる独立した処理であり、`services/`のオーケストレーション（[ADR-0019](../adr/0019-workflow-orchestration.md)）またはスケジュールされたエントリポイントから起動される想定とする。
-- **依存先**: `models/`, `repositories/`（抽象、`PDFRepository`）, `ftp/`, `utils/`。
-- **依存禁止**: `document/`〜`validators/`（中核パイプラインへの依存はしない。取得と解析は独立したステージであり、上記「PDF本文へのアクセスに関する制約」も参照）。
+- **責務（実装確認済み）**: `src/mod_personnel_db/fetch/__init__.py`が`FetchClient` Protocol（`fetch(request: FetchRequest) -> FetchResult`）を定義する。具象実装`HTTPFetchClient`（`fetch/client.py`）は標準ライブラリ`urllib.request`のみに依存し（新規の外部依存を追加しない）、`http`/`https`以外のURLスキームを明示的に拒否する（`file://`等の意図しないローカルファイル読み取りを防ぐ安全対策）。HTTPステータスコード・Content-Typeを検証し（既定は`200`のみ許可、`expected_content_types`で追加検証可能）、タイムアウト・ネットワークエラーを`FetchTimeoutError`/`FetchNetworkError`（`fetch/exceptions.py`）へラッピングする。`FetchRequest`/`FetchResult`（`fetch/messages.py`）は`fetch/`ローカルの値オブジェクトであり、`models/`のドメインモデルではない。テスト用モック実装`MockFetchClient`・既定値ヘルパー`default_fetch_result()`を`fetch/mock.py`が提供する。
+- **Scope（Task16-3で確定した狭い契約）**: 本節が元々想定していた「`ftp/`経由の取得」「`content_hash`計算・`PDFRepository`への重複排除登録」は、**`fetch/`パッケージ自体には実装されていない**（`fetch/`は`models/`・`repositories/`・`ftp/`のいずれもimportしない、実装上も確認済み）。これらの責務は`services/`（`DefaultJobOrchestrator.fetch_and_stage()`）が代わりに実装している（下記`services/`節参照）。`fetch/`はHTTP経由の取得機構（転送層）のみを提供する、より狭い契約として実装された。
+- **PDF本文へのアクセスに関する制約（実装確認済み）**: `fetch/`はPDFファイルのバイト列を取得するのみであり、**PDF本文（テキスト・レイアウト構造）を解析・読み取りしてはならない**。これは「Layout DetectorだけがPDF本文にアクセスできる」という[architecture-contract.md 保証11](../architecture/architecture-contract.md#11-layout-detectorだけがpdf本文にアクセスできる)を`fetch/`にも適用したものであり、`fetch/`配下のソースは`pypdf`等のPDF専用ライブラリを一切importしないことを確認済み。
+- **起動契機**: `fetch/`は`JobRunner`・`pipeline/`から直接呼び出されない（実装上も参照なし）。現時点で`fetch/`（`FetchClient`）を実際に呼び出すのは`services/`（`DefaultJobOrchestrator.fetch_and_stage()`）のみである。
+- **依存先（実装確認済み）**: `utils/`のみ（`fetch/exceptions.py`が`MODPersonnelDBError`を参照）。
+- **依存禁止**: `document/`〜`validators/`, `models/`, `repositories/`, `ftp/`, `features/`, `services/`, `cli/`（`tests/unit/fetch/test_dependency_ownership.py`がAST走査で機械的に検証）。
 
 ### `pipeline/`（**実装済み**）
 
@@ -207,22 +208,22 @@ src/mod_personnel_db/
 - **責務（`PipelineRunner`、`pipeline/runner.py`、実装済み）**: `PipelineContext`/`PipelineStage`/`PipelineResult`/`PipelineEvent`/`PipelineException`/`PipelineMetrics`の提供、および登録済み`PipelineStage`列の順次呼び出し（Artifact受け渡し・イベント記録）のみ。Stage生成（コンストラクタ注入）・`PipelineContext`生成・永続化は行わない。
 - **責務（`JobRunner`、`pipeline/job_runner.py`、実装済み）**: `PipelineContext`生成、`KnowledgeSnapshot`/`ValidationRuleSet`取得によるStage生成（コンストラクタ注入）、`PipelineBuilder`経由での`PipelineRunner`への登録・呼び出し、`PipelineResult`のRepositoryへの永続化、Learning記録（[ADR-0013](../adr/0013-learning-dataset-not-correction-log.md)）。加えて、集約Artifact（`SectionParseResult`/`FieldExtractionResult`/`NormalizationResult`）を反復処理し`PipelineRunner`を必要な回数呼び出すCoordinator責務を持つ（[ADR-0045](../adr/0045-job-runner-aggregate-artifact-coordinator.md)）。この展開は`PipelineRunner`側では行わない。
 - **依存先（パッケージ全体、`JobRunner`が必要とする分を含む）**: `models/`, `repositories/`（抽象、`PDFRepository`, `CandidateRepository`, `JobRepository`）, `document/`, `layout/`, `sections/`, `extractors/`, `normalizers/`, `validators/`, `knowledge/`, `learning/`, `utils/`。**ただし`PipelineRunner`自身のコードは`repositories/`, `knowledge/`, `learning/`のいずれにも依存しない**（[architecture-contract.md 保証13](../architecture/architecture-contract.md#13-pipelinerunnerはrepositoryknowledgelearningreviewexportを知らない)）。これらへの依存は`JobRunner`の責務としてのみ生じる。逆方向として、`document/`〜`validators/`の6パッケージ側から`pipeline/`（`PipelineContext`型のみ）への型依存がある（上記「`PipelineContext`型依存について」参照）。この逆方向の依存は`pipeline/__init__.py`が6段階パッケージ・`job_runner.py`をimportしないことで循環を回避しており、`pipeline/ → 6段階`という一方向の実行時依存構造そのものは維持される。
-- **依存禁止**: `repositories/sqlite/`（具象）, `review/`, `export/`, `ftp/`（これらは中核パイプラインの外側であり、`pipeline/`から呼び出さない。実際の連携は`cli/`が合成ルートとして直接束ねる。下記`services/`の実装状況を参照）。
+- **依存禁止**: `repositories/sqlite/`（具象）, `review/`, `export/`, `ftp/`（これらは中核パイプラインの外側であり、`pipeline/`から呼び出さない。実際の連携は`cli/`が合成ルートとして直接束ねる。`services/`は実装済みだが、`pipeline/`はこれとも依存関係を持たない。下記`services/`節参照）。
 
-### `services/`（**未実装、Phase7 Task16-0で設計確定**）
+### `services/`（**実装済み、Phase7 Task16-4**）
 
 - **目的**: 単一の中核パイプライン実行に閉じない、横断的な運用オーケストレーションを提供する。
-- **責務**: `Scheduler`（[ADR-0019](../adr/0019-workflow-orchestration.md)、実行トリガーの決定）。`fetch/`によるPDF取得（`run-pending`より前段の処理）と`JobRunner`によるパイプライン実行、`review/`、`export/`を束ねる上位のワークフローをオーケストレーションする。将来、これらを横断する運用フロー（定期取得→パイプライン実行→レビュー待ち通知→エクスポート公開等）が必要になった場合もここに置く。
-- **依存先（Phase7 Task16-0で確定、`fetch/`・`ftp/`を追加）**: `pipeline/`, `review/`, `export/`, `fetch/`, `ftp/`, `models/`, `utils/`。`fetch/`は`services/`がPDF取得フローを起動するために、`ftp/`は`fetch/`・`export/`のFTP経由搬送を`services/`が調整する場合に必要となるため、依存先へ追加する。
-- **依存生成責務についての確認（Phase7 Task16-0で確定）**: `services/`は`pipeline/`・`review/`・`export/`・`fetch/`・`ftp/`の**具象実装を自ら生成しない**。他のいかなるパッケージも具象実装を生成しないという[architecture-contract.md 保証15](../architecture/architecture-contract.md#15-依存生成責務はcomposition-rootcliに一本化される)（依存生成責務はComposition Root（`cli/`）に一本化される）は`services/`にもそのまま適用される。`services/`は、`cli/`が構築済みの`JobRunner`・`ReviewService`・`ExportService`・fetch/ftpクライアント等のインスタンスを引数として受け取り、それらを呼び出す順序・タイミングのみを制御する（`pipeline/`の`PipelineRunner`が既に構築済みの`PipelineStage`列を受け取って呼び出すだけであるのと同じ設計原則）。
-- **依存禁止**: `repositories/sqlite/`（具象）, `document/`〜`validators/`（`pipeline/`を介さず中核パイプライン段階を直接呼び出さない）。
-- **現状**: `src/mod_personnel_db/`配下に`services/`パッケージは存在しない。`cli/bootstrap.py`（合成ルート）が`services/`層を介さず`pipeline/`・`review/`・`export/`を直接呼び出す構成になっている（下記`cli/`参照）。この現状は`fetch/`・`ftp/`が未実装であることとも整合しており、`services/`実装の前提として`fetch/`・`ftp/`が先に実装されている必要がある（実装順序は[`docs/phase7-implementation-roadmap.md`](../phase7-implementation-roadmap.md)を参照）。
+- **責務（実装確認済み）**: `src/mod_personnel_db/services/__init__.py`が`JobOrchestrator` Protocol（`fetch_and_stage`/`run_job`/`run_pending_pipeline`/`list_pending_reviews`/`export_and_publish`/`run_workflow`）を定義する。これは[interfaces.md#scheduler](interfaces.md)が定める`Scheduler`Protocol（`trigger_now`/`list_upcoming`）とは異なる、別の独立した契約である（`Scheduler`自体は未実装のまま、下記参照）。具象実装`DefaultJobOrchestrator`（`services/orchestrator.py`）は、`OrchestratorDependencies`（コンストラクタ注入専用のfrozen dataclass、`pipeline.job_runner.JobRunnerRepositories`と同じ設計判断）経由でのみ依存を受け取る。`fetch_and_stage()`は`FetchClient`で取得したバイト列のSHA-256を`content_hash`として計算し、`PDFRepository.get_by_hash()`で重複排除した上で`PDFRepository.add()`へ登録する（`fetch/`自体が実装していない責務を`services/`側で担う、上記`fetch/`節参照）。`run_job()`/`run_pending_pipeline()`は`JobRunner`へ委譲する。`export_and_publish()`は`ExportService`でエクスポートを生成し、`remote_path`指定時のみ`FTPClient`でアップロードする。`run_workflow()`はFetch（個別URL失敗を収集し継続）→Pipeline→Review（読み取りのみ）→Export/Publish（フェイルファスト）の順に実行する。
+- **依存先（実装確認済み）**: `fetch/`（`FetchClient`, `FetchRequest`, `FetchError`）, `ftp/`（`FTPClient`）, `pipeline/`（`PipelineResult`型、および`pipeline.job_runner.JobRunner`——`cli/bootstrap.py`が同モジュールから直接importする既存の慣行に準じる）, `review/`（`ReviewService`）, `export/`（`ExportService`）, `repositories/`（抽象、`PDFRepository`のみの型参照。具象は一切生成しない）, `models/`（`ExportArtifact`, `ExportFormat`, `LearningRecord`, `PdfId`, `PdfRecord`）。**`utils/`への依存は持たない**（`services/`は独自の例外クラスを持たず、`utils.exceptions`を参照する必要がないため。Phase7 Task16-0時点の計画では`utils/`への依存を想定していたが、実装では不要であった）。
+- **依存生成責務についての確認（実装確認済み）**: `services/`は`fetch/`・`ftp/`・`pipeline/`・`review/`・`export/`の**具象実装を自ら生成しない**（`tests/unit/services/test_dependency_ownership.py`がAST走査で、`DefaultJobOrchestrator.__init__`が属性代入のみを行い新規オブジェクトを生成しないことを機械的に検証）。他のいかなるパッケージも具象実装を生成しないという[architecture-contract.md 保証15](../architecture/architecture-contract.md#15-依存生成責務はcomposition-rootcliに一本化される)は`services/`にもそのまま適用される。
+- **依存禁止**: `repositories/sqlite/`（具象）, `document/`〜`validators/`, `cli/`（実装上も参照なし）。
+- **統合状況**: `cli/bootstrap.py`は`services/`（`DefaultJobOrchestrator`・`OrchestratorDependencies`）を一切参照していない（確認済み）。`cli/`は引き続き`services/`層を介さず`pipeline/`・`review/`・`export/`を直接呼び出す構成のままである（下記`cli/`参照）。`services/`パッケージ自体・その結合テスト（実HTTPサーバ・実SQLite・実`JobRunner`/`ReviewService`/`ExportService`・実`InMemoryFTPClient`を組み合わせた検証）は実装済みだが、`cli/`のComposition Rootへの配線・CLIサブコマンド化・`Scheduler`（ADR-0019が定める定期実行トリガー）の実装は未着手である。
 
 ### `cli/`（**実装済み**）
 
 - **目的**: 人間が操作するコマンドラインエントリポイント（[ADR-0021](../adr/0021-review-ui-strategy.md)のレビューCLI等）であり、かつ**アプリケーション全体の合成ルート（Composition Root）**を担う。他のいかなるパッケージ（`pipeline/`・`repositories/`を含む）も具象実装を生成しない（[ADR-0046](../adr/0046-composition-root-dependency-injection-contract.md)、[architecture-contract.md 保証15](../architecture/architecture-contract.md#15-依存生成責務はcomposition-rootcliに一本化される)）。
 - **責務**: コマンドライン引数の解析、`review/`・`export/`等のAPI呼び出しに加え、起動時に`repositories/sqlite/`（将来は`repositories/postgres/`も）・`KnowledgeService`・`LearningService`・`ReviewService`・`ExportService`の具象実装を、Repository具象生成→`KnowledgeService`生成→`LearningService`生成→`ReviewService`生成→`ExportService`生成→`JobRunner`生成の順に構築する（ADR-0046）。`JobRunner`（`pipeline/job_runner.py`）へは`JobRunnerRepositories`・`KnowledgeService`・`LearningService`・`ParserVersionId`・`layout_definitions`を個別に注入する。`UnitOfWork`（未実装、上記`repositories/`節参照）は`JobRunner`へは注入しない（`JobRunner`が必要とするRepositoryは`pdfs`/`jobs`/`candidates`の3種のみであり、複数Repositoryにまたがる原子性が必要な操作を現時点で行わないため）。パイプライン実行（`run-pending`/`run-job`）・Review（`review list`/`start`/`approve`/`reject`）・Export（`export all`/`person`/`since`）は、それぞれ独立したCLIサブコマンドとして提供し、`cli/`がこれらを1プロセス内で自動的に直列実行することはない。
-- **依存先**: `review/`, `export/`, `pipeline/`, `models/`, **`repositories/sqlite/`（合成ルートとしての唯一の例外、[`dependency-rule.md`](dependency-rule.md#合成ルートcomposition-root)）**, `knowledge/`, `learning/`, `layout/`（`layouts/<era_id>/manifest.yaml`の読み込みに`layout.definitions.load_layout_definitions`を利用するため）, `config/`（Phase6 Task14-5で追加。`cli/bootstrap.py`が`AppSettings`を`build_settings()`経由で生成する唯一の箇所、上記`config/`節参照）。**`services/`は未実装のため現時点では依存しない**（`services/`が実装された場合、`cli/`はその配下の`pipeline/`・`review/`・`export/`直接呼び出しを`services/`経由に置き換えることを検討する）。
+- **依存先**: `review/`, `export/`, `pipeline/`, `models/`, **`repositories/sqlite/`（合成ルートとしての唯一の例外、[`dependency-rule.md`](dependency-rule.md#合成ルートcomposition-root)）**, `knowledge/`, `learning/`, `layout/`（`layouts/<era_id>/manifest.yaml`の読み込みに`layout.definitions.load_layout_definitions`を利用するため）, `config/`（Phase6 Task14-5で追加。`cli/bootstrap.py`が`AppSettings`を`build_settings()`経由で生成する唯一の箇所、上記`config/`節参照）。**`services/`はPhase7 Task16-4で実装済みだが、`cli/bootstrap.py`は現時点で一切これを参照していない**（確認済み。`cli/`はその配下の`pipeline/`・`review/`・`export/`直接呼び出しを`services/`経由に置き換える配線変更をまだ行っておらず、これは別タスクでの実施事項として残る）。`ftp/`・`fetch/`・`features/`も同様にPhase7で実装済みだが、`cli/bootstrap.py`はいずれも参照していない。
 - **依存禁止**: `document/`〜`validators/`（`layout/`を除き直接は呼ばない、`pipeline/`経由）。`repositories/sqlite/`への依存は`cli/`にのみ許される例外であり、他のいかなるパッケージにも拡大しない。
 
 ---
@@ -239,15 +240,15 @@ src/mod_personnel_db/
 | `document/`〜`validators/` | 実装済み | `models/`, `utils/`, `pipeline/`（`PipelineContext`型のみ） | `repositories/`（抽象含む）, `knowledge/`, 他段階間の直接依存 |
 | `knowledge/` | 実装済み | `models/`, `utils/` | 中核パイプライン6段階, `repositories/`（抽象含む）, `repositories/sqlite/` |
 | `learning/` | 実装済み | `models/`, `repositories/`（抽象）, `utils/` | 中核パイプライン6段階, `repositories/sqlite/` |
-| `features/` | 未実装 | `models/`, `learning/`, `utils/` | 中核パイプライン6段階, `repositories/` |
+| `features/` | 実装済み（`JobRunner`未統合） | `models/`, `learning/`, `utils/` | 中核パイプライン6段階, `repositories/`, `pipeline/`, `ftp/`, `fetch/`, `services/`, `cli/` |
 | `review/` | 実装済み（限定スコープ） | `models/`, `repositories/`（抽象、`LearningRepository`, `GoldRepository`のみ）, `learning/`, `utils/` | 中核パイプライン6段階, `repositories/sqlite/`, `knowledge/` |
 | `export/` | 実装済み（限定スコープ） | `models/`, `repositories/`（抽象、`GoldRepository`のみ）, `utils/` | 中核パイプライン6段階, `repositories/sqlite/` |
-| `ftp/` | 未実装（設計確定） | `utils/` | `repositories/`, `models/`, `config/` |
-| `fetch/` | 未実装（設計確定） | `models/`, `repositories/`（抽象）, `ftp/`, `utils/` | 中核パイプライン6段階 |
-| `pipeline/`（パッケージ全体・`JobRunner`分を含む） | 実装済み | `models/`, `repositories/`（抽象）, 中核パイプライン6段階, `knowledge/`, `learning/`, `utils/` | `repositories/sqlite/`, `review/`, `export/`, `ftp/` |
-| `services/` | 未実装（設計確定） | `pipeline/`, `review/`, `export/`, `fetch/`, `ftp/`, `models/`, `utils/` | `repositories/sqlite/`, 中核パイプライン6段階（直接） |
+| `ftp/` | 実装済み | `utils/` | `repositories/`, `models/`, `config/` |
+| `fetch/` | 実装済み（HTTP経由の取得機構に限定） | `utils/` | 中核パイプライン6段階, `models/`, `repositories/`, `ftp/`, `features/`, `services/`, `cli/` |
+| `pipeline/`（パッケージ全体・`JobRunner`分を含む） | 実装済み | `models/`, `repositories/`（抽象）, 中核パイプライン6段階, `knowledge/`, `learning/`, `utils/` | `repositories/sqlite/`, `review/`, `export/`, `ftp/`, `features/`, `services/` |
+| `services/` | 実装済み（`cli/`未配線） | `fetch/`, `ftp/`, `pipeline/`, `review/`, `export/`, `repositories/`（抽象、`PDFRepository`のみ）, `models/` | `repositories/sqlite/`, 中核パイプライン6段階（直接）, `cli/` |
 | `cli/` | 実装済み | `review/`, `export/`, `pipeline/`, `models/`, `knowledge/`, `learning/`, `layout/`, `config/`, `repositories/sqlite/`（合成ルートとしての例外） | 中核パイプライン6段階（直接、`layout/`を除く） |
 
-上記`pipeline/`行はパッケージ全体（`JobRunner`が必要とする依存を含む）のサマリである。`PipelineRunner`（`pipeline/runner.py`）自身は`repositories/`, `knowledge/`, `learning/`のいずれにも依存しない（[ADR-0044](../adr/0044-pipelinerunner-jobrunner-boundary.md)、[architecture-contract.md 保証13](../architecture/architecture-contract.md#13-pipelinerunnerはrepositoryknowledgelearningreviewexportを知らない)）。この区別はパッケージ単位の本表では表現できないモジュール単位の規律であり、[`dependency-rule.md`](dependency-rule.md)の注記を参照。`document/`〜`validators/`行の`pipeline/`（`PipelineContext`型のみ）は、実行ロジックへの依存ではなく型シグネチャ上の参照であることに注意（上記「`PipelineContext`型依存について」参照）。`cli/`行の`services/`は未実装のため現時点では依存先に含まれない（実装後は`cli/`の直接依存の一部を置き換える想定）。`config/`はPhase6 Task14-5で実装済みとなり、`cli/`の依存先に含まれる。
+上記`pipeline/`行はパッケージ全体（`JobRunner`が必要とする依存を含む）のサマリである。`PipelineRunner`（`pipeline/runner.py`）自身は`repositories/`, `knowledge/`, `learning/`のいずれにも依存しない（[ADR-0044](../adr/0044-pipelinerunner-jobrunner-boundary.md)、[architecture-contract.md 保証13](../architecture/architecture-contract.md#13-pipelinerunnerはrepositoryknowledgelearningreviewexportを知らない)）。この区別はパッケージ単位の本表では表現できないモジュール単位の規律であり、[`dependency-rule.md`](dependency-rule.md)の注記を参照。`document/`〜`validators/`行の`pipeline/`（`PipelineContext`型のみ）は、実行ロジックへの依存ではなく型シグネチャ上の参照であることに注意（上記「`PipelineContext`型依存について」参照）。`cli/`行の`services/`は実装済みだが、`cli/`が現時点でこれを一切参照していないため依存先に含まれない（配線変更は別タスクでの実施事項）。`config/`はPhase6 Task14-5で実装済みとなり、`cli/`の依存先に含まれる。`features/`は`models/`・`learning/`・`utils/`に依存するが、実装済みのどのパッケージからも呼び出されていない（`pipeline/job_runner.py`からの統合は未実装、上記`features/`節参照）。
 
 完全な依存グラフ（Mermaid）は[`dependency-rule.md`](dependency-rule.md)を参照。
