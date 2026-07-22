@@ -1,0 +1,42 @@
+# Nightly: 定期実行によるlint・型チェック・テストの再確認
+#
+# 設計方針: docs/adr/0019-workflow-orchestration.md（Workflow Orchestration戦略）
+#
+# PRごと・main pushごとのci.ymlに加え、依存ライブラリの更新等による突発的な
+# 壊れを毎日検知するための定期実行（schedule: cron）。パイプライン自体の
+# 定期実行（PDF取得・処理、ADR-0019が将来想定する範囲）は未実装であり、
+# 本ワークフローは品質ゲート（lint/型チェック/テスト）の定期再確認のみを
+# 行う（ci.ymlと同じインストール方法・チェック内容）。
+
+name: Nightly
+
+on:
+  schedule:
+    - cron: "0 17 * * *"
+  workflow_dispatch:
+
+jobs:
+  nightly-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install dev dependencies
+        run: pip install -e ".[dev]"
+
+      - name: Ruff lint
+        run: ruff check .
+
+      - name: Ruff format check
+        run: ruff format --check .
+
+      - name: mypy
+        run: mypy
+
+      - name: pytest
+        run: pytest --cov

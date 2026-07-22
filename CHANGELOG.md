@@ -11,6 +11,7 @@
 ### Added
 
 - Phase5 Task13-2: リリース準備（README.md全面更新、本CHANGELOG.mdの整理、`LICENSE`新設、`.github/`配下の初期フェーズ記述更新）。
+- Phase6 Task14-6: GitHub Actionsによる Workflow Orchestration（[ADR-0019](docs/adr/0019-workflow-orchestration.md)）を実装。`.github/workflows/release.yml`（`workflow_dispatch`・`v*`タグpushで起動する明示的リリース操作時の品質ゲート、[ADR-0010](docs/adr/0010-ci-cd-and-publish-strategy.md)）・`.github/workflows/nightly.yml`（`schedule`によるcron定期実行・`workflow_dispatch`）を新規追加。`.github/workflows/README.md`を3ワークフロー体制に合わせて更新。
 
 ## Phase5 — 最終監査・ドキュメント同期・リリース準備
 
