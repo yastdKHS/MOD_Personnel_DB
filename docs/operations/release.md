@@ -33,6 +33,23 @@
 
 **この9段階のうち、1〜6は「コードリリース」、7〜9は「データ公開」であり、両者は独立して失敗しうる**。コードリリースが成功しても、Human Reviewが承認しなければデータは公開されない。この分離こそが[ADR-0010](../adr/0010-ci-cd-and-publish-strategy.md)の意図である。
 
+## Release Candidateからv1.0.0正式版までの残タスク
+
+Phase6 Task15-0の最終監査（[`RELEASE_STATUS.md`](../../RELEASE_STATUS.md)のKnown Limitations参照）に基づき、v1.0.0 Release Candidateから正式版へ昇格するまでの残タスクを整理する。個々の実装順序・優先度の確定は本ドキュメントの範囲外とし、実装着手時に別途判断する。
+
+| カテゴリ | 内容 | 対応する制限事項 |
+|---|---|---|
+| データ整備 | `layouts/`・`knowledge/`を実運用規模（複数様式・表記ゆれ）へ拡充し、Golden Testフィクスチャを`era_id`ごとに整備する | [`RELEASE_STATUS.md`](../../RELEASE_STATUS.md)のKnown Limitations 1・2 |
+| 未実装パッケージの実装 | `features/`（特徴量計算）・`ftp/`（FTP送信）・`fetch/`（PDF取得）・`services/`（Scheduler等の上位ワークフロー）を実装し、PDF自動取得〜公開までの経路を確立する | 同3 |
+| Export完全性・監査の強化 | [ADR-0029](../adr/0029-export-integrity-and-audit-log-policy.md)が定めるEd25519署名・GitHub Actionsの`GITHUB_TOKEN`最小権限設定（`permissions:`ブロック）・サードパーティActionsのコミットSHAピン留めを実装する | 同4 |
+| 依存脆弱性スキャン | [ADR-0026](../adr/0026-security-policy.md)が求める`pip-audit`等を3ワークフロー（`ci.yml`/`release.yml`/`nightly.yml`）へ導入する | 同5 |
+| CLI公開範囲の拡張 | `ExportService`の新機能（`PersonnelRecord`/CSV/Parquet/完全性メタデータ、Phase6 Task14-2〜14-4）をCLIサブコマンドとして公開する | 同6 |
+| リリース自動化 | 「Release Flow」節が定める`parser_versions`テーブルへのタグ起点自動記録、`staging`/`production`環境分離（[`docs/configuration.md`](../configuration.md#environment)）を実装する | 同7 |
+| スキーマMigration基盤 | [`docs/database/schema.md`](../database/schema.md#migration方針)が定める`schema_migrations`管理テーブル・`PRAGMA user_version`によるバージョン管理を実装する | 同11 |
+| 残りのテスト層整備 | Regression / Performance / Acceptance / Benchmark / Mutation Test（[`docs/testing/test-policy.md`](../testing/test-policy.md)が定める8種のうち残り5種）に着手する | 同13 |
+
+このうち「データ整備」「未実装パッケージの実装」「セキュリティ強化（Export完全性・依存脆弱性スキャン）」の3カテゴリは、[`RELEASE_STATUS.md`](../../RELEASE_STATUS.md)のRelease Recommendationが正式リリースの前提条件として挙げているものである。
+
 ## Rollback
 
 ### コードリリースのロールバック（本ドキュメントで新規定義）
