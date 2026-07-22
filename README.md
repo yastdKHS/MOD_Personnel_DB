@@ -1,6 +1,6 @@
 # MOD Personnel DB（防衛省人事発令データベース）
 
-> ステータス: **実装フェーズ（Phase5、リリース準備中）**。10年以上の運用に耐える設計corpus（ディレクトリ構成・規約・46本のADR・`docs/`配下の全設計文書）が[`docs/design-freeze.md`](docs/design-freeze.md)のレビューを経て確定し、[`docs/implementation.md`](docs/implementation.md)以下のImplementation Standardsに従って実装した。現時点で、中核パイプライン6段階（Document Analyzer〜Validator）・Repository層（SQLite実装）・JobRunner（Coordinator）・KnowledgeService/LearningService/ReviewService/ExportService・Composition Root（`cli/`）・CLIエントリポイントが実装済みである。詳細な実装状況の監査結果は[`docs/reports/phase5-final-audit.md`](docs/reports/phase5-final-audit.md)を参照。
+> ステータス: **v1.0.0 Release Candidate（Phase6完了）**。10年以上の運用に耐える設計corpus（ディレクトリ構成・規約・46本のADR・`docs/`配下の全設計文書）が[`docs/design-freeze.md`](docs/design-freeze.md)のレビューを経て確定し、[`docs/implementation.md`](docs/implementation.md)以下のImplementation Standardsに従って実装した。現時点で、中核パイプライン6段階（Document Analyzer〜Validator）・Repository層（SQLite実装）・JobRunner（Coordinator）・KnowledgeService/LearningService/ReviewService/ExportService（JSON/CSV/Parquet・完全性情報を含む）・`config/`（Pydantic Settings）・Composition Root（`cli/`）・CLIエントリポイント・GitHub Actions 3ワークフロー（`ci.yml`/`release.yml`/`nightly.yml`）が実装済みである。Phase5時点の詳細な実装状況の監査結果は[`docs/reports/phase5-final-audit.md`](docs/reports/phase5-final-audit.md)を、Phase6完了時点で残る既知の制限は本READMEの「[既知の制限事項](#既知の制限事項v10-release-candidate)」を参照。まだGitタグは打たれていない（`pyproject.toml`の`version`は`0.0.0`のまま）。タグ運用は「[リリースタグ運用](#リリースタグ運用)」を参照。
 
 ## これは何か
 
@@ -40,7 +40,7 @@ Document Analyzer → Layout Detector → Section Parser → Field Extractor →
 - **`review/`・`export/`**: 人手レビューとGold Database読み出しを担うサービス。現時点の実装は、それぞれLearning Dataset固有のレビューとGold Database読み出しに責務を限定した狭い契約であり、[`docs/api/review.md`](docs/api/review.md)・[`docs/api/interfaces.md`](docs/api/interfaces.md)が定めるより広範な設計とは異なる（詳細は[`docs/api/package-design.md`](docs/api/package-design.md)の`review/`・`export/`節を参照）。
 - **`cli/`（Composition Root）**: 上記すべての具象実装を組み立てる唯一の合成ルート（[ADR-0046](docs/adr/0046-composition-root-dependency-injection-contract.md)）であり、かつCLIエントリポイントを兼ねる。
 
-パッケージ間の依存方向は[`docs/api/dependency-rule.md`](docs/api/dependency-rule.md)が定め、各パッケージの責務・実装状況は[`docs/api/package-design.md`](docs/api/package-design.md)を正とする。`config/`・`features/`・`ftp/`・`fetch/`・`services/`は設計のみで未実装である。
+パッケージ間の依存方向は[`docs/api/dependency-rule.md`](docs/api/dependency-rule.md)が定め、各パッケージの責務・実装状況は[`docs/api/package-design.md`](docs/api/package-design.md)を正とする。`config/`はPhase6 Task14-5で実装済み（[ADR-0028](docs/adr/0028-pydantic-settings-for-configuration.md)）。`features/`・`ftp/`・`fetch/`・`services/`は依然設計のみで未実装である。
 
 ## インストール方法
 
@@ -109,7 +109,7 @@ python -m mod_personnel_db.cli help
 | `CLAUDE.md` | Claude Code（AIコーディングエージェント）向けの作業規約 |
 | `AGENTS.md` | 任意のAIエージェント向けの汎用運用規約 |
 | `CONTRIBUTING.md` | 人間の開発者向けの開発フロー・規約 |
-| [`CHANGELOG.md`](CHANGELOG.md) | Phase1〜Phase5の変更履歴（Keep a Changelog形式） |
+| [`CHANGELOG.md`](CHANGELOG.md) | Phase1〜Phase6の変更履歴（Keep a Changelog形式） |
 | `LICENSE` | ライセンス条項 |
 | `CODEOWNERS` | パスごとのレビュー担当者定義 |
 | `.gitignore` | Git管理除外ルール |
@@ -120,8 +120,8 @@ python -m mod_personnel_db.cli help
 | `knowledge/` | 階級名・組織名・表記ゆれ等のドメイン知識（人手管理データ、8カテゴリ。現時点ではREADMEのみで実データは未投入） |
 | `layouts/` | PDFフォーマット（時代・様式）ごとのレイアウト定義（現時点ではREADMEのみで実データは未投入） |
 | `src/mod_personnel_db/` | 本体実装（Pythonパッケージ）。下記「主要パッケージ」を参照 |
-| `tests/unit/` | 単体テスト（53ファイル、対象パッケージ全域） |
-| `tests/integration/` | 結合テスト（`cli/`配下、CLI全体のE2Eテスト） |
+| `tests/unit/` | 単体テスト（64ファイル、対象パッケージ全域） |
+| `tests/integration/` | 結合テスト（`cli/`/`config/`/`export/`/`golden/`配下、6ファイル） |
 | `tests/golden/` | ゴールデンファイルテスト用フィクスチャ（[ADR-0007](docs/adr/0007-golden-file-testing.md)、合成PDF1件。テストコードは`tests/integration/golden/test_golden.py`） |
 | `scripts/` | 定型化されていない運用・保守スクリプト |
 | `sample_pdfs/` | テスト用の代表的なサンプルPDF（現時点では未投入） |
@@ -201,7 +201,25 @@ mypy --strict src/ tests/
 pytest --cov
 ```
 
-`pyproject.toml`の`[tool.coverage.report]`が定めるCoverage閾値（`fail_under = 80`）を満たす必要がある。現在の実測値は`docs/reports/phase5-final-audit.md`のTest Summaryを参照。テスト種別ごとの目的・実行タイミング・Coverage目標は[`docs/testing/test-policy.md`](docs/testing/test-policy.md)が定める8種別（Unit/Integration/Golden/Regression/Performance/Acceptance/Benchmark/Mutation）を正とする。Golden Testは`tests/integration/golden/test_golden.py`（Phase6 Task14-1）として実装済み。Regression/Performance/Acceptance/Benchmark Testは未着手である。
+`pyproject.toml`の`[tool.coverage.report]`が定めるCoverage閾値（`fail_under = 80`）を満たす必要がある。Phase6完了時点の実測値は634件成功・Coverage 98.99%（Phase5時点の実測値は`docs/reports/phase5-final-audit.md`のTest Summaryを参照、528件成功時点のスナップショット）。テスト種別ごとの目的・実行タイミング・Coverage目標は[`docs/testing/test-policy.md`](docs/testing/test-policy.md)が定める8種別（Unit/Integration/Golden/Regression/Performance/Acceptance/Benchmark/Mutation）を正とする。Golden Testは`tests/integration/golden/test_golden.py`（Phase6 Task14-1）として実装済み。Regression/Performance/Acceptance/Benchmark Testは未着手である。
+
+## リリースタグ運用
+
+本プロジェクトはまだリリースタグを打っていない（`pyproject.toml`の`version`は`0.0.0`のまま）。最初のリリースタグ`v1.0.0`（SemVer形式、[ADR-0023](docs/adr/0023-parser-versioning-policy.md)）を`main`へ付与すると、[`.github/workflows/release.yml`](.github/workflows/release.yml)（`push: tags: v*`）が起動し、`ci.yml`と同じ品質ゲート（Poetry経由でのruff lint・ruff format check・mypy・pytest）を再実行する（`workflow_dispatch`による手動起動も可能）。
+
+ADR-0023が定める「タグ付与をトリガーに`parser_versions`テーブルへ新しい行を自動記録する」処理、および[`docs/operations/release.md`](docs/operations/release.md#release-flow)のRelease Flowが定めるstaging/production環境分離・データ公開（Human Review後のExport/FTP送信）は、対応する自動化（バージョン記録・環境分離・`ftp/`/`fetch/`パッケージ）が未実装のため、現時点の`release.yml`には含まれない。詳細は[`docs/operations/release.md`](docs/operations/release.md#release-flow)の実装状況注記を参照。
+
+## 既知の制限事項（v1.0 Release Candidate）
+
+v1.0.0 Release Candidateとしての最終監査（Phase6 Task15-0）で確認された、主要な既知の制限事項を示す（監査結果自体は読み取り専用で実施しレポートファイルは作成していない）。
+
+- `layouts/`（1様式）・`knowledge/`（8カテゴリ各1件）・Golden Testフィクスチャ（1件）とも実運用規模のデータには未到達であり、複数様式・表記ゆれを網羅したパイプライン実データ検証はできない。
+- `features/`・`ftp/`・`fetch/`・`services/`パッケージが未実装。PDFの自動取得・実際のデータベース公開（FTP送信等）の経路が存在しない。
+- ADR-0029が求めるEd25519署名・GitHub Actionsの`GITHUB_TOKEN`最小権限設定（`permissions:`ブロック）・サードパーティActionsのコミットSHAピン留めが未実装。Exportの完全性情報はSHA-256チェックサム（`ExportArtifact`、Phase6 Task14-4）のみ。
+- ADR-0026が求める依存脆弱性スキャン（`pip-audit`等）が3ワークフロー（`ci.yml`/`release.yml`/`nightly.yml`）いずれにも存在しない。
+- `export/`の新機能（`PersonnelRecord`/CSV/Parquet/完全性メタデータ、Phase6 Task14-2〜14-4）はCLIコマンドとして未公開であり、`ExportService`の内部APIとしてのみ利用できる。
+- 上記「リリースタグ運用」節のとおり、`parser_versions`自動記録・staging/production環境分離・データ公開の自動化は未実装。
+- Golden Test以外のテスト層（Regression/Performance/Acceptance/Benchmark/Mutation）は未着手。
 
 ## データの出典と利用方針
 

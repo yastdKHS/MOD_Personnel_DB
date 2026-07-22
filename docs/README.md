@@ -11,6 +11,8 @@
 | [`constitution.md`](constitution.md) | **Project Constitution**（プロジェクト憲法）。ADR・Architecture Contractを含む本ディレクトリ配下のすべての設計文書より上位に位置する統治文書。変更にはプロジェクトオーナーの明示的承認を要する |
 | [`design-freeze.md`](design-freeze.md) | **Design Freeze Review**。全設計領域（Architecture/ADR/Review/Workflow/Knowledge/Repository/Interface/Security/Observability/Configuration/Release）の横断レビュー、不足点・改善点・リスク・TODO一覧、設計完了宣言、Deferred Decisions |
 | [`roadmap.md`](roadmap.md) | 将来のメジャーバージョンに向けた設計改善候補（Priority/Target/Status）。実装変更を伴わない再評価候補の一覧 |
+| [`reports/`](reports/) | 監査レポート（[`reports/phase5-final-audit.md`](reports/phase5-final-audit.md): Phase5時点のADR・Architecture Contract・Dependency Rule・Package Design・Protocol・Composition Root・CLI・Testの整合性監査） |
+| [`architecture-review-package.md`](architecture-review-package.md) | Architecture Review Package（設計フェーズのアーキテクチャレビュー資料一式） |
 | [`implementation.md`](implementation.md) | **Implementation Guide**。実装フェーズの最上位ガイドライン（Constitution → ADR → Architecture Contract → Implementation Guideの順で従う）。Repository First等の実装哲学、Version Rule、Definition of Done等27項目 |
 | [`coding-style.md`](coding-style.md) | Coding Style Guide（命名規則、関数/クラス/ファイル長、コメント・Docstring方針、型ヒント方針、構文選択、Import順序、禁止事項） |
 | [`testing/`](testing/) | Test Policy（Unit/Integration/Golden/Regression/Performance/Acceptance/Benchmark/Mutation Testの目的・実行タイミング・成功条件・Coverage目標） |

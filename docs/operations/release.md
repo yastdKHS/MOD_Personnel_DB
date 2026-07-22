@@ -19,6 +19,8 @@
 
 「コードのリリース」と「データの公開」は別の意思決定ステップである（[ADR-0010](../adr/0010-ci-cd-and-publish-strategy.md)）。本節はこの2つを1つの一貫したフローとして順序づける。
 
+> **実装状況（Phase6 Task14-6時点）**: [`.github/workflows/release.yml`](../../.github/workflows/release.yml)は現在、`workflow_dispatch`・`v*`タグpushをトリガーに、[`ci.yml`](../../.github/workflows/ci.yml)と同じ品質ゲート（ruff lint・ruff format check・mypy・pytest）をPoetry経由で再実行するのみである。下記9段階のうち2（CI検証）・3（マージ）に相当する部分はci.ymlが担い、4はrelease.ymlのトリガー（タグpush）に対応するが、`parser_versions`テーブルへの自動記録自体は未実装である。5〜9（`staging`検証・`production`昇格・データ生成・Human Review・公開）に対応する自動化（環境分離・`ftp/`/`fetch/`パッケージ）も未実装であり、現時点では以下のフローは設計目標として記載する。
+
 1. **開発**: `dev`環境でのローカル作業。1PR1責務（[ADR-0014](../adr/0014-development-discipline.md)）。
 2. **CI検証**: PRごとにlint・型チェック・テスト（ゴールデンファイル含む、[ADR-0007](../adr/0007-golden-file-testing.md)）を実行（`test`環境、[`docs/configuration.md`](../configuration.md#environment)）。
 3. **マージ**: `main`ブランチへのマージ。この時点ではまだ本番実行環境のコードは更新されない（[ADR-0025](../adr/0025-deployment-strategy.md)のバッチ実行モデルでは、次回のスケジュール実行が`main`の最新状態を都度チェックアウトする）。
