@@ -66,7 +66,7 @@ repository（抽象であっても）
 flowchart TB
     subgraph LEAF["基盤（葉）"]
         utils["utils/"]
-        config["config/ (未実装)"]
+        config["config/"]
     end
 
     subgraph MODEL["models/"]
@@ -160,9 +160,10 @@ flowchart TB
     cli --> knowledge
     cli --> learning
     cli --> layout
+    cli --> config
 ```
 
-**読み方**: 矢印`A --> B`は「AはBに依存してよい（Aのコードから`import`してよい）」。逆方向（`B --> A`）は許可しない限り禁止。図に存在しない実線エッジ（例: `extractors --> repositories`）はすべて暗黙的に禁止である。破線エッジ（`-.->`）は「型シグネチャ上の型のみの依存であり、実行ロジックへの依存ではない」ことを表す（[`PipelineContext`型依存](#pipelinecontext型依存)参照）。`config["config/ (未実装)"]`・`services["services/ (未実装)"]`・`features/`・`ftp/`・`fetch/`は未実装のため、これらを起点/終点とするエッジは現時点で実現されていない設計目標である。`repositories_sqlite → config`エッジは、`config/`が未実装であり`repositories/sqlite/`のDB接続先（`db_path`）は合成ルート（`cli/`）から単純な文字列として渡されるため、削除した。`cli/`の実際の依存は`review/`・`export/`・`pipeline/`・`knowledge/`・`learning/`・`layout/`・`repositories/sqlite/`（合成ルートとしての例外）であり、`services/`・`config/`が未実装のため、それらへの依存エッジは現時点で描かない。
+**読み方**: 矢印`A --> B`は「AはBに依存してよい（Aのコードから`import`してよい）」。逆方向（`B --> A`）は許可しない限り禁止。図に存在しない実線エッジ（例: `extractors --> repositories`）はすべて暗黙的に禁止である。破線エッジ（`-.->`）は「型シグネチャ上の型のみの依存であり、実行ロジックへの依存ではない」ことを表す（[`PipelineContext`型依存](#pipelinecontext型依存)参照）。`config["config/"]`はPhase6 Task14-5で実装済みとなった（[ADR-0028](../adr/0028-pydantic-settings-for-configuration.md)）。`services["services/ (未実装)"]`・`features/`・`ftp/`・`fetch/`は依然未実装のため、これらを起点/終点とするエッジは現時点で実現されていない設計目標である。`repositories_sqlite → config`エッジは、`config/`が実装済みの現在も存在しない。`repositories/sqlite/`のDB接続先（`db_path`）は合成ルート（`cli/`）から単純な文字列として渡される設計であり、`repositories/sqlite/`自身が`config/`の型付き設定オブジェクトを参照することはないため（構造上の設計判断であり、`config/`の実装状況とは無関係）。`cli/`の実際の依存は`review/`・`export/`・`pipeline/`・`knowledge/`・`learning/`・`layout/`・`config/`・`repositories/sqlite/`（合成ルートとしての例外）であり、`services/`は未実装のため、それへの依存エッジのみ現時点で描かない。
 
 > **注記（`pipeline`ノードの粒度について、[ADR-0044](../adr/0044-pipelinerunner-jobrunner-boundary.md)）**: 上図の`pipeline`ノードはパッケージ単位であり、`pipeline --> repositories`・`pipeline --> knowledge`・`pipeline --> learning`の3エッジは、`pipeline/`パッケージ内の`JobRunner`（`pipeline/job_runner.py`、実装済み）が必要とする依存を表す。パッケージ内の`PipelineRunner`（`pipeline/runner.py`、実装済み）自身は、これら3エッジのいずれにも該当するimportを持たない（[architecture-contract.md 保証13](../architecture/architecture-contract.md#13-pipelinerunnerはrepositoryknowledgelearningreviewexportを知らない)）。この区別はモジュール単位の規律であり、他パッケージと粒度を揃えるため、本図ではノードを分割しない（[ADR-0044](../adr/0044-pipelinerunner-jobrunner-boundary.md)の「検討した代替案」）。
 
@@ -192,9 +193,9 @@ flowchart TB
 
 ## 合成ルート（Composition Root）
 
-「誰も`repositories/sqlite/`を直接importしない」という原則には、唯一の例外として**合成ルート**が必要である。実行時にどの`Repository`実装（SQLite/将来のPostgreSQL）を使うかを決定し、`repositories/sqlite/`・`KnowledgeService`・`LearningService`・`ReviewService`・`ExportService`の具象実装を構築して`JobRunner`に渡す箇所は、**`cli/bootstrap.py`**が担う（[ADR-0046](../adr/0046-composition-root-dependency-injection-contract.md)）。`config/`・`services/`・`pipeline/`・`repositories/`のいずれも、これらの具象実装を自ら生成しない（`config/`・`services/`は未実装、[`package-design.md`](package-design.md)参照）。
+「誰も`repositories/sqlite/`を直接importしない」という原則には、唯一の例外として**合成ルート**が必要である。実行時にどの`Repository`実装（SQLite/将来のPostgreSQL）を使うかを決定し、`repositories/sqlite/`・`KnowledgeService`・`LearningService`・`ReviewService`・`ExportService`の具象実装を構築して`JobRunner`に渡す箇所は、**`cli/bootstrap.py`**が担う（[ADR-0046](../adr/0046-composition-root-dependency-injection-contract.md)）。`config/`・`services/`・`pipeline/`・`repositories/`のいずれも、これらの具象実装を自ら生成しない（`config/`は実装済みだが値の提供に責務を限定し合成を行わない設計、`services/`は未実装、[`package-design.md`](package-design.md)参照）。
 
-> **設計変更の経緯**: 当初`config/`を合成ルートとする案を検討したが、[`import-graph.md`](import-graph.md)の循環参照検証により、`repositories/sqlite/ → config/`（接続情報取得のため）と`config/ → repositories/sqlite/`（合成のため）が同時に成立し**循環参照になる**ことが判明した。`config/`は「設定値を提供するだけの末端パッケージ」のままとし、合成（具象実装のimportと組み立て）は依存グラフの最上位に位置する`cli/`に一本化することで循環を解消した。詳細な検証手順は[`import-graph.md`](import-graph.md#循環参照がないことの検証)を参照。**現状（`config/`未実装）**: `cli/bootstrap.py`内のローカルな`CompositionSettings`データクラス（`db_path`/`knowledge_root`/`layouts_root`/`parser_code_version`）が、`config/`が想定していた設定値提供の一部を暫定的に代替する。
+> **設計変更の経緯**: 当初`config/`を合成ルートとする案を検討したが、[`import-graph.md`](import-graph.md)の循環参照検証により、`repositories/sqlite/ → config/`（接続情報取得のため）と`config/ → repositories/sqlite/`（合成のため）が同時に成立し**循環参照になる**ことが判明した。`config/`は「設定値を提供するだけの末端パッケージ」のままとし、合成（具象実装のimportと組み立て）は依存グラフの最上位に位置する`cli/`に一本化することで循環を解消した。詳細な検証手順は[`import-graph.md`](import-graph.md#循環参照がないことの検証)を参照。**現状（Phase6 Task14-5で`config/`実装済み）**: `config/settings.py`の`AppSettings`（`pydantic_settings.BaseSettings`、`db_path`/`knowledge_root`/`layouts_root`/`parser_code_version`）が、本節が想定する設定値提供を実現する。`cli/bootstrap.py`の`CompositionSettings`は`AppSettings`の別名（`CompositionSettings = AppSettings`）であり、`AppSettings`の生成（`AppSettings(...)`の呼び出し）は`cli/bootstrap.py`の`build_settings()`一箇所に限定される。上記の循環参照回避策（合成は`cli/`に一本化）自体は変更していない。
 
 > **`pipeline/`（`JobRunner`）への注入契約（ADR-0046）**: `JobRunner`（`pipeline/job_runner.py`）は`UnitOfWork`を受け取らない。`cli/`は`JobRunnerRepositories`（`pdfs`/`jobs`/`candidates`の3種のみを束ねる）・`KnowledgeService`・`LearningService`・`ParserVersionId`・`layout_definitions`を個別にコンストラクタ注入する。`UnitOfWork`は未実装であり（[`repositories.md#unitofwork`](repositories.md#unitofwork)参照）、`JobRunner`はそのような複数Repository原子性操作を行わないため使用しない。
 

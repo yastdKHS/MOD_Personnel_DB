@@ -50,9 +50,9 @@
 | 項目 | 内容 |
 |---|---|
 | 目的 | PDFパースのような「入力の微妙な違いが出力に大きく影響しうる」処理の回帰を検知する（[ADR-0007](../adr/0007-golden-file-testing.md)） |
-| 責務 | `sample_pdfs/`の各ファイルをパイプラインに通した結果が`sample_outputs/`と一致することを検証する |
+| 責務 | フィクスチャ（合成PDFは`tests/golden/sample_pdfs/`、実在の公表PDFはリポジトリ直下`sample_pdfs/`、両者の使い分けは[`tests/golden/README.md`](../../tests/golden/README.md)参照）の各ファイルをパイプラインに通した結果が、対応する`sample_outputs/`と一致することを検証する |
 | 実行タイミング | PRごと（CI）。新しい`layouts/`定義を追加する変更では必須 |
-| GitHub Actionsでの位置づけ | `ci.yml`の`test`ジョブ（`tests/golden/`配下、既存の`pytest`実行に含まれる）。将来的には`layout-validation.yml`（[`.github/workflows/README.md`](../../.github/workflows/README.md)の「今後追加予定」）として専用化することを検討する |
+| GitHub Actionsでの位置づけ | `ci.yml`の`test`ジョブ内、既存の`pytest`実行に含まれる。テストコードは[`tests/integration/golden/test_golden.py`](../../tests/integration/golden/test_golden.py)（Phase6 Task14-1）、フィクスチャ（入力PDF・期待結果JSON）は`tests/golden/`配下に置く。将来的には`layout-validation.yml`（[`.github/workflows/README.md`](../../.github/workflows/README.md)の「今後追加予定」）として専用化することを検討する |
 | 成功条件 | すべての`sample_pdfs/`が対応する`sample_outputs/`と一致する |
 | 失敗時の対応 | 不一致が「バグ」か「意図的な正解変更」かを人手で判定する。後者の場合はゴールデンファイルを更新し、PR説明に変更理由を明記する（無言で更新しない、[`CLAUDE.md`](../../CLAUDE.md)） |
 | Coverage対象 | `layouts/`の全`era_id`（様式）に対する代表サンプル |
