@@ -1,6 +1,9 @@
+import csv
 import dataclasses
 from datetime import UTC, date, datetime
+from pathlib import Path
 
+import pyarrow.parquet as pq  # type: ignore[import-untyped]
 import pytest
 
 from mod_personnel_db.export import ExportService
@@ -146,6 +149,8 @@ def test_export_service_public_api_matches_protocol() -> None:
         "export_all_records",
         "export_since_records",
         "export_person_records",
+        "export_all_csv",
+        "export_all_parquet",
     }
 
 
@@ -222,3 +227,54 @@ def test_export_service_protocol_exposes_personnel_record_methods() -> None:
     assert service.export_all_records() != ()
     assert service.export_since_records(datetime(2026, 1, 1, tzinfo=UTC)) != ()
     assert service.export_person_records("person-1") != ()
+
+
+def test_export_all_csv_writes_personnel_record_as_csv(tmp_path: Path) -> None:
+    repository = StubGoldRepository(records=(_make_gold_record(1, "person-1"),))
+    service = RepositoryExportService(repository)
+    destination = tmp_path / "export.csv"
+
+    service.export_all_csv(destination)
+
+    with open(destination, encoding="utf-8", newline="") as f:
+        rows = list(csv.DictReader(f))
+    assert len(rows) == 1
+    assert rows[0]["id"] == "gold-00000001"
+    assert rows[0]["person_value"] == "person-1"
+
+
+def test_export_all_csv_output_has_no_bom(tmp_path: Path) -> None:
+    repository = StubGoldRepository(records=(_make_gold_record(1, "person-1"),))
+    service = RepositoryExportService(repository)
+    destination = tmp_path / "export.csv"
+
+    service.export_all_csv(destination)
+
+    assert not destination.read_bytes().startswith(b"\xef\xbb\xbf")
+
+
+def test_export_all_parquet_writes_personnel_record_as_parquet(tmp_path: Path) -> None:
+    repository = StubGoldRepository(records=(_make_gold_record(1, "person-1"),))
+    service = RepositoryExportService(repository)
+    destination = tmp_path / "export.parquet"
+
+    service.export_all_parquet(destination)
+
+    table = pq.read_table(destination)
+    rows = table.to_pylist()
+    assert len(rows) == 1
+    assert rows[0]["id"] == "gold-00000001"
+    assert rows[0]["person_value"] == "person-1"
+
+
+def test_export_service_protocol_exposes_csv_parquet_methods(tmp_path: Path) -> None:
+    typed_repository: GoldRepository = StubGoldRepository(
+        records=(_make_gold_record(1, "person-1"),)
+    )
+    service: ExportService = RepositoryExportService(typed_repository)
+
+    service.export_all_csv(tmp_path / "protocol.csv")
+    service.export_all_parquet(tmp_path / "protocol.parquet")
+
+    assert (tmp_path / "protocol.csv").exists()
+    assert (tmp_path / "protocol.parquet").exists()
