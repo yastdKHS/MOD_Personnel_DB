@@ -1,0 +1,47 @@
+# Release: タグpush・手動実行時の品質ゲート
+#
+# 設計方針: docs/adr/0019-workflow-orchestration.md（Workflow Orchestration戦略）,
+#          docs/adr/0010-ci-cd-and-publish-strategy.md（CI/CDと公開戦略）
+#
+# ADR-0010は「自動マージによる即時公開はしない」と定め、データベースの公開を
+# 明示的なリリース操作として扱う。本ワークフローはその明示的リリース操作の
+# 起点（タグpush・手動実行）でci.ymlと同じ品質ゲート（lint・型チェック・
+# テスト）を再確認する。実際の公開ステップ（FTP送信等、ftp/未実装）は
+# 対象外であり、実装時に別途追加する。
+
+name: Release
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  release-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install Poetry
+        run: pip install poetry
+
+      - name: Install dependencies
+        run: poetry install --extras dev
+
+      - name: Ruff lint
+        run: poetry run ruff check .
+
+      - name: Ruff format check
+        run: poetry run ruff format --check .
+
+      - name: mypy
+        run: poetry run mypy
+
+      - name: pytest
+        run: poetry run pytest --cov

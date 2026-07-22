@@ -115,7 +115,7 @@ python -m mod_personnel_db.cli help
 | `.gitignore` | Git管理除外ルール |
 | `pyproject.toml` | Pythonプロジェクトの唯一の設定源（依存関係・ビルド・lint・型・テスト設定） |
 | `.pre-commit-config.yaml` | コミット前静的チェックの定義 |
-| `.github/` | CI/CDワークフロー・Issue/PRテンプレート |
+| `.github/` | GitHub Actionsワークフロー（`ci.yml`／`release.yml`／`nightly.yml`、詳細は[`.github/workflows/README.md`](.github/workflows/README.md)）・Issue/PRテンプレート |
 | `docs/` | アーキテクチャ・データモデル・ADR・運用手順書 |
 | `knowledge/` | 階級名・組織名・表記ゆれ等のドメイン知識（人手管理データ、8カテゴリ。現時点ではREADMEのみで実データは未投入） |
 | `layouts/` | PDFフォーマット（時代・様式）ごとのレイアウト定義（現時点ではREADMEのみで実データは未投入） |
