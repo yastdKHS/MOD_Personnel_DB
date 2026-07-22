@@ -171,6 +171,50 @@ flowchart TB
 
 ---
 
+## 統合後の依存グラフ（Phase7 Integration Design、計画中）
+
+> **本節は計画中の設計であり、実装済みの状態を表さない。** 上記「全体依存グラフ」が実装済みの実際のimportのみを描くのに対し、本節は[`docs/phase7-integration-design.md`](../phase7-integration-design.md)（Task17-0）が確定したComposition Root統合の**設計案**を示す。実装着手前の段階では、この図のエッジは`cli/bootstrap.py`のコードには存在しない。
+
+Phase7統合が`cli/`に追加する予定のエッジは、`cli --> fetch`・`cli --> ftp`・`cli --> services`の3本のみである（`cli --> features`は追加しない、[`phase7-integration-design.md`](../phase7-integration-design.md#7-featurestore生成位置)参照）。
+
+```mermaid
+flowchart TB
+    subgraph ORCH2["オーケストレーション（統合後）"]
+        pipeline2["pipeline/"]
+        services2["services/ (JobOrchestrator)"]
+        cli2["cli/ (Composition Root)"]
+    end
+
+    subgraph SERVICE2["サービス層"]
+        review2["review/"]
+        export2["export/"]
+        ftp2["ftp/"]
+        fetch2["fetch/"]
+    end
+
+    subgraph REPO2["永続化"]
+        repositories2["repositories/ (抽象)"]
+    end
+
+    services2 --> pipeline2
+    services2 --> review2
+    services2 --> export2
+    services2 --> fetch2
+    services2 --> ftp2
+    services2 --> repositories2
+
+    cli2 --> pipeline2
+    cli2 --> review2
+    cli2 --> export2
+    cli2 -.->|Task17-0で新設予定| fetch2
+    cli2 -.->|Task17-0で新設予定・FtpSettings実装待ち| ftp2
+    cli2 -.->|Task17-0で新設予定| services2
+```
+
+**循環依存が発生しない理由**: [`package-design.md`](package-design.md)のパッケージ横断の依存先サマリ表が定めるとおり、`fetch/`・`ftp/`・`services/`はいずれも依存禁止に`cli/`を含む（`fetch/`・`ftp/`は`utils/`以外への依存を持たず、`services/`の依存禁止表に`cli/`が明記されている）。したがって`cli --> fetch`・`cli --> ftp`・`cli --> services`のいずれの新規エッジも逆方向（`fetch --> cli`等）を伴わず、既存の依存グラフに循環を生じさせない（詳細な検証は[`phase7-integration-design.md`](../phase7-integration-design.md#13-循環依存が発生しないことの確認)を参照）。
+
+---
+
 ## 明示的な禁止例・許可例（追加）
 
 | # | 禁止 | 許可（代替） | 理由 |
@@ -212,6 +256,8 @@ flowchart LR
 ```
 
 この例外は、`cli/`が「どの具象実装を選ぶか」という配線の責務を持つことの直接の帰結であり、`cli/`以外のいかなるパッケージにもこの例外を拡大しない。実装済みの`cli/bootstrap.py`は、`repositories/sqlite/`の8具象クラス・`FileKnowledgeService`・`RepositoryLearningService`・`RepositoryReviewService`・`RepositoryExportService`の生成をすべて一箇所に集約しており、他のいかなるパッケージにもこれらの生成は存在しない。
+
+> **Phase7統合（Task17-0、計画中）**: `ftp/`・`fetch/`・`services/`の具象実装（`StandardFTPClient`・`HTTPFetchClient`・`DefaultJobOrchestrator`）の生成位置も、この例外を拡大することなく`cli/bootstrap.py`に一本化する設計を[`docs/phase7-integration-design.md`](../phase7-integration-design.md)が確定した（未実装）。詳細は「[統合後の依存グラフ](#統合後の依存グラフphase7-integration-design計画中)」を参照。
 
 ---
 

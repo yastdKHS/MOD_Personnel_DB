@@ -317,6 +317,8 @@ class FeatureStore(Protocol):
 ## `Scheduler`
 
 > 本Protocolは未実装である（`src/`に対応する実装は存在しない）。Phase7 Task16-4で実装した`JobOrchestrator`（後述）は、`fetch/`・`ftp/`・`pipeline/`・`review/`・`export/`を横断的に調整する別契約であり、本節が定める「パイプライン実行のトリガー管理」（cron等の定期実行スケジュール管理）とは責務が異なる。両者の統合は行っていない。
+>
+> **責務境界（Phase7 Task17-0、[`phase7-integration-design.md`](../phase7-integration-design.md#12-scheduler導入予定位置)で整理）**: `Scheduler`は「いつ`JobOrchestrator`（の`run_workflow()`等）を呼び出すか」の決定にのみ責務を持ち、`JobOrchestrator`が担う「`fetch/`・`ftp/`・`pipeline/`・`review/`・`export/`をどう調整するか」には関与しない設計とする。この整理は責務境界の明文化であり、`JobOrchestrator`を`Scheduler`へ統合する（両者を1つの型・1つのコンポーネントにまとめる）ことを意味しない。`Scheduler`の具象実装・生成位置は未確定であり、着手時に新規ADRで確定する。
 
 ```python
 from typing import Protocol
@@ -361,6 +363,8 @@ class JobRunner(Protocol):
 ## `JobOrchestrator`
 
 > 本Protocolは[`src/mod_personnel_db/services/__init__.py`](../../src/mod_personnel_db/services/__init__.py)にPhase7 Task16-4で実装している。`fetch/`・`ftp/`・`pipeline/`（`JobRunner`）・`review/`・`export/`を横断的に調整するアプリケーションサービス層であり、`Scheduler`（前掲）とは別契約である。具象実装`DefaultJobOrchestrator`は、依存をコンストラクタインジェクション（`OrchestratorDependencies`、`services.orchestrator`）のみで受け取り、`fetch/`・`ftp/`・`pipeline/`・`review/`・`export/`の具象実装を自ら生成しない（[architecture-contract.md 保証15](../architecture/architecture-contract.md#15-依存生成責務はcomposition-rootcliに一本化される)）。`cli/bootstrap.py`は本パッケージを一切参照しておらず、Composition Rootへの配線は未実施である。詳細は[`package-design.md`](package-design.md)の`services/`節を参照。
+>
+> **生成位置（Phase7 Task17-0、[`phase7-integration-design.md`](../phase7-integration-design.md#4-joborchestrator生成位置)で確定）**: `DefaultJobOrchestrator`は、実装された場合も`cli/bootstrap.py`（Composition Root）からのみ生成される設計とする。`services/`自身（`DefaultJobOrchestrator`のコンストラクタを含む）は自らの依存の具象実装を生成しないため、`cli/`以外のいかなるパッケージからも`JobOrchestrator`の具象生成は行われない。この設計は未実装であり、上記のとおり現時点で`cli/bootstrap.py`は本パッケージを参照していない。
 
 ```python
 from datetime import date
