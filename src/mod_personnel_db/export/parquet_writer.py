@@ -2,6 +2,8 @@
 
 入力は`PersonnelRecord`のみを扱う。`GoldRecord`は一切参照・import しない。
 `pyarrow`（Phase6 Task14-3で追加した依存、`pyproject.toml`参照）を用いる。
+`to_parquet_bytes()`は`export/integrity.py`（Phase6 Task14-4、ADR-0029）が
+SHA-256を計算する際の出力バイト列としても共用する。
 """
 
 from collections.abc import Iterable
@@ -41,13 +43,20 @@ _SCHEMA = pa.schema(
 )
 
 
+def to_parquet_bytes(records: Iterable[PersonnelRecord]) -> bytes:
+    """`records`を標準的なカラム構造のParquetバイト列へ変換する（`write_parquet`と共通の出力）。"""
+    table = _to_table(records)
+    sink = pa.BufferOutputStream()
+    pq.write_table(table, sink)
+    return sink.getvalue().to_pybytes()  # type: ignore[no-any-return]
+
+
 def write_parquet(records: Iterable[PersonnelRecord], destination: str | Path) -> None:
     """`records`を標準的なカラム構造のParquetとして`destination`へ書き出す。
 
     列順・列名は`export.tabular.TABULAR_COLUMNS`に従う（`write_csv`と共通）。
     """
-    table = _to_table(records)
-    pq.write_table(table, str(destination))
+    Path(destination).write_bytes(to_parquet_bytes(records))
 
 
 def _to_table(records: Iterable[PersonnelRecord]) -> pa.Table:
@@ -59,4 +68,4 @@ def _to_table(records: Iterable[PersonnelRecord]) -> pa.Table:
     return pa.table(columns, schema=_SCHEMA)
 
 
-__all__ = ["write_parquet"]
+__all__ = ["to_parquet_bytes", "write_parquet"]

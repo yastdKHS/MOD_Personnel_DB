@@ -23,7 +23,14 @@ from mod_personnel_db.models.enums import (
     PipelineStageName,
     RegressionStatus,
 )
-from mod_personnel_db.models.export import ExportRecord, PersonnelRecord, Provenance, SourcePdf
+from mod_personnel_db.models.export import (
+    ExportArtifact,
+    ExportFormat,
+    ExportRecord,
+    PersonnelRecord,
+    Provenance,
+    SourcePdf,
+)
 from mod_personnel_db.models.extraction import (
     ExtractionCandidate,
     ExtractionEvidence,
@@ -103,6 +110,8 @@ __all__ = [
     "DocumentV1",
     "DocumentWarning",
     "ErrorCategory",
+    "ExportArtifact",
+    "ExportFormat",
     "ExportId",
     "ExportRecord",
     "ExtractionCandidate",

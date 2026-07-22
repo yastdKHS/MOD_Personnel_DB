@@ -19,6 +19,16 @@ ADR-0022が定めるCSV/Parquetファイルとして`export_all_records()`の結
 `export/parquet_writer.py`（`export/tabular.py`を共通利用）が担い、
 `GoldRecord`を一切参照しない。
 
+`export_all_with_metadata()`/`export_since_with_metadata()`/
+`export_person_with_metadata()`（Phase6 Task14-4で追加）は、ADR-0029が
+定める完全性保証・監査情報を伴うエクスポートAPIである。`format`
+（`"json"`/`"csv"`/`"parquet"`）を指定して`destination`へ書き出しつつ、
+実際に書き出したバイト列から計算したSHA-256等を含む`ExportArtifact`
+（`export_id`/`exported_at`（UTC）/`format`/`record_count`/`sha256`）を
+返す。完全性情報の計算自体は`export/integrity.py`が担い、`GoldRecord`を
+一切参照しない。既存の`export_all_csv()`等・`export_all_records()`等の
+シグネチャ・戻り値は変更していない。
+
 `docs/api/interfaces.md#exportservice`が定める`ExportService`（`generate()`/
 `get()`/`list_recent()`、`ExportRepository`が管理する`ExportRecord`＝
 エクスポート実行記録を対象とする）とは異なる、Gold Database読み出しに
@@ -35,11 +45,14 @@ from datetime import datetime
 from pathlib import Path
 from typing import Protocol
 
-from mod_personnel_db.models import GoldRecord, PersonnelRecord
+from mod_personnel_db.models import ExportArtifact, ExportFormat, GoldRecord, PersonnelRecord
 
 
 class ExportService(Protocol):
-    """Gold Databaseのデータを外部出力向けに取得する（Phase4 Task12-1、Phase6 Task14-2/14-3）。"""
+    """Gold Databaseのデータを外部出力向けに取得する。
+
+    Phase4 Task12-1、Phase6 Task14-2/14-3/14-4に対応する。
+    """
 
     def export_all(self) -> tuple[GoldRecord, ...]:
         """現在有効な（`is_current=True`）Gold Record全件を返す。"""
@@ -71,6 +84,27 @@ class ExportService(Protocol):
 
     def export_all_parquet(self, destination: str | Path) -> None:
         """現在有効なGold Record全件を、`PersonnelRecord`としてParquetへ書き出す（ADR-0022）。"""
+        ...
+
+    def export_all_with_metadata(
+        self, export_format: ExportFormat, destination: str | Path
+    ) -> ExportArtifact:
+        """現在有効なGold Record全件を`export_format`で書き出し、完全性・監査情報を返す。
+
+        ADR-0029が定めるSHA-256等の完全性・監査情報（`ExportArtifact`）を返す。
+        """
+        ...
+
+    def export_since_with_metadata(
+        self, since: datetime, export_format: ExportFormat, destination: str | Path
+    ) -> ExportArtifact:
+        """`since`時点で有効だったGold Recordを`export_format`で書き出し、監査情報を返す。"""
+        ...
+
+    def export_person_with_metadata(
+        self, person_id: str, export_format: ExportFormat, destination: str | Path
+    ) -> ExportArtifact:
+        """指定した`person_key`の全バージョン履歴を`export_format`で書き出し、完全性・監査情報を返す。"""
         ...
 
 
