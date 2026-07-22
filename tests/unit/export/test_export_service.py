@@ -1,5 +1,6 @@
 import csv
 import dataclasses
+import json
 from datetime import UTC, date, datetime
 from pathlib import Path
 
@@ -10,6 +11,7 @@ from mod_personnel_db.export import ExportService
 from mod_personnel_db.export.service import RepositoryExportService
 from mod_personnel_db.models import (
     CandidateId,
+    ExportArtifact,
     GoldRecord,
     GoldRecordId,
     NormalizedRecord,
@@ -151,6 +153,9 @@ def test_export_service_public_api_matches_protocol() -> None:
         "export_person_records",
         "export_all_csv",
         "export_all_parquet",
+        "export_all_with_metadata",
+        "export_since_with_metadata",
+        "export_person_with_metadata",
     }
 
 
@@ -278,3 +283,74 @@ def test_export_service_protocol_exposes_csv_parquet_methods(tmp_path: Path) -> 
 
     assert (tmp_path / "protocol.csv").exists()
     assert (tmp_path / "protocol.parquet").exists()
+
+
+def test_export_all_with_metadata_writes_file_and_returns_artifact(tmp_path: Path) -> None:
+    repository = StubGoldRepository(records=(_make_gold_record(1, "person-1"),))
+    service = RepositoryExportService(repository)
+    destination = tmp_path / "export.json"
+
+    artifact = service.export_all_with_metadata("json", destination)
+
+    assert isinstance(artifact, ExportArtifact)
+    assert artifact.format == "json"
+    assert artifact.record_count == 1
+    payload = json.loads(destination.read_bytes().decode("utf-8"))
+    assert payload[0]["id"] == "gold-00000001"
+
+
+def test_export_since_with_metadata_passes_as_of_to_repository(tmp_path: Path) -> None:
+    record = _make_gold_record(1, "person-1")
+    repository = StubGoldRepository(records=(record,))
+    service = RepositoryExportService(repository)
+    since = datetime(2026, 6, 1, tzinfo=UTC)
+    destination = tmp_path / "export.csv"
+
+    artifact = service.export_since_with_metadata(since, "csv", destination)
+
+    assert repository.list_current_calls == [since]
+    assert artifact.record_count == 1
+    assert artifact.format == "csv"
+
+
+def test_export_person_with_metadata_returns_history_for_person_key(tmp_path: Path) -> None:
+    person_a = _make_gold_record(1, "person-a")
+    person_b = _make_gold_record(2, "person-b")
+    repository = StubGoldRepository(records=(person_a, person_b))
+    service = RepositoryExportService(repository)
+    destination = tmp_path / "export.parquet"
+
+    artifact = service.export_person_with_metadata("person-a", "parquet", destination)
+
+    assert repository.get_history_calls == ["person-a"]
+    assert artifact.record_count == 1
+    assert artifact.format == "parquet"
+
+
+def test_export_all_with_metadata_does_not_leak_gold_record(tmp_path: Path) -> None:
+    repository = StubGoldRepository(records=(_make_gold_record(1, "person-1"),))
+    service = RepositoryExportService(repository)
+
+    artifact = service.export_all_with_metadata("csv", tmp_path / "export.csv")
+
+    for field in dataclasses.fields(artifact):
+        assert not isinstance(getattr(artifact, field.name), GoldRecord)
+
+
+def test_export_service_protocol_exposes_with_metadata_methods(tmp_path: Path) -> None:
+    typed_repository: GoldRepository = StubGoldRepository(
+        records=(_make_gold_record(1, "person-1"),)
+    )
+    service: ExportService = RepositoryExportService(typed_repository)
+
+    all_artifact = service.export_all_with_metadata("csv", tmp_path / "all.csv")
+    since_artifact = service.export_since_with_metadata(
+        datetime(2026, 1, 1, tzinfo=UTC), "json", tmp_path / "since.json"
+    )
+    person_artifact = service.export_person_with_metadata(
+        "person-1", "parquet", tmp_path / "person.parquet"
+    )
+
+    assert isinstance(all_artifact, ExportArtifact)
+    assert isinstance(since_artifact, ExportArtifact)
+    assert isinstance(person_artifact, ExportArtifact)
