@@ -46,6 +46,16 @@ Phase6 Task14-5以降`config.AppSettings`（Pydantic Settings、ADR-0028）の
 だが、環境変数・`.env`ファイルからの読み込みにも対応する。`AppSettings`の
 生成は本モジュールの`build_settings()`経由のみに限定し、`cli/app.py`等の
 呼び出し元は`build_settings()`を呼ぶのみで自らSettingsを生成しない。
+
+**Phase7統合（Task17-0で確定した設計・Task17-1で実装）**: 上記の生成順序
+1〜7（`build_application()`）に続けて、順序8「`FetchClient`生成」・
+順序9「`FTPClient`生成」・順序10「`JobOrchestrator`生成」を追加する
+（docs/phase7-integration-design.md）。既存の生成順序1〜7・`build_settings()`
+等の既存公開関数のシグネチャはこの統合によって変更しない（加算的統合）。
+`build_feature_store()`は`FeatureStore`を生成するが、`JobRunner`の
+コンストラクタ拡張（別途新規ADRを前提とする将来タスク）が未実装であるため、
+現時点ではどこからも呼び出されない未使用のBuilderとして提供する。新規CLI
+サブコマンドの追加は本Taskの対象外である。
 """
 
 import sqlite3
@@ -55,6 +65,9 @@ from pathlib import Path
 
 from mod_personnel_db.config import AppSettings
 from mod_personnel_db.export.service import RepositoryExportService
+from mod_personnel_db.features import DefaultFeatureStore
+from mod_personnel_db.fetch import FetchClient, HTTPFetchClient
+from mod_personnel_db.ftp import FTPClient, FTPConnectionConfig, StandardFTPClient
 from mod_personnel_db.knowledge import FileKnowledgeService
 from mod_personnel_db.layout.definitions import load_layout_definitions
 from mod_personnel_db.learning import RepositoryLearningService
@@ -78,6 +91,7 @@ from mod_personnel_db.repositories.sqlite import (
     connect,
 )
 from mod_personnel_db.review.service import RepositoryReviewService
+from mod_personnel_db.services import DefaultJobOrchestrator, OrchestratorDependencies
 
 #: 合成ルートが依存生成に必要とする設定値の型。Phase6 Task14-5以降
 #: `config.AppSettings`（Pydantic Settings、ADR-0028）の別名であり、
@@ -247,12 +261,82 @@ def build_job_runner(settings: CompositionSettings) -> JobRunner:
     return build_application(settings).job_runner
 
 
+def build_fetch_client() -> HTTPFetchClient:
+    """生成順序8（Phase7 Task17-0/17-1）: `FetchClient`を生成する。
+
+    `HTTPFetchClient`（標準ライブラリの`urllib`ベース）のみを生成する。設定値
+    への依存を持たないため、他のいかなる`build_*`関数よりも先に呼び出せる
+    （docs/phase7-integration-design.md#5-fetchclient生成位置）。テスト用の
+    `MockFetchClient`は合成ルートでは生成しない。
+    """
+    return HTTPFetchClient()
+
+
+def build_ftp_client(settings: CompositionSettings) -> StandardFTPClient:
+    """生成順序9（Phase7 Task17-0/17-1）: `FTPClient`を生成する。
+
+    `StandardFTPClient`（`ftplib`ベース）のみを生成する。テスト用の
+    `InMemoryFTPClient`は合成ルートでは生成しない。
+
+    TODO(Phase7統合、`config/`拡張待ち): `AppSettings`は現時点でFTP接続情報
+    （host/port/username/password等）を持たない。`docs/configuration.md`が
+    設計する`FtpSettings`（`SecretStr`によるパスワード秘匿を含むネスト設定）
+    が`config/`へ追加された後、`settings.ftp`から実接続情報を取得するよう
+    本関数を更新する（docs/phase7-integration-design.md#6-ftpclient生成位置）。
+    それまでは`settings`引数はTask17-0が確定したシグネチャ整合のためにのみ
+    保持し、内部では使用しない。
+    """
+    del settings
+    return StandardFTPClient(FTPConnectionConfig(host=""))
+
+
+def build_feature_store() -> DefaultFeatureStore:
+    """Phase7 Task17-0/17-1: `FeatureStore`を生成する。
+
+    `JobRunner`（`pipeline/job_runner.py`）が`FeatureStore`をコンストラクタ
+    注入で受け取る拡張は未実装であるため、本関数は現時点でどこからも
+    呼び出されない未使用のBuilderとして提供する（`JobRunner`への配線は行わない、
+    docs/phase7-integration-design.md#7-featurestore生成位置）。
+    """
+    return DefaultFeatureStore()
+
+
+def build_job_orchestrator(
+    application: Application,
+    repositories: SqliteRepositories,
+    fetch_client: FetchClient,
+    ftp_client: FTPClient,
+) -> DefaultJobOrchestrator:
+    """生成順序10（Phase7 Task17-0/17-1）: `JobOrchestrator`を生成する。
+
+    既存の生成順序1〜7（`build_application()`）・順序8〜9（`build_fetch_client()`/
+    `build_ftp_client()`）が構築済みのインスタンスを`OrchestratorDependencies`へ
+    束ねるのみであり、本関数自身は新たな具象実装を生成しない（Constructor
+    Injectionのみで依存を解決する、docs/phase7-integration-design.md
+    #4-joborchestrator生成位置）。
+    """
+    return DefaultJobOrchestrator(
+        OrchestratorDependencies(
+            fetch_client=fetch_client,
+            ftp_client=ftp_client,
+            pdf_repository=repositories.pdfs,
+            job_runner=application.job_runner,
+            review_service=application.review_service,
+            export_service=application.export_service,
+        )
+    )
+
+
 __all__ = [
     "Application",
     "CompositionSettings",
     "SqliteRepositories",
     "build_application",
     "build_export_service",
+    "build_feature_store",
+    "build_fetch_client",
+    "build_ftp_client",
+    "build_job_orchestrator",
     "build_job_runner",
     "build_knowledge_service",
     "build_learning_service",

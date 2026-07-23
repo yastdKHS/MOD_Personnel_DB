@@ -1,14 +1,20 @@
+import ast
 from collections.abc import Callable
+from pathlib import Path
 
 import pytest
 
+import mod_personnel_db
 from mod_personnel_db.cli import bootstrap
 from mod_personnel_db.cli.bootstrap import Application, CompositionSettings, SqliteRepositories
 from mod_personnel_db.export import ExportService
 from mod_personnel_db.export.service import RepositoryExportService
+from mod_personnel_db.features import DefaultFeatureStore
+from mod_personnel_db.fetch import FetchClient, HTTPFetchClient
+from mod_personnel_db.ftp import FTPClient, StandardFTPClient
 from mod_personnel_db.knowledge import FileKnowledgeService, KnowledgeService
 from mod_personnel_db.learning import LearningService, RepositoryLearningService
-from mod_personnel_db.models import LearningStatus
+from mod_personnel_db.models import LearningStatus, PdfId
 from mod_personnel_db.pipeline.job_runner import JobRunner, JobRunnerRepositories
 from mod_personnel_db.repositories import CandidateRepository, JobRepository, PDFRepository
 from mod_personnel_db.repositories.sqlite import (
@@ -24,6 +30,7 @@ from mod_personnel_db.repositories.sqlite import (
 )
 from mod_personnel_db.review import ReviewService
 from mod_personnel_db.review.service import RepositoryReviewService
+from mod_personnel_db.services import DefaultJobOrchestrator
 
 
 def test_build_sqlite_repositories_creates_seven_concrete_instances(
@@ -183,3 +190,126 @@ def test_application_services_are_protocol_typed(settings: CompositionSettings) 
 
     assert review_protocol.list_pending() == ()
     assert export_protocol.export_all() == ()
+
+
+# --- Phase7統合（Task17-0/17-1）: build_fetch_client / build_ftp_client /
+# build_feature_store / build_job_orchestrator ---
+
+
+def test_build_fetch_client_returns_http_fetch_client() -> None:
+    """`build_fetch_client()`は`HTTPFetchClient`のみを生成する（Mockは生成しない）。"""
+    fetch_client = bootstrap.build_fetch_client()
+
+    assert isinstance(fetch_client, HTTPFetchClient)
+    fetch_protocol: FetchClient = fetch_client
+    assert fetch_protocol is fetch_client
+
+
+def test_build_ftp_client_returns_standard_ftp_client(settings: CompositionSettings) -> None:
+    """`build_ftp_client()`は`StandardFTPClient`のみを生成する（Mockは生成しない）。"""
+    ftp_client = bootstrap.build_ftp_client(settings)
+
+    assert isinstance(ftp_client, StandardFTPClient)
+    ftp_protocol: FTPClient = ftp_client
+    assert ftp_protocol is ftp_client
+
+
+def test_build_feature_store_returns_default_feature_store() -> None:
+    """`build_feature_store()`は`DefaultFeatureStore`を生成するが、他のいかなる
+    `build_*`関数からも呼び出されない（`JobRunner`への配線は行わない、Task17-0設計）。
+    """
+    feature_store = bootstrap.build_feature_store()
+
+    assert isinstance(feature_store, DefaultFeatureStore)
+
+
+def test_build_job_orchestrator_wires_dependencies_via_constructor_injection(
+    settings: CompositionSettings,
+) -> None:
+    """`build_job_orchestrator()`は既存の生成順序1〜9の成果物を`OrchestratorDependencies`
+    へ束ねるのみであり、新たな具象実装を生成しない（Constructor Injectionのみ）。
+    """
+    connection = connect(settings.db_path)
+    repositories = bootstrap.build_sqlite_repositories(connection)
+    application = bootstrap.build_application(settings)
+    fetch_client = bootstrap.build_fetch_client()
+    ftp_client = bootstrap.build_ftp_client(settings)
+
+    orchestrator = bootstrap.build_job_orchestrator(
+        application, repositories, fetch_client, ftp_client
+    )
+
+    assert isinstance(orchestrator, DefaultJobOrchestrator)
+    assert orchestrator.run_pending_pipeline() == ()
+    assert orchestrator.list_pending_reviews() == ()
+
+
+def test_build_application_backward_compatible_after_phase7_integration(
+    settings: CompositionSettings,
+) -> None:
+    """Phase7統合の追加後も`build_application()`の戻り値・公開属性は変更されない。"""
+    application = bootstrap.build_application(settings)
+
+    assert isinstance(application, Application)
+    assert isinstance(application.job_runner, JobRunner)
+    assert isinstance(application.review_service, RepositoryReviewService)
+    assert isinstance(application.export_service, RepositoryExportService)
+    assert application.read_pdf(PdfId(1)) is None
+    # build_application()自体がParserVersionを解決・記録する副作用を持つため
+    # （既存の_resolve_parser_version_id()、Phase7統合前から変わらない挙動）、
+    # Noneではなくsettingsのparser_code_versionと一致するレコードを期待する。
+    latest_version = application.read_latest_parser_version()
+    assert latest_version is not None
+    assert latest_version.code_version == settings.parser_code_version
+    assert application.read_knowledge_snapshot().items == ()
+
+
+_FORBIDDEN_PHASE7_CONSTRUCTOR_CALLS = {
+    "HTTPFetchClient",
+    "StandardFTPClient",
+    "DefaultJobOrchestrator",
+}
+
+
+def _called_names(source_path: Path) -> set[str]:
+    tree = ast.parse(source_path.read_text(encoding="utf-8"))
+    names: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
+            names.add(node.func.id)
+    return names
+
+
+def test_only_composition_root_constructs_phase7_concrete_implementations() -> None:
+    """`HTTPFetchClient`・`StandardFTPClient`・`DefaultJobOrchestrator`の直接インスタンス化は
+    `cli/bootstrap.py`（Composition Root）以外のいかなる`src/mod_personnel_db/`配下モジュールにも
+    存在しないことをASTで確認する（レビュー項目「Composition Root一本化維持」）。
+    """
+    src_root = Path(mod_personnel_db.__file__).parent
+    bootstrap_path = Path(bootstrap.__file__)
+
+    for source_path in sorted(src_root.rglob("*.py")):
+        if source_path == bootstrap_path:
+            continue
+        called = _called_names(source_path)
+        violations = called & _FORBIDDEN_PHASE7_CONSTRUCTOR_CALLS
+        assert not violations, f"{source_path} constructs concrete types: {violations}"
+
+
+def test_build_job_orchestrator_does_not_construct_new_types_in_body() -> None:
+    """`build_job_orchestrator()`の本体は`DefaultJobOrchestrator(OrchestratorDependencies(...))`
+    の呼び出しのみであり、他の関数呼び出し（＝新たな具象生成）を含まないことをASTで確認する。
+    """
+    source_path = Path(bootstrap.__file__)
+    tree = ast.parse(source_path.read_text(encoding="utf-8"))
+    func_node = next(
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.FunctionDef) and node.name == "build_job_orchestrator"
+    )
+    called_names = {
+        n.func.id
+        for n in ast.walk(func_node)
+        if isinstance(n, ast.Call) and isinstance(n.func, ast.Name)
+    }
+    assert called_names == {"DefaultJobOrchestrator", "OrchestratorDependencies"}
