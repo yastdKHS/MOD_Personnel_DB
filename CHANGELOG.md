@@ -2,7 +2,7 @@
 
 本プロジェクトの設計・実装上の重要な変更を記録する。[Keep a Changelog](https://keepachangelog.com/) の形式に準拠する。
 
-本プロジェクトはまだセマンティックバージョニングによるリリースタグを持たない（`pyproject.toml`の`version`は`0.0.0`のまま）。そのため、リリースバージョンの代わりに開発フェーズ（Phase1〜Phase6）ごとに変更履歴をグルーピングする。最初のリリースタグ（`v1.0.0`、[ADR-0023](docs/adr/0023-parser-versioning-policy.md)のSemVer規則）を打つ時点で、本ファイルの形式をバージョン番号ベースに移行する。
+本プロジェクトはまだセマンティックバージョニングによるリリースタグを持たない（`pyproject.toml`の`version`は`0.0.0`のまま）。そのため、リリースバージョンの代わりに開発フェーズ（Phase1〜Phase7）ごとに変更履歴をグルーピングする。最初のリリースタグ（`v1.0.0`、[ADR-0023](docs/adr/0023-parser-versioning-policy.md)のSemVer規則）を打つ時点で、本ファイルの形式をバージョン番号ベースに移行する。
 
 新しいエントリを追加する際は、対応するADR・更新したドキュメントへのリンクを必ず含める（[CLAUDE.md](CLAUDE.md)の「Single Source of Truth」原則、[ADR-0014](docs/adr/0014-development-discipline.md)の開発規律）。
 
@@ -11,6 +11,27 @@
 ### Added
 
 - Phase5 Task13-2: リリース準備（README.md全面更新、本CHANGELOG.mdの整理、`LICENSE`新設、`.github/`配下の初期フェーズ記述更新）。
+
+## Phase7 — Composition Root統合・Closeout（Completed）
+
+Phase6完了後に未実装だった`features/`・`fetch/`・`ftp/`・`services/`の4パッケージを実装し（Task16-1〜16-4）、続けて`fetch/`・`ftp/`・`services/`（`JobOrchestrator`・`Scheduler`）をComposition Root（`cli/`）へ配線してCLIから利用可能にした（Task17-1〜17-4）。Task17-5の最終監査・ドキュメント同期を経て、Task17-6でPhase7を正式にCompletedとしてクローズした。`features/`の`JobRunner`への統合のみ、Phase8以降の課題として残る。
+
+### Added
+
+- Task16-0: `features/`・`fetch/`・`ftp/`・`services/`の設計方針・依存方向・実装順序を確定（[`docs/phase7-implementation-roadmap.md`](docs/phase7-implementation-roadmap.md)）。
+- Task16-1: `ftp/`パッケージを実装。`FTPClient` Protocol・標準実装`StandardFTPClient`（`ftplib`ベース）・テスト用`InMemoryFTPClient`を追加。
+- Task16-2: `features/`パッケージを実装。`FeatureStore` Protocol・標準実装`DefaultFeatureStore`（`raw_field_fill_rate`等の決定的特徴量計算）を追加。
+- Task16-3: `fetch/`パッケージを実装。`FetchClient` Protocol・標準実装`HTTPFetchClient`（`urllib.request`ベース、HTTP経由の取得機構に限定）を追加。
+- Task16-4: `services/`パッケージを実装。`JobOrchestrator` Protocol・標準実装`DefaultJobOrchestrator`（`fetch/`・`ftp/`・`pipeline/`・`review/`・`export/`を横断的に調整）を追加。
+- Task16-5: Phase7最終監査（読み取り専用）。Architecture Contract・Dependency Ruleとの矛盾がないことを確認。
+- Task16-6: Document Synchronization。監査結果を`docs/api/`・READMEへ反映。
+- Task17-0: Composition Root統合設計を確定（[`docs/phase7-integration-design.md`](docs/phase7-integration-design.md)）。加算的統合（既存`build_*`関数のシグネチャ不変）を方針とする。
+- Task17-1: `cli/bootstrap.py`へ`build_fetch_client()`/`build_ftp_client()`/`build_job_orchestrator()`を追加し、`fetch/`・`ftp/`・`services/`（`JobOrchestrator`）をComposition Rootへ配線。
+- Task17-2: `fetch-stage`/`run-workflow`サブコマンドをCLIへ追加（`cli/app.py`, `cli/commands.py`）。`JobOrchestrator`をProtocol型としてのみ呼び出す。
+- Task17-3: `Scheduler`を実装（`services/scheduler.py`の`DefaultScheduler`）。`JobOrchestrator`のみに依存し、`trigger_now(job_type)`/`list_upcoming()`を提供。周期表現は起点時刻`anchor`＋固定間隔`interval`によるcron式非依存の単純モデル。
+- Task17-4: `schedule-now`/`list-schedule`サブコマンドをCLIへ追加。`cli/bootstrap.py`へ`build_scheduler()`を追加し、`Scheduler`をComposition Rootへ配線。
+- Task17-5: Phase7最終監査（[`docs/reports/phase7-final-audit.md`](docs/reports/phase7-final-audit.md)）。循環依存不在・Composition Root唯一性・`Scheduler`が`JobOrchestrator`のみに依存すること・CLIのProtocol経由利用・Public API後方互換性を確認。`docs/api/package-design.md`・`docs/api/dependency-rule.md`・`docs/api/interfaces.md`・README.md・`RELEASE_STATUS.md`をCLI統合完了後の状態に同期。
+- Task17-6: Phase7 Closeout。`RELEASE_STATUS.md`のPhase7を正式にCompleted化（v1.0.0 Release Candidate判定は維持）。Phase8開始前の残課題（`FtpSettings`実装・`Scheduler`永続化・自動実行経路・`release.yml`・Production FTP接続）を整理。バージョン管理は`pyproject.toml`（[ADR-0001](docs/adr/0001-python-packaging.md)・[ADR-0023](docs/adr/0023-parser-versioning-policy.md)）に一本化されたままとし、新たな`VERSION`ファイル等の並行するバージョン情報源は導入しない。
 
 ## Phase6 — v1.0.0 Release Candidate
 
