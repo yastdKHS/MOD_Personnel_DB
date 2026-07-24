@@ -21,6 +21,7 @@ from mod_personnel_db.cli.commands import (
     export_since_command,
     fetch_stage_command,
     init_db_command,
+    list_schedule_command,
     review_approve_command,
     review_list_command,
     review_reject_command,
@@ -28,19 +29,22 @@ from mod_personnel_db.cli.commands import (
     run_job_command,
     run_pending_command,
     run_workflow_command,
+    schedule_now_command,
     version_command,
 )
 from mod_personnel_db.cli.exceptions import CliCommandError
 from mod_personnel_db.models import (
     ExportFormat,
     GoldRecord,
+    JobId,
     LearningRecord,
     LearningRecordId,
     PdfId,
 )
-from mod_personnel_db.services import WorkflowResult
+from mod_personnel_db.services import RUN_PENDING_JOB_TYPE, WorkflowResult
 
 _EXPORT_FORMATS = ("csv", "parquet", "json")
+_SCHEDULER_JOB_TYPES = (RUN_PENDING_JOB_TYPE,)
 
 COMMANDS = (
     "init-db",
@@ -51,13 +55,16 @@ COMMANDS = (
     "export",
     "fetch-stage",
     "run-workflow",
+    "schedule-now",
+    "list-schedule",
     "help",
 )
 
 
 def build_parser() -> argparse.ArgumentParser:
-    """9コマンド（init-db/run-pending/run-job/version/review/export/
-    fetch-stage/run-workflow/help）を持つparserを構築する。
+    """11コマンド（init-db/run-pending/run-job/version/review/export/
+    fetch-stage/run-workflow/schedule-now/list-schedule/help）を持つparserを
+    構築する。
     """
     parser = argparse.ArgumentParser(prog="mod-personnel-db")
     parser.add_argument("--db-path", help="SQLiteデータベースファイルのパス")
@@ -75,8 +82,23 @@ def build_parser() -> argparse.ArgumentParser:
     _add_export_subparser(subparsers)
     _add_fetch_stage_subparser(subparsers)
     _add_run_workflow_subparser(subparsers)
+    _add_schedule_now_subparser(subparsers)
+    subparsers.add_parser(
+        "list-schedule", help="登録済み周期実行対象の次回実行予定を表示する（Scheduler経由）"
+    )
     subparsers.add_parser("help", help="利用可能コマンド一覧を表示する")
     return parser
+
+
+def _add_schedule_now_subparser(
+    subparsers: "argparse._SubParsersAction[argparse.ArgumentParser]",
+) -> None:
+    schedule_now_parser = subparsers.add_parser(
+        "schedule-now", help="指定したjob_typeを即座に実行する（Scheduler経由）"
+    )
+    schedule_now_parser.add_argument(
+        "job_type", choices=_SCHEDULER_JOB_TYPES, help="即座に実行するjob_type"
+    )
 
 
 def _add_fetch_stage_subparser(
@@ -230,6 +252,16 @@ def _format_workflow_result(result: WorkflowResult) -> str:
     return "\n".join(lines)
 
 
+def _format_schedule_now_result(job_id: JobId) -> str:
+    return f"triggered job: id={int(job_id)}"
+
+
+def _format_list_schedule_result(upcoming: tuple[str, ...]) -> str:
+    if not upcoming:
+        return "0 upcoming schedule(s)"
+    return "\n".join([f"{len(upcoming)} upcoming schedule(s):", *upcoming])
+
+
 def _dispatch_review(args: argparse.Namespace, settings: CompositionSettings) -> str:
     action = args.review_action
     if action == "list":
@@ -274,6 +306,26 @@ def _dispatch_orchestrator(
     return _format_workflow_result(workflow_result)
 
 
+def _dispatch_scheduler(
+    command: str, args: argparse.Namespace, settings: CompositionSettings
+) -> str:
+    if command == "schedule-now":
+        job_id = schedule_now_command(settings, args.job_type)
+        return _format_schedule_now_result(job_id)
+    upcoming = list_schedule_command(settings)
+    return _format_list_schedule_result(upcoming)
+
+
+def _dispatch_service(command: str, args: argparse.Namespace, settings: CompositionSettings) -> str:
+    """`JobOrchestrator`/`Scheduler`経由のコマンド4種をまとめて振り分ける
+    （`_dispatch`の分岐数を規律上の上限内に収めるための集約、
+    `_dispatch_orchestrator`/`_dispatch_scheduler`自体の責務は変更しない）。
+    """
+    if command in ("fetch-stage", "run-workflow"):
+        return _dispatch_orchestrator(command, args, settings)
+    return _dispatch_scheduler(command, args, settings)
+
+
 def _dispatch(command: str, args: argparse.Namespace, settings: CompositionSettings) -> str:
     if command == "init-db":
         init_db_command(settings)
@@ -290,8 +342,8 @@ def _dispatch(command: str, args: argparse.Namespace, settings: CompositionSetti
         message = _dispatch_review(args, settings)
     elif command == "export":
         message = _dispatch_export(args, settings)
-    elif command in ("fetch-stage", "run-workflow"):
-        message = _dispatch_orchestrator(command, args, settings)
+    elif command in ("fetch-stage", "run-workflow", "schedule-now", "list-schedule"):
+        message = _dispatch_service(command, args, settings)
     else:
         raise CliCommandError(f"unknown command: {command}")
     return message

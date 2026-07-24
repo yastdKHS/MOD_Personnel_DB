@@ -54,11 +54,17 @@ Phase6 Task14-5以降`config.AppSettings`（Pydantic Settings、ADR-0028）の
 等の既存公開関数のシグネチャはこの統合によって変更しない（加算的統合）。
 `build_feature_store()`は`FeatureStore`を生成するが、`JobRunner`の
 コンストラクタ拡張（別途新規ADRを前提とする将来タスク）が未実装であるため、
-現時点ではどこからも呼び出されない未使用のBuilderとして提供する。新規CLI
-サブコマンドの追加は本Taskの対象外である。
+現時点ではどこからも呼び出されない未使用のBuilderとして提供する。
+
+**Phase7統合Step4（Task17-4）**: `build_scheduler()`を追加し、`Scheduler`
+（`services/scheduler.py`のDefaultScheduler、Task17-3実装済み）の生成を
+`JobOrchestrator`・`FetchClient`・`FTPClient`・`DefaultJobOrchestrator`と
+同じくComposition Root（本モジュール）に一本化する。`cli/commands.py`は
+本関数を呼び出すのみで、`DefaultScheduler`を自ら生成しない。
 """
 
 import sqlite3
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -91,7 +97,13 @@ from mod_personnel_db.repositories.sqlite import (
     connect,
 )
 from mod_personnel_db.review.service import RepositoryReviewService
-from mod_personnel_db.services import DefaultJobOrchestrator, OrchestratorDependencies
+from mod_personnel_db.services import (
+    DefaultJobOrchestrator,
+    DefaultScheduler,
+    JobOrchestrator,
+    JobSchedule,
+    OrchestratorDependencies,
+)
 
 #: 合成ルートが依存生成に必要とする設定値の型。Phase6 Task14-5以降
 #: `config.AppSettings`（Pydantic Settings、ADR-0028）の別名であり、
@@ -327,6 +339,21 @@ def build_job_orchestrator(
     )
 
 
+def build_scheduler(
+    orchestrator: JobOrchestrator,
+    schedules: tuple[JobSchedule, ...],
+    clock: Callable[[], datetime],
+) -> DefaultScheduler:
+    """Phase7 Task17-4: `Scheduler`を生成する。
+
+    順序10（`build_job_orchestrator()`）が構築済みの`JobOrchestrator`・
+    呼び出し元が指定する周期実行対象一覧・現在時刻取得用`clock`を個別に
+    受け取るのみであり、本関数自身は新たな具象実装を生成しない（Constructor
+    Injectionのみで依存を解決する）。
+    """
+    return DefaultScheduler(orchestrator, schedules, clock)
+
+
 __all__ = [
     "Application",
     "CompositionSettings",
@@ -341,6 +368,7 @@ __all__ = [
     "build_knowledge_service",
     "build_learning_service",
     "build_review_service",
+    "build_scheduler",
     "build_settings",
     "build_sqlite_repositories",
 ]

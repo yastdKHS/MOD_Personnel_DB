@@ -1,5 +1,6 @@
 import ast
 from collections.abc import Callable
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -30,7 +31,12 @@ from mod_personnel_db.repositories.sqlite import (
 )
 from mod_personnel_db.review import ReviewService
 from mod_personnel_db.review.service import RepositoryReviewService
-from mod_personnel_db.services import DefaultJobOrchestrator
+from mod_personnel_db.services import (
+    RUN_PENDING_JOB_TYPE,
+    DefaultJobOrchestrator,
+    DefaultScheduler,
+    JobSchedule,
+)
 
 
 def test_build_sqlite_repositories_creates_seven_concrete_instances(
@@ -268,6 +274,7 @@ _FORBIDDEN_PHASE7_CONSTRUCTOR_CALLS = {
     "HTTPFetchClient",
     "StandardFTPClient",
     "DefaultJobOrchestrator",
+    "DefaultScheduler",
 }
 
 
@@ -313,3 +320,52 @@ def test_build_job_orchestrator_does_not_construct_new_types_in_body() -> None:
         if isinstance(n, ast.Call) and isinstance(n.func, ast.Name)
     }
     assert called_names == {"DefaultJobOrchestrator", "OrchestratorDependencies"}
+
+
+# --- Phase7統合Step4（Task17-4）: build_scheduler ---
+
+
+def test_build_scheduler_wires_dependencies_via_constructor_injection(
+    settings: CompositionSettings,
+) -> None:
+    """`build_scheduler()`は呼び出し元が渡した`JobOrchestrator`・スケジュール一覧・
+    `clock`を`DefaultScheduler`へ束ねるのみであり、新たな具象実装を生成しない
+    （Constructor Injectionのみ）。
+    """
+    connection = connect(settings.db_path)
+    repositories = bootstrap.build_sqlite_repositories(connection)
+    application = bootstrap.build_application(settings)
+    fetch_client = bootstrap.build_fetch_client()
+    ftp_client = bootstrap.build_ftp_client(settings)
+    orchestrator = bootstrap.build_job_orchestrator(
+        application, repositories, fetch_client, ftp_client
+    )
+    anchor = datetime(2026, 1, 1, tzinfo=UTC)
+    schedule = JobSchedule(
+        job_type=RUN_PENDING_JOB_TYPE, interval=timedelta(hours=6), anchor=anchor
+    )
+    fixed_now = anchor + timedelta(hours=7)
+
+    scheduler = bootstrap.build_scheduler(orchestrator, (schedule,), lambda: fixed_now)
+
+    assert isinstance(scheduler, DefaultScheduler)
+    assert scheduler.list_upcoming() == (f"{RUN_PENDING_JOB_TYPE} at 2026-01-01T12:00:00+00:00",)
+
+
+def test_build_scheduler_does_not_construct_new_types_in_body() -> None:
+    """`build_scheduler()`の本体は`DefaultScheduler(...)`の呼び出しのみであり、
+    他の関数呼び出し（＝新たな具象生成）を含まないことをASTで確認する。
+    """
+    source_path = Path(bootstrap.__file__)
+    tree = ast.parse(source_path.read_text(encoding="utf-8"))
+    func_node = next(
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.FunctionDef) and node.name == "build_scheduler"
+    )
+    called_names = {
+        n.func.id
+        for n in ast.walk(func_node)
+        if isinstance(n, ast.Call) and isinstance(n.func, ast.Name)
+    }
+    assert called_names == {"DefaultScheduler"}
