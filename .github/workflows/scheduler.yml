@@ -1,0 +1,73 @@
+# Scheduler: 定期実行によるSchedulerの起動
+#
+# 設計方針: docs/adr/0019-workflow-orchestration.md（Workflow Orchestration戦略）,
+#          docs/adr/0025-deployment-strategy.md（デプロイメント戦略、バッチ実行モデル）,
+#          docs/phase8-integration-design.md#3-scheduler自動起動設計（Task18-0）
+#
+# 既存CLI（`python -m mod_personnel_db.cli ... schedule-now run_pending_pipeline`）を
+# 定期的に起動する。`Scheduler`・`JobOrchestrator`等のPythonコードを本ワークフローが
+# 直接importすることはなく、常にCLIコマンド経由でのみ実行する（Composition Root
+# （`cli/bootstrap.py`）を経由した既存の依存解決をそのまま利用する）。
+#
+# 常駐プロセスは持たない。1回の起動で1回の`trigger_now()`呼び出しを行い、
+# 処理完了後にプロセス・ランナーとも終了する（ADR-0025のバッチ実行モデル）。
+#
+# `concurrency`により、cron起動と`workflow_dispatch`による手動起動が重なった場合の
+# 同時書き込みを防ぐ（ADR-0025が要求するワークフロー側の排他制御）。
+#
+# 現時点では`schedule-now`が受け付ける`job_type`は`run_pending_pipeline`のみ
+# （`services/scheduler.py`の`RUN_PENDING_JOB_TYPE`）であり、Fetch・Export・FTP
+# Publishを含む`run_workflow`系の自動化は対象外（docs/phase8-integration-design.md
+# #4-production-workflow設計の未解決事項を参照）。
+#
+# `cli/app.py::main()`は現時点で`NoPendingJobError`（処理対象PDFが0件、
+# docs/phase8-integration-design.md#34-例外処理が指摘済みの既知のギャップ）を
+# 専用ハンドリングせず、Pythonの未処理例外として終了コード1で終了する。
+# `src/`の変更は本Taskのscope外のため、ワークフロー側で出力を判定し、
+# 「処理対象PDFが0件」という正常系の結果のみをジョブ成功として扱う
+# （それ以外の失敗は従来どおりジョブ失敗のまま伝播させる）。
+
+name: Scheduler
+
+on:
+  schedule:
+    - cron: "45 8 * * *" # 毎日17:45 JST（UTC+9） = 08:45 UTC
+  workflow_dispatch:
+
+concurrency:
+  group: mod-personnel-db-scheduler
+  cancel-in-progress: false
+
+jobs:
+  schedule-now:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install package
+        run: pip install -e .
+
+      - name: Run schedule-now via CLI
+        env:
+          MOD_PERSONNEL_DB_DB_PATH: ${{ secrets.MOD_PERSONNEL_DB_DB_PATH }}
+          MOD_PERSONNEL_DB_KNOWLEDGE_ROOT: ${{ secrets.MOD_PERSONNEL_DB_KNOWLEDGE_ROOT }}
+          MOD_PERSONNEL_DB_LAYOUTS_ROOT: ${{ secrets.MOD_PERSONNEL_DB_LAYOUTS_ROOT }}
+        run: |
+          set +e
+          output=$(python -m mod_personnel_db.cli \
+            --db-path "$MOD_PERSONNEL_DB_DB_PATH" \
+            --knowledge-root "$MOD_PERSONNEL_DB_KNOWLEDGE_ROOT" \
+            --layouts-root "$MOD_PERSONNEL_DB_LAYOUTS_ROOT" \
+            schedule-now run_pending_pipeline 2>&1)
+          exit_code=$?
+          echo "$output"
+          if [ "$exit_code" -ne 0 ] && echo "$output" | grep -q "NoPendingJobError"; then
+            echo "no pending PDF to process (normal outcome, not treated as a failure)"
+            exit 0
+          fi
+          exit "$exit_code"

@@ -238,6 +238,30 @@ pytest --cov
 
 ADR-0023が定める「タグ付与をトリガーに`parser_versions`テーブルへ新しい行を自動記録する」処理、および[`docs/operations/release.md`](docs/operations/release.md#release-flow)のRelease Flowが定めるstaging/production環境分離・データ公開（Human Review後のExport/FTP送信）は、`ftp/`・`fetch/`パッケージ自体はPhase7で実装済みでありCLI経由（`fetch-stage`/`run-workflow --remote-path`）で手動実行可能になったものの、対応する自動化（バージョン記録・環境分離・CI/CDワークフローからの定期呼び出し）が未実装のため、現時点の`release.yml`には含まれない。詳細は[`docs/operations/release.md`](docs/operations/release.md#release-flow)の実装状況注記を参照。
 
+## Scheduler運用（GitHub Actions）
+
+[`.github/workflows/scheduler.yml`](.github/workflows/scheduler.yml)（Phase8 Task18-3）が、既存CLIの`schedule-now run_pending_pipeline`コマンドを定期的に起動する。`Scheduler`・`JobOrchestrator`等のPythonコードをワークフローが直接importすることはなく、常にCLIコマンド経由でのみ実行する。運用フロー全体（GitHub Actions → `schedule-now` → `Scheduler` → `JobOrchestrator`）は[`docs/operations/release.md`](docs/operations/release.md#scheduler運用フローgithub-actions--schedule-now--scheduler--joborchestrator)を参照。
+
+### 手動実行方法
+
+GitHub Actions画面の「Actions」タブ →「Scheduler」ワークフロー →「Run workflow」（`workflow_dispatch`）から、cronを待たずに即座に実行できる。
+
+### Secrets一覧
+
+以下3件をリポジトリ（またはEnvironment）のGitHub Secretsとして登録する。いずれも`schedule-now`が要求する`--db-path`/`--knowledge-root`/`--layouts-root`（`help`コマンド以外の全コマンド共通の必須オプション、上記「CLI使用方法」参照）に対応する。
+
+| Secret名 | 対応するCLIオプション |
+|---|---|
+| `MOD_PERSONNEL_DB_DB_PATH` | `--db-path` |
+| `MOD_PERSONNEL_DB_KNOWLEDGE_ROOT` | `--knowledge-root` |
+| `MOD_PERSONNEL_DB_LAYOUTS_ROOT` | `--layouts-root` |
+
+FTP接続情報（[`FtpSettings`](docs/phase8-integration-design.md#2-ftpsettings導入設計)）は`schedule-now`（`run_pending_pipeline`のみ）が呼び出す経路では使用しないため、本ワークフローには含めない。
+
+### cron運用方法
+
+`schedule: cron: "45 8 * * *"`（UTC）= 毎日17:45 JST（UTC+9）に自動起動する。`concurrency`グループ（`mod-personnel-db-scheduler`）により、cron起動と手動起動が重なった場合でも同時実行はされず、先行する実行の完了を待って後続が実行される（[ADR-0025](docs/adr/0025-deployment-strategy.md)が要求するワークフロー側の排他制御）。cronの一時停止・恒久的な廃止の手順は[`docs/operations/release.md`](docs/operations/release.md#maintenance-window)を参照。
+
 ## 既知の制限事項（v1.0 Release Candidate）
 
 v1.0.0 Release Candidateとしての最終監査（Phase6 Task15-0、Phase7完了時点は[`docs/reports/phase7-final-audit.md`](docs/reports/phase7-final-audit.md)、Task17-5）で確認された、主要な既知の制限事項を示す。完全な一覧・リリース判定は[`RELEASE_STATUS.md`](RELEASE_STATUS.md)のKnown Limitations/Release Decisionを正とする。
