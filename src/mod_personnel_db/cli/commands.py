@@ -25,18 +25,21 @@ architecture-contract.md 保証15）。
 `bootstrap.build_sqlite_repositories()`経由で組み立てるために、
 `repositories.sqlite.connect()`のみを直接importする（他の具象Repository
 クラスは一切importしない）。`connect()`は`bootstrap.py`の`__all__`に
-含まれず`mypy --strict`のno-implicit-reexport制約で参照できないため、
-かつ本Taskは`bootstrap.py`の変更を禁止されているため、この1関数のみ
-`repositories.sqlite`から直接importする。本モジュールの他のいかなる箇所も
-Repository具象クラス・`sqlite3`を直接扱わない。
+含まれず`mypy --strict`のno-implicit-reexport制約で参照できないため、この
+1関数のみ`repositories.sqlite`から直接importする。本モジュールの他のいかなる
+箇所もRepository具象クラス・`sqlite3`を直接扱わない。
 
-`Scheduler`（cron・timer・daemon等の定期実行機構）は本Taskの対象外であり
-追加しない。`FeatureStore`（`build_feature_store()`）も呼び出さない
-（`JobRunner`への配線が未実装のため、Task17-1と同様に未使用のまま据え置く）。
+**Phase7統合Step4（Task17-4）**: `schedule_now_command`/`list_schedule_command`は
+`bootstrap.build_scheduler()`（Task17-4で追加）が返す`Scheduler`をProtocol型
+としてのみ呼び出す。`DefaultScheduler`は本モジュールが直接生成せず、
+`bootstrap.build_scheduler()`経由でのみ取得する。両コマンドとも
+`JobOrchestrator`を直接呼び出すことはない（`Scheduler`経由のみ）。
+`FeatureStore`（`build_feature_store()`）は引き続き呼び出さない（`JobRunner`
+への配線が未実装のため、Task17-1と同様に未使用のまま据え置く）。
 """
 
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 
 from mod_personnel_db.cli.bootstrap import (
     CompositionSettings,
@@ -45,6 +48,7 @@ from mod_personnel_db.cli.bootstrap import (
     build_ftp_client,
     build_job_orchestrator,
     build_job_runner,
+    build_scheduler,
     build_sqlite_repositories,
 )
 from mod_personnel_db.cli.exceptions import CliCommandError
@@ -53,6 +57,7 @@ from mod_personnel_db.fetch import FetchRequest
 from mod_personnel_db.models import (
     ExportFormat,
     GoldRecord,
+    JobId,
     LearningRecord,
     LearningRecordId,
     ParserVersion,
@@ -60,7 +65,7 @@ from mod_personnel_db.models import (
 )
 from mod_personnel_db.pipeline.result import PipelineResult
 from mod_personnel_db.repositories.sqlite import connect
-from mod_personnel_db.services import JobOrchestrator, WorkflowResult
+from mod_personnel_db.services import JobOrchestrator, Scheduler, WorkflowResult
 
 
 def init_db_command(settings: CompositionSettings) -> None:
@@ -206,6 +211,36 @@ def run_workflow_command(
     return orchestrator.run_workflow([], export_format, export_destination, remote_path=remote_path)
 
 
+def _build_scheduler(settings: CompositionSettings) -> Scheduler:
+    """`schedule-now`/`list-schedule`コマンド用に`Scheduler`を取得する。
+
+    `_build_job_orchestrator()`が返す`JobOrchestrator`を`bootstrap.build_scheduler()`
+    へ渡すのみであり、本モジュールが`DefaultScheduler`等の具象実装を直接生成する
+    ことはない。周期実行対象（`JobSchedule`）はCLIからはまだ設定できないため
+    空タプルとする（`list-schedule`は現時点で常に空を返す。`schedule-now`は
+    登録済みの周期定義に依存せず動作するため影響を受けない）。現在時刻は
+    `datetime.now(UTC)`をそのまま`clock`として注入する。
+    """
+    orchestrator = _build_job_orchestrator(settings)
+    return build_scheduler(orchestrator, (), lambda: datetime.now(UTC))
+
+
+def schedule_now_command(settings: CompositionSettings, job_type: str) -> JobId:
+    """`schedule-now`コマンド。`Scheduler.trigger_now()`のみを呼び出す
+    （`JobOrchestrator`を直接呼び出すことはない）。
+    """
+    scheduler = _build_scheduler(settings)
+    return scheduler.trigger_now(job_type)
+
+
+def list_schedule_command(settings: CompositionSettings) -> tuple[str, ...]:
+    """`list-schedule`コマンド。`Scheduler.list_upcoming()`のみを呼び出す
+    （`JobOrchestrator`を直接呼び出すことはない）。
+    """
+    scheduler = _build_scheduler(settings)
+    return scheduler.list_upcoming()
+
+
 __all__ = [
     "VersionInfo",
     "export_all_command",
@@ -213,6 +248,7 @@ __all__ = [
     "export_since_command",
     "fetch_stage_command",
     "init_db_command",
+    "list_schedule_command",
     "review_approve_command",
     "review_list_command",
     "review_reject_command",
@@ -220,5 +256,6 @@ __all__ = [
     "run_job_command",
     "run_pending_command",
     "run_workflow_command",
+    "schedule_now_command",
     "version_command",
 ]
