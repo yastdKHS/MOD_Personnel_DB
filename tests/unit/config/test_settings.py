@@ -43,11 +43,16 @@ def test_app_settings_uses_base_settings() -> None:
 
 
 def test_app_settings_field_names_match_composition_settings_equivalent() -> None:
+    """既存4フィールドに、Phase8 Task18-1で追加した`ftp`（既定`None`、
+    未設定時は旧`CompositionSettings`と完全に等価）を加えた構成が正である。
+    `ftp`の詳細な挙動は`tests/unit/config/test_ftp_settings.py`を参照。
+    """
     assert set(AppSettings.model_fields) == {
         "db_path",
         "knowledge_root",
         "layouts_root",
         "parser_code_version",
+        "ftp",
     }
 
 
@@ -162,7 +167,12 @@ def test_app_settings_is_frozen(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_config_package_depends_only_on_utils_or_external() -> None:
-    """`config/`は`utils/`以外の自パッケージに依存しない（docs/api/package-design.md#config）。"""
+    """`config/`は`utils/`以外の自パッケージに依存しない（docs/api/package-design.md#config）。
+
+    `config/ftp.py`（Phase8 Task18-1、`FtpSettings`）への自パッケージ内部参照
+    （`config/__init__.py`・`config/settings.py`から）は、`config/`自身への
+    依存であり本制約の対象外として許可する。
+    """
     for module in (config_package, inspect.getmodule(AppSettings)):
         assert module is not None
         tree = ast.parse(inspect.getsource(module))
@@ -171,7 +181,8 @@ def test_config_package_depends_only_on_utils_or_external() -> None:
                 continue
             if not node.module.startswith("mod_personnel_db"):
                 continue
-            assert node.module == "mod_personnel_db.config.settings" or (
-                node.module == "mod_personnel_db.utils"
+            assert (
+                node.module in {"mod_personnel_db.config.settings", "mod_personnel_db.config.ftp"}
+                or node.module == "mod_personnel_db.utils"
                 or node.module.startswith("mod_personnel_db.utils.")
             )

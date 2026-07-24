@@ -4,10 +4,12 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
+from pydantic import SecretStr
 
 import mod_personnel_db
 from mod_personnel_db.cli import bootstrap
 from mod_personnel_db.cli.bootstrap import Application, CompositionSettings, SqliteRepositories
+from mod_personnel_db.config import FtpSettings
 from mod_personnel_db.export import ExportService
 from mod_personnel_db.export.service import RepositoryExportService
 from mod_personnel_db.features import DefaultFeatureStore
@@ -218,6 +220,52 @@ def test_build_ftp_client_returns_standard_ftp_client(settings: CompositionSetti
     assert isinstance(ftp_client, StandardFTPClient)
     ftp_protocol: FTPClient = ftp_client
     assert ftp_protocol is ftp_client
+
+
+def test_build_ftp_client_falls_back_to_placeholder_when_ftp_settings_unset(
+    settings: CompositionSettings,
+) -> None:
+    """`settings.ftp`が`None`（Task18-1既定のfixtureはFTP環境変数を持たない）の場合、
+    Task17-1時点と同じ`host=""`のプレースホルダを返し、FTPを利用しない既存コマンド
+    （`fetch-stage`等）の後方互換性を維持する。
+    """
+    assert settings.ftp is None
+
+    ftp_client = bootstrap.build_ftp_client(settings)
+
+    assert isinstance(ftp_client, StandardFTPClient)
+    assert ftp_client._config.host == ""
+
+
+def test_build_ftp_client_uses_app_settings_ftp_when_configured(
+    settings: CompositionSettings,
+) -> None:
+    """`settings.ftp`（`FtpSettings`）が設定されている場合、`build_ftp_client()`は
+    プレースホルダではなくその実接続情報を`FTPConnectionConfig`へ反映する
+    （レビュー項目「プレースホルダは禁止」）。
+    """
+    configured_settings = settings.model_copy(
+        update={
+            "ftp": FtpSettings(
+                host="ftp.example.com",
+                port=2121,
+                username="publisher",
+                password=SecretStr("s3cret"),
+                remote_directory="/public",
+                timeout=45.0,
+            )
+        }
+    )
+
+    ftp_client = bootstrap.build_ftp_client(configured_settings)
+
+    assert isinstance(ftp_client, StandardFTPClient)
+    config = ftp_client._config
+    assert config.host == "ftp.example.com"
+    assert config.port == 2121
+    assert config.username == "publisher"
+    assert config.password == "s3cret"
+    assert config.timeout == 45.0
 
 
 def test_build_feature_store_returns_default_feature_store() -> None:

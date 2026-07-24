@@ -285,21 +285,32 @@ def build_fetch_client() -> HTTPFetchClient:
 
 
 def build_ftp_client(settings: CompositionSettings) -> StandardFTPClient:
-    """生成順序9（Phase7 Task17-0/17-1）: `FTPClient`を生成する。
+    """生成順序9（Phase7 Task17-0/17-1、Phase8 Task18-1で更新）: `FTPClient`を生成する。
 
     `StandardFTPClient`（`ftplib`ベース）のみを生成する。テスト用の
     `InMemoryFTPClient`は合成ルートでは生成しない。
 
-    TODO(Phase7統合、`config/`拡張待ち): `AppSettings`は現時点でFTP接続情報
-    （host/port/username/password等）を持たない。`docs/configuration.md`が
-    設計する`FtpSettings`（`SecretStr`によるパスワード秘匿を含むネスト設定）
-    が`config/`へ追加された後、`settings.ftp`から実接続情報を取得するよう
-    本関数を更新する（docs/phase7-integration-design.md#6-ftpclient生成位置）。
-    それまでは`settings`引数はTask17-0が確定したシグネチャ整合のためにのみ
-    保持し、内部では使用しない。
+    `settings.ftp`（`FtpSettings`、`config/ftp.py`、Task18-1で追加）が
+    設定されている場合はその接続情報（host/port/username/password/timeout）を
+    `FTPConnectionConfig`へそのまま渡す。`settings.ftp`が`None`（FTP関連の
+    環境変数が一切指定されていない、`dev`/`test`等の既定状態）の場合は、
+    Task17-1時点のプレースホルダと同じ`FTPConnectionConfig(host="")`を返し、
+    FTPを利用しない既存コマンド（`fetch-stage`・`schedule-now`・
+    `run-workflow`（`--remote-path`未指定）等）の後方互換性を維持する
+    （docs/phase8-integration-design.md#25-build_ftp_client更新方法）。
     """
-    del settings
-    return StandardFTPClient(FTPConnectionConfig(host=""))
+    ftp_settings = settings.ftp
+    if ftp_settings is None:
+        return StandardFTPClient(FTPConnectionConfig(host=""))
+    return StandardFTPClient(
+        FTPConnectionConfig(
+            host=ftp_settings.host,
+            port=ftp_settings.port,
+            username=ftp_settings.username,
+            password=ftp_settings.password.get_secret_value(),
+            timeout=ftp_settings.timeout,
+        )
+    )
 
 
 def build_feature_store() -> DefaultFeatureStore:
