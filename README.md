@@ -1,6 +1,6 @@
 # MOD Personnel DB（防衛省人事発令データベース）
 
-> ステータス: **v1.0.0 Release Candidate（Phase7完了）**。10年以上の運用に耐える設計corpus（ディレクトリ構成・規約・46本のADR・`docs/`配下の全設計文書）が[`docs/design-freeze.md`](docs/design-freeze.md)のレビューを経て確定し、[`docs/implementation.md`](docs/implementation.md)以下のImplementation Standardsに従って実装した。現時点で、中核パイプライン6段階（Document Analyzer〜Validator）・Repository層（SQLite実装）・JobRunner（Coordinator）・KnowledgeService/LearningService/ReviewService/ExportService（JSON/CSV/Parquet・完全性情報を含む）・`config/`（Pydantic Settings）・Composition Root（`cli/`）・CLIエントリポイント・GitHub Actions 3ワークフロー（`ci.yml`/`release.yml`/`nightly.yml`）に加え、Phase7で`ftp/`（FTPClient）・`features/`（FeatureStore）・`fetch/`（FetchClient）・`services/`（JobOrchestrator）の4パッケージが実装済みである。ただしこれら4パッケージはComposition Root（`cli/`）へ未配線であり、CLIから利用できない（詳細は「アーキテクチャ概要」・[`RELEASE_STATUS.md`](RELEASE_STATUS.md)を参照）。Phase5時点の詳細な実装状況の監査結果は[`docs/reports/phase5-final-audit.md`](docs/reports/phase5-final-audit.md)を、Phase7完了時点のリリース判定（Release Decision/Known Limitations/Remaining Work等）は[`RELEASE_STATUS.md`](RELEASE_STATUS.md)を参照。まだGitタグは打たれていない（`pyproject.toml`の`version`は`0.0.0`のまま）。タグ運用は「[リリースタグ運用](#リリースタグ運用)」を参照。
+> ステータス: **v1.0.0 Release Candidate（Phase7完了、CLI統合済み）**。10年以上の運用に耐える設計corpus（ディレクトリ構成・規約・46本のADR・`docs/`配下の全設計文書）が[`docs/design-freeze.md`](docs/design-freeze.md)のレビューを経て確定し、[`docs/implementation.md`](docs/implementation.md)以下のImplementation Standardsに従って実装した。現時点で、中核パイプライン6段階（Document Analyzer〜Validator）・Repository層（SQLite実装）・JobRunner（Coordinator）・KnowledgeService/LearningService/ReviewService/ExportService（JSON/CSV/Parquet・完全性情報を含む）・`config/`（Pydantic Settings）・Composition Root（`cli/`）・CLIエントリポイント・GitHub Actions 3ワークフロー（`ci.yml`/`release.yml`/`nightly.yml`）に加え、Phase7で`ftp/`（FTPClient）・`features/`（FeatureStore）・`fetch/`（FetchClient）・`services/`（JobOrchestrator・Scheduler）の4パッケージが実装済みである。このうち`ftp/`・`fetch/`・`services/`はTask17-1〜17-4でComposition Root（`cli/`）へ配線され、`fetch-stage`/`run-workflow`/`schedule-now`/`list-schedule`の4コマンドとしてCLIから利用できる。`features/`のみ、実装済みだが`JobRunner`への統合が未実装のため未接続のまま残る（詳細は「アーキテクチャ概要」・[`RELEASE_STATUS.md`](RELEASE_STATUS.md)を参照）。Phase5時点の詳細な実装状況の監査結果は[`docs/reports/phase5-final-audit.md`](docs/reports/phase5-final-audit.md)を、Phase7完了時点の監査結果は[`docs/reports/phase7-final-audit.md`](docs/reports/phase7-final-audit.md)を、リリース判定（Release Decision/Known Limitations/Remaining Work等）は[`RELEASE_STATUS.md`](RELEASE_STATUS.md)を参照。まだGitタグは打たれていない（`pyproject.toml`の`version`は`0.0.0`のまま）。タグ運用は「[リリースタグ運用](#リリースタグ運用)」を参照。
 
 ## これは何か
 
@@ -39,7 +39,7 @@ Document Analyzer → Layout Detector → Section Parser → Field Extractor →
 - **`knowledge/`・`learning/`**: ドメイン知識（階級名・組織名の表記ゆれ等）とLearning Dataset（誤りの学習資産化、[ADR-0013](docs/adr/0013-learning-dataset-not-correction-log.md)）を管理するサービス。
 - **`review/`・`export/`**: 人手レビューとGold Database読み出しを担うサービス。現時点の実装は、それぞれLearning Dataset固有のレビューとGold Database読み出しに責務を限定した狭い契約であり、[`docs/api/review.md`](docs/api/review.md)・[`docs/api/interfaces.md`](docs/api/interfaces.md)が定めるより広範な設計とは異なる（詳細は[`docs/api/package-design.md`](docs/api/package-design.md)の`review/`・`export/`節を参照）。
 - **`cli/`（Composition Root）**: 上記すべての具象実装を組み立てる唯一の合成ルート（[ADR-0046](docs/adr/0046-composition-root-dependency-injection-contract.md)）であり、かつCLIエントリポイントを兼ねる。
-- **`ftp/`・`features/`・`fetch/`・`services/`（Phase7）**: `ftp/`はFTP/SFTPファイル転送を抽象化する`FTPClient`（`StandardFTPClient`/`InMemoryFTPClient`）、`features/`はConfidence算出等に使う派生特徴量を都度計算する`FeatureStore`、`fetch/`はHTTP経由でのPDF取得に限定した`FetchClient`（`HTTPFetchClient`/`MockFetchClient`）、`services/`は`fetch/`・`ftp/`・`pipeline/`・`review/`・`export/`を横断的に調整するアプリケーションサービス層`JobOrchestrator`（`DefaultJobOrchestrator`）である。いずれもPhase7（Task16-1〜16-4）で実装済みだが、`cli/`（Composition Root）からは一切参照されておらず、CLIコマンドとしては未公開である。`features/`はさらに`pipeline/`（`JobRunner`）からも呼び出されておらず、独立した未接続のパッケージである。これら4パッケージを`cli/`（Composition Root）へ統合するための設計は[`docs/phase7-integration-design.md`](docs/phase7-integration-design.md)（Task17-0）が確定した（実装は未着手）。
+- **`ftp/`・`features/`・`fetch/`・`services/`（Phase7）**: `ftp/`はFTP/SFTPファイル転送を抽象化する`FTPClient`（`StandardFTPClient`/`InMemoryFTPClient`）、`features/`はConfidence算出等に使う派生特徴量を都度計算する`FeatureStore`、`fetch/`はHTTP経由でのPDF取得に限定した`FetchClient`（`HTTPFetchClient`/`MockFetchClient`）、`services/`は`fetch/`・`ftp/`・`pipeline/`・`review/`・`export/`を横断的に調整するアプリケーションサービス層`JobOrchestrator`（`DefaultJobOrchestrator`）、および「いつ`JobOrchestrator`を呼ぶか」の決定にのみ責務を持つ`Scheduler`（`DefaultScheduler`、`JobOrchestrator`のみに依存）である。いずれもPhase7（Task16-1〜16-4）で実装済みであり、このうち`ftp/`・`fetch/`・`services/`はPhase7 Task17-1〜17-4で`cli/`（Composition Root）へ配線され、`fetch-stage`・`run-workflow`・`schedule-now`・`list-schedule`の4コマンドとして公開されている。統合設計は[`docs/phase7-integration-design.md`](docs/phase7-integration-design.md)（Task17-0）、実装は[`docs/reports/phase7-final-audit.md`](docs/reports/phase7-final-audit.md)を参照。`features/`のみ`pipeline/`（`JobRunner`）から呼び出されておらず、独立した未接続のパッケージのまま残る。
 
 パッケージ間の依存方向は[`docs/api/dependency-rule.md`](docs/api/dependency-rule.md)が定め、各パッケージの責務・実装状況は[`docs/api/package-design.md`](docs/api/package-design.md)を正とする。`config/`はPhase6 Task14-5で実装済み（[ADR-0028](docs/adr/0028-pydantic-settings-for-configuration.md)）。
 
@@ -96,11 +96,30 @@ python -m mod_personnel_db.cli --db-path ./mod_personnel.sqlite3 \
 python -m mod_personnel_db.cli --db-path ./mod_personnel.sqlite3 \
   --knowledge-root ./knowledge --layouts-root ./layouts export since 2026-01-01T00:00:00+00:00
 
+# PDFをURLから取得し保存する（JobOrchestrator経由）
+python -m mod_personnel_db.cli --db-path ./mod_personnel.sqlite3 \
+  --knowledge-root ./knowledge --layouts-root ./layouts \
+  fetch-stage https://example.mod.go.jp/order.pdf ./staged/order.pdf 2026-01-01
+
+# Pipeline→Review→Exportを一括実行する（JobOrchestrator経由。Fetchフェーズは対象外）
+python -m mod_personnel_db.cli --db-path ./mod_personnel.sqlite3 \
+  --knowledge-root ./knowledge --layouts-root ./layouts \
+  run-workflow json ./export.json
+
+# 未処理PDFの処理を即座にトリガーする（Scheduler経由、job_typeはrun_pending_pipelineのみ対応）
+python -m mod_personnel_db.cli --db-path ./mod_personnel.sqlite3 \
+  --knowledge-root ./knowledge --layouts-root ./layouts \
+  schedule-now run_pending_pipeline
+
+# 登録済み周期実行対象の次回実行予定を表示する（Scheduler経由。CLIからの周期定義設定は未実装のため現時点では常に0件）
+python -m mod_personnel_db.cli --db-path ./mod_personnel.sqlite3 \
+  --knowledge-root ./knowledge --layouts-root ./layouts list-schedule
+
 # コマンド一覧
 python -m mod_personnel_db.cli help
 ```
 
-`review`・`export`コマンドの現在の責務範囲は上記「アーキテクチャ概要」の注記を参照。
+`review`・`export`コマンドの現在の責務範囲は上記「アーキテクチャ概要」の注記を参照。`fetch-stage`・`run-workflow`はPhase7 Task17-2、`schedule-now`・`list-schedule`はPhase7 Task17-4で追加した（詳細は[`docs/reports/phase7-final-audit.md`](docs/reports/phase7-final-audit.md)を参照）。
 
 ## ディレクトリ構成
 
@@ -148,10 +167,10 @@ python -m mod_personnel_db.cli help
 | `learning/` | `LearningService`（Learning Datasetのライフサイクル管理） |
 | `review/` | `ReviewService`（Learning Datasetの人手レビュー、限定スコープ） |
 | `export/` | `ExportService`（Gold Databaseの読み出し、限定スコープ） |
-| `ftp/` | `FTPClient`（FTP/SFTPファイル転送、Phase7 Task16-1、`cli/`未配線） |
+| `ftp/` | `FTPClient`（FTP/SFTPファイル転送、Phase7 Task16-1、Task17-1で`cli/`配線済み） |
 | `features/` | `FeatureStore`（Confidence派生特徴量の都度計算、Phase7 Task16-2、`pipeline/`未接続） |
-| `fetch/` | `FetchClient`（HTTP経由のPDF取得、Phase7 Task16-3、`cli/`未配線） |
-| `services/` | `JobOrchestrator`（fetch/ftp/pipeline/review/exportの横断調整、Phase7 Task16-4、`cli/`未配線） |
+| `fetch/` | `FetchClient`（HTTP経由のPDF取得、Phase7 Task16-3、Task17-1で`cli/`配線済み） |
+| `services/` | `JobOrchestrator`（fetch/ftp/pipeline/review/exportの横断調整）・`Scheduler`（実行トリガー管理、Phase7 Task16-4、Task17-1/17-4で`cli/`配線済み） |
 | `cli/` | Composition Root（`bootstrap.py`）とCLIエントリポイント（`app.py`, `commands.py`） |
 | `utils/` | ドメイン知識を持たない汎用ヘルパー |
 
@@ -162,9 +181,10 @@ python -m mod_personnel_db.cli help
 - [`docs/constitution.md`](docs/constitution.md) — **Project Constitution**（プロジェクト憲法）。ADR・Architecture Contractを含む全設計文書の最上位に位置する統治文書
 - [`docs/design-freeze.md`](docs/design-freeze.md) — **Design Freeze Review**。全設計領域の横断レビューと設計完了宣言
 - [`docs/reports/phase5-final-audit.md`](docs/reports/phase5-final-audit.md) — **Phase5最終監査レポート**。ADR・Architecture Contract・Dependency Rule・Package Design・Protocol・Composition Root・CLI・Testの整合性監査結果
+- [`docs/reports/phase7-final-audit.md`](docs/reports/phase7-final-audit.md) — **Phase7最終監査レポート**（Task17-5）。`ftp/`・`fetch/`・`features/`・`services/`・`Scheduler`・CLI統合・Composition Root・Dependency Rule・Package Design・Architecture Contract・Public API後方互換性・Release Readinessの監査結果
 - [`RELEASE_STATUS.md`](RELEASE_STATUS.md) — **v1.0.0 Release Candidateリリース判定**。Release Decision・Known Limitations・Remaining Work等
 - [`docs/phase7-implementation-roadmap.md`](docs/phase7-implementation-roadmap.md) — **Phase7 Implementation Roadmap**。`features/`・`fetch/`・`ftp/`・`services/`の設計方針・依存方向・実装順序（Task16-0で設計確定。4パッケージともTask16-1〜16-4で実装済み、実装状況の詳細は[`docs/api/package-design.md`](docs/api/package-design.md)を参照）
-- [`docs/phase7-integration-design.md`](docs/phase7-integration-design.md) — **Phase7 Integration Design**。Phase7実装済み4パッケージをComposition Root（`cli/`）へ統合するための設計（Task17-0で設計確定、実装は未着手）
+- [`docs/phase7-integration-design.md`](docs/phase7-integration-design.md) — **Phase7 Integration Design**。Phase7実装済み4パッケージをComposition Root（`cli/`）へ統合するための設計（Task17-0で設計確定。`ftp/`・`fetch/`・`services/`はTask17-1〜17-4で実装済み、`features/`統合のみ未着手のまま残る）
 - [`docs/implementation.md`](docs/implementation.md) — **Implementation Guide**。実装フェーズの最上位ガイドライン（Constitution → ADR → Architecture Contract → Implementation Guideの順で従う）
 - [`docs/coding-style.md`](docs/coding-style.md) — Coding Style Guide（命名規則・関数長・型ヒント方針・構文選択等）
 - [`docs/testing/test-policy.md`](docs/testing/test-policy.md) — Test Policy（Unit/Integration/Golden/Regression/Performance/Acceptance/Benchmark/Mutation Testの定義）
@@ -210,20 +230,20 @@ mypy --strict src/ tests/
 pytest --cov
 ```
 
-`pyproject.toml`の`[tool.coverage.report]`が定めるCoverage閾値（`fail_under = 80`）を満たす必要がある。Phase6完了時点の実測値は634件成功・Coverage 98.99%（Phase5時点の実測値は`docs/reports/phase5-final-audit.md`のTest Summaryを参照、528件成功時点のスナップショット）。テスト種別ごとの目的・実行タイミング・Coverage目標は[`docs/testing/test-policy.md`](docs/testing/test-policy.md)が定める8種別（Unit/Integration/Golden/Regression/Performance/Acceptance/Benchmark/Mutation）を正とする。Golden Testは`tests/integration/golden/test_golden.py`（Phase6 Task14-1）として実装済み。Regression/Performance/Acceptance/Benchmark Testは未着手である。
+`pyproject.toml`の`[tool.coverage.report]`が定めるCoverage閾値（`fail_under = 80`）を満たす必要がある。Phase7完了時点（Task17-5監査時点）の実測値は816件成功・Coverage 98.98%（Phase6完了時点は634件成功・Coverage 98.99%、Phase5時点の実測値は`docs/reports/phase5-final-audit.md`のTest Summaryを参照、528件成功時点のスナップショット）。テスト種別ごとの目的・実行タイミング・Coverage目標は[`docs/testing/test-policy.md`](docs/testing/test-policy.md)が定める8種別（Unit/Integration/Golden/Regression/Performance/Acceptance/Benchmark/Mutation）を正とする。Golden Testは`tests/integration/golden/test_golden.py`（Phase6 Task14-1）として実装済み。Regression/Performance/Acceptance/Benchmark Testは未着手である。
 
 ## リリースタグ運用
 
 本プロジェクトはまだリリースタグを打っていない（`pyproject.toml`の`version`は`0.0.0`のまま）。最初のリリースタグ`v1.0.0`（SemVer形式、[ADR-0023](docs/adr/0023-parser-versioning-policy.md)）を`main`へ付与すると、[`.github/workflows/release.yml`](.github/workflows/release.yml)（`push: tags: v*`）が起動し、`ci.yml`と同じ品質ゲート（Poetry経由でのruff lint・ruff format check・mypy・pytest）を再実行する（`workflow_dispatch`による手動起動も可能）。
 
-ADR-0023が定める「タグ付与をトリガーに`parser_versions`テーブルへ新しい行を自動記録する」処理、および[`docs/operations/release.md`](docs/operations/release.md#release-flow)のRelease Flowが定めるstaging/production環境分離・データ公開（Human Review後のExport/FTP送信）は、`ftp/`・`fetch/`パッケージ自体はPhase7で実装済みであるものの、対応する自動化（バージョン記録・環境分離・Composition Rootへの配線・CI/CDワークフローからの呼び出し）が未実装のため、現時点の`release.yml`には含まれない。詳細は[`docs/operations/release.md`](docs/operations/release.md#release-flow)の実装状況注記を参照。
+ADR-0023が定める「タグ付与をトリガーに`parser_versions`テーブルへ新しい行を自動記録する」処理、および[`docs/operations/release.md`](docs/operations/release.md#release-flow)のRelease Flowが定めるstaging/production環境分離・データ公開（Human Review後のExport/FTP送信）は、`ftp/`・`fetch/`パッケージ自体はPhase7で実装済みでありCLI経由（`fetch-stage`/`run-workflow --remote-path`）で手動実行可能になったものの、対応する自動化（バージョン記録・環境分離・CI/CDワークフローからの定期呼び出し）が未実装のため、現時点の`release.yml`には含まれない。詳細は[`docs/operations/release.md`](docs/operations/release.md#release-flow)の実装状況注記を参照。
 
 ## 既知の制限事項（v1.0 Release Candidate）
 
-v1.0.0 Release Candidateとしての最終監査（Phase6 Task15-0）で確認された、主要な既知の制限事項を示す（監査結果自体は読み取り専用で実施しレポートファイルは作成していない）。完全な一覧・リリース判定は[`RELEASE_STATUS.md`](RELEASE_STATUS.md)のKnown Limitations/Release Decisionを正とする。
+v1.0.0 Release Candidateとしての最終監査（Phase6 Task15-0、Phase7完了時点は[`docs/reports/phase7-final-audit.md`](docs/reports/phase7-final-audit.md)、Task17-5）で確認された、主要な既知の制限事項を示す。完全な一覧・リリース判定は[`RELEASE_STATUS.md`](RELEASE_STATUS.md)のKnown Limitations/Release Decisionを正とする。
 
 - `layouts/`（1様式）・`knowledge/`（8カテゴリ各1件）・Golden Testフィクスチャ（1件）とも実運用規模のデータには未到達であり、複数様式・表記ゆれを網羅したパイプライン実データ検証はできない。
-- `features/`・`ftp/`・`fetch/`・`services/`パッケージはPhase7（Task16-1〜16-4）で実装済みだが、いずれも`cli/`（Composition Root）へ未配線であり、PDFの自動取得・実際のデータベース公開（FTP送信等）へ至る実行経路が存在しない。`features/`はさらに`pipeline/`（`JobRunner`）からも呼び出されておらず、独立した未接続のパッケージである（詳細は[`docs/api/package-design.md`](docs/api/package-design.md)、設計方針・実装順序は[`docs/phase7-implementation-roadmap.md`](docs/phase7-implementation-roadmap.md)で確定済み、Task16-0）。
+- `ftp/`・`fetch/`・`services/`（`JobOrchestrator`・`Scheduler`）パッケージはPhase7 Task16-1〜16-4で実装され、Task17-1〜17-4で`cli/`（Composition Root）へ配線済みである（`fetch-stage`/`run-workflow`/`schedule-now`/`list-schedule`の4コマンド）。ただし（1）`ftp/`の実接続情報（`FtpSettings`、`config/`未実装）は依然プレースホルダ（`FTPConnectionConfig(host="")`）のままであり実FTPサーバへ接続できない、（2）`schedule-now`/`list-schedule`はCLIから手動でトリガーする経路のみであり、cron等による自動的な定期実行（`JobSchedule`の登録経路）は未実装である（`list-schedule`は現時点で常に0件を返す）、という2点が実運用への到達を妨げている。`features/`は`pipeline/`（`JobRunner`）からも呼び出されておらず、独立した未接続のパッケージのまま残る（詳細は[`docs/api/package-design.md`](docs/api/package-design.md)、[`docs/reports/phase7-final-audit.md`](docs/reports/phase7-final-audit.md)）。
 - ADR-0029が求めるEd25519署名・GitHub Actionsの`GITHUB_TOKEN`最小権限設定（`permissions:`ブロック）・サードパーティActionsのコミットSHAピン留めが未実装。Exportの完全性情報はSHA-256チェックサム（`ExportArtifact`、Phase6 Task14-4）のみ。
 - ADR-0026が求める依存脆弱性スキャン（`pip-audit`等）が3ワークフロー（`ci.yml`/`release.yml`/`nightly.yml`）いずれにも存在しない。
 - `export/`の新機能（`PersonnelRecord`/CSV/Parquet/完全性メタデータ、Phase6 Task14-2〜14-4）はCLIコマンドとして未公開であり、`ExportService`の内部APIとしてのみ利用できる。

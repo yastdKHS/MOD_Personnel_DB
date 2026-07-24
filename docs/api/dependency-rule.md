@@ -99,8 +99,8 @@ flowchart TB
 
     subgraph ORCH["オーケストレーション"]
         pipeline["pipeline/"]
-        services["services/ (cli/未配線)"]
-        cli["cli/"]
+        services["services/ (JobOrchestrator, Scheduler)"]
+        cli["cli/ (Composition Root)"]
     end
 
     models --> utils
@@ -163,55 +163,24 @@ flowchart TB
     cli --> learning
     cli --> layout
     cli --> config
+    cli --> fetch
+    cli --> ftp
+    cli --> services
 ```
 
-**読み方**: 矢印`A --> B`は「AはBに依存してよい（Aのコードから`import`してよい）」。逆方向（`B --> A`）は許可しない限り禁止。図に存在しない実線エッジ（例: `extractors --> repositories`）はすべて暗黙的に禁止である。破線エッジ（`-.->`）は「型シグネチャ上の型のみの依存」（[`PipelineContext`型依存](#pipelinecontext型依存)参照）を表す。`config["config/"]`はPhase6 Task14-5で実装済みとなった（[ADR-0028](../adr/0028-pydantic-settings-for-configuration.md)）。`features/`・`ftp/`・`fetch/`・`services/`はPhase7 Task16-1〜16-4で実装済みとなり、上図のエッジは実装時点のimportを反映している（`fetch/`は`utils/`のみに依存し、Task16-0計画時点の`repositories/`・`ftp/`への依存は実装されなかった。`services/`は計画通り`repositories/`（抽象、`PDFRepository`のみ）へ依存する一方、計画にあった`utils/`への依存は実装上不要であった。詳細は[`package-design.md`](package-design.md)の各節参照）。`pipeline --> features`（`JobRunner`が`FeatureVector`を計算しNormalizer/Validatorへ注入する統合）は設計方針のみ確定しており未実装のため、上図にエッジとして描かない（`features/`は現時点でどのコンポーネントからも呼び出されない独立パッケージ、[`package-design.md`](package-design.md)の`features/`節参照）。`cli --> services`も同様に、`cli/bootstrap.py`が`services/`を一切参照していないため描かない。`repositories_sqlite → config`エッジは、`config/`が実装済みの現在も存在しない。`repositories/sqlite/`のDB接続先（`db_path`）は合成ルート（`cli/`）から単純な文字列として渡される設計であり、`repositories/sqlite/`自身が`config/`の型付き設定オブジェクトを参照することはないため（構造上の設計判断であり、`config/`の実装状況とは無関係）。`cli/`の実際の依存は`review/`・`export/`・`pipeline/`・`knowledge/`・`learning/`・`layout/`・`config/`・`repositories/sqlite/`（合成ルートとしての例外）であり、`services/`・`ftp/`・`fetch/`・`features/`は実装済みだが`cli/`から一切参照されていないため、それらへの依存エッジは描かない。
+**読み方**: 矢印`A --> B`は「AはBに依存してよい（Aのコードから`import`してよい）」。逆方向（`B --> A`）は許可しない限り禁止。図に存在しない実線エッジ（例: `extractors --> repositories`）はすべて暗黙的に禁止である。破線エッジ（`-.->`）は「型シグネチャ上の型のみの依存」（[`PipelineContext`型依存](#pipelinecontext型依存)参照）を表す。`config["config/"]`はPhase6 Task14-5で実装済みとなった（[ADR-0028](../adr/0028-pydantic-settings-for-configuration.md)）。`features/`・`ftp/`・`fetch/`・`services/`はPhase7 Task16-1〜16-4で実装済みとなり、上図のエッジは実装時点のimportを反映している（`fetch/`は`utils/`のみに依存し、Task16-0計画時点の`repositories/`・`ftp/`への依存は実装されなかった。`services/`は計画通り`repositories/`（抽象、`PDFRepository`のみ）へ依存する一方、計画にあった`utils/`への依存は実装上不要であった。詳細は[`package-design.md`](package-design.md)の各節参照）。`pipeline --> features`（`JobRunner`が`FeatureVector`を計算しNormalizer/Validatorへ注入する統合）は設計方針のみ確定しており未実装のため、上図にエッジとして描かない（`features/`は現時点でどのコンポーネントからも呼び出されない独立パッケージ、[`package-design.md`](package-design.md)の`features/`節参照）。`cli --> fetch`・`cli --> ftp`・`cli --> services`は、Phase7 Task17-1（`build_fetch_client()`/`build_ftp_client()`/`build_job_orchestrator()`）・Task17-4（`build_scheduler()`）で`cli/bootstrap.py`に実装され、上図に反映済みである（旧「統合後の依存グラフ（計画中）」節は本節へ統合済み、下記参照）。`repositories_sqlite → config`エッジは、`config/`が実装済みの現在も存在しない。`repositories/sqlite/`のDB接続先（`db_path`）は合成ルート（`cli/`）から単純な文字列として渡される設計であり、`repositories/sqlite/`自身が`config/`の型付き設定オブジェクトを参照することはないため（構造上の設計判断であり、`config/`の実装状況とは無関係）。`cli/`の実際の依存は`review/`・`export/`・`pipeline/`・`knowledge/`・`learning/`・`layout/`・`config/`・`fetch/`・`ftp/`・`services/`・`repositories/sqlite/`（合成ルートとしての例外）であり、`features/`のみ実装済みだが`cli/`から一切参照されていないため、依存エッジを描かない。
 
 > **注記（`pipeline`ノードの粒度について、[ADR-0044](../adr/0044-pipelinerunner-jobrunner-boundary.md)）**: 上図の`pipeline`ノードはパッケージ単位であり、`pipeline --> repositories`・`pipeline --> knowledge`・`pipeline --> learning`の3エッジは、`pipeline/`パッケージ内の`JobRunner`（`pipeline/job_runner.py`、実装済み）が必要とする依存を表す。パッケージ内の`PipelineRunner`（`pipeline/runner.py`、実装済み）自身は、これら3エッジのいずれにも該当するimportを持たない（[architecture-contract.md 保証13](../architecture/architecture-contract.md#13-pipelinerunnerはrepositoryknowledgelearningreviewexportを知らない)）。この区別はモジュール単位の規律であり、他パッケージと粒度を揃えるため、本図ではノードを分割しない（[ADR-0044](../adr/0044-pipelinerunner-jobrunner-boundary.md)の「検討した代替案」）。
 
 ---
 
-## 統合後の依存グラフ（Phase7 Integration Design、計画中）
+## Phase7統合（Task17-0設計・Task17-1/17-4実装、完了）
 
-> **本節は計画中の設計であり、実装済みの状態を表さない。** 上記「全体依存グラフ」が実装済みの実際のimportのみを描くのに対し、本節は[`docs/phase7-integration-design.md`](../phase7-integration-design.md)（Task17-0）が確定したComposition Root統合の**設計案**を示す。実装着手前の段階では、この図のエッジは`cli/bootstrap.py`のコードには存在しない。
+> **本節は実装済みの状態を記録する。** 本節はもともと「統合後の依存グラフ（計画中）」として[`docs/phase7-integration-design.md`](../phase7-integration-design.md)（Task17-0）が確定したComposition Root統合の設計案を示していたが、Task17-1（`cli --> fetch`・`cli --> ftp`・`cli --> services`の新設）・Task17-4（`Scheduler`の`cli`統合）で実装が完了し、上記「全体依存グラフ」に反映済みである。本節は実装完了後の記録として残す（設計時点の検討経緯は[`phase7-integration-design.md`](../phase7-integration-design.md)を参照）。
 
-Phase7統合が`cli/`に追加する予定のエッジは、`cli --> fetch`・`cli --> ftp`・`cli --> services`の3本のみである（`cli --> features`は追加しない、[`phase7-integration-design.md`](../phase7-integration-design.md#7-featurestore生成位置)参照）。
+Phase7統合が`cli/`に追加したエッジは、`cli --> fetch`・`cli --> ftp`・`cli --> services`の3本のみである（`cli --> features`は追加していない、`FeatureStore`は`JobRunner`への統合が未実装のため未接続のまま、[`phase7-integration-design.md`](../phase7-integration-design.md#7-featurestore生成位置)参照）。`services/`側は`JobOrchestrator`（Task17-1）に加え`Scheduler`（Task17-4、`services/scheduler.py`の`DefaultScheduler`）も`cli/bootstrap.py`の`build_scheduler()`経由で生成される。`DefaultScheduler`自体は`JobOrchestrator`のみに依存し（`fetch/`・`ftp/`・`pipeline/`・`review/`・`export/`・Repositoryのいずれにも直接依存しない）、`services/`パッケージ内で完結する。
 
-```mermaid
-flowchart TB
-    subgraph ORCH2["オーケストレーション（統合後）"]
-        pipeline2["pipeline/"]
-        services2["services/ (JobOrchestrator)"]
-        cli2["cli/ (Composition Root)"]
-    end
-
-    subgraph SERVICE2["サービス層"]
-        review2["review/"]
-        export2["export/"]
-        ftp2["ftp/"]
-        fetch2["fetch/"]
-    end
-
-    subgraph REPO2["永続化"]
-        repositories2["repositories/ (抽象)"]
-    end
-
-    services2 --> pipeline2
-    services2 --> review2
-    services2 --> export2
-    services2 --> fetch2
-    services2 --> ftp2
-    services2 --> repositories2
-
-    cli2 --> pipeline2
-    cli2 --> review2
-    cli2 --> export2
-    cli2 -.->|Task17-0で新設予定| fetch2
-    cli2 -.->|Task17-0で新設予定・FtpSettings実装待ち| ftp2
-    cli2 -.->|Task17-0で新設予定| services2
-```
-
-**循環依存が発生しない理由**: [`package-design.md`](package-design.md)のパッケージ横断の依存先サマリ表が定めるとおり、`fetch/`・`ftp/`・`services/`はいずれも依存禁止に`cli/`を含む（`fetch/`・`ftp/`は`utils/`以外への依存を持たず、`services/`の依存禁止表に`cli/`が明記されている）。したがって`cli --> fetch`・`cli --> ftp`・`cli --> services`のいずれの新規エッジも逆方向（`fetch --> cli`等）を伴わず、既存の依存グラフに循環を生じさせない（詳細な検証は[`phase7-integration-design.md`](../phase7-integration-design.md#13-循環依存が発生しないことの確認)を参照）。
+**循環依存が発生しない理由**: [`package-design.md`](package-design.md)のパッケージ横断の依存先サマリ表が定めるとおり、`fetch/`・`ftp/`・`services/`はいずれも依存禁止に`cli/`を含む（`fetch/`・`ftp/`は`utils/`以外への依存を持たず、`services/`の依存禁止表に`cli/`が明記されている）。したがって`cli --> fetch`・`cli --> ftp`・`cli --> services`のいずれのエッジも逆方向（`fetch --> cli`等）を伴わず、既存の依存グラフに循環を生じさせない（実装後の再検証結果は[`docs/reports/phase7-final-audit.md`](../reports/phase7-final-audit.md)を参照）。
 
 ---
 
@@ -241,7 +210,7 @@ flowchart TB
 
 ## 合成ルート（Composition Root）
 
-「誰も`repositories/sqlite/`を直接importしない」という原則には、唯一の例外として**合成ルート**が必要である。実行時にどの`Repository`実装（SQLite/将来のPostgreSQL）を使うかを決定し、`repositories/sqlite/`・`KnowledgeService`・`LearningService`・`ReviewService`・`ExportService`の具象実装を構築して`JobRunner`に渡す箇所は、**`cli/bootstrap.py`**が担う（[ADR-0046](../adr/0046-composition-root-dependency-injection-contract.md)）。`config/`・`services/`・`pipeline/`・`repositories/`のいずれも、これらの具象実装を自ら生成しない（`config/`は値の提供に責務を限定し合成を行わない設計、`services/`はPhase7 Task16-4で実装済みだが同様に構築済みインスタンスの注入のみを行い自ら具象実装を生成しない設計、[`package-design.md`](package-design.md)参照）。`services/`は`cli/bootstrap.py`から一切参照されておらず、現時点で合成ルートの一部を構成していない。
+「誰も`repositories/sqlite/`を直接importしない」という原則には、唯一の例外として**合成ルート**が必要である。実行時にどの`Repository`実装（SQLite/将来のPostgreSQL）を使うかを決定し、`repositories/sqlite/`・`KnowledgeService`・`LearningService`・`ReviewService`・`ExportService`の具象実装を構築して`JobRunner`に渡す箇所は、**`cli/bootstrap.py`**が担う（[ADR-0046](../adr/0046-composition-root-dependency-injection-contract.md)）。`config/`・`services/`・`pipeline/`・`repositories/`のいずれも、これらの具象実装を自ら生成しない（`config/`は値の提供に責務を限定し合成を行わない設計、`services/`はPhase7 Task16-4で実装済みだが同様に構築済みインスタンスの注入のみを行い自ら具象実装を生成しない設計、[`package-design.md`](package-design.md)参照）。Phase7 Task17-1/17-4で、`ftp/`・`fetch/`・`services/`の具象実装（`StandardFTPClient`・`HTTPFetchClient`・`DefaultJobOrchestrator`・`DefaultScheduler`）の生成も同じ合成ルート（`cli/bootstrap.py`）に一本化された。`services/`自身は依然`cli/bootstrap.py`から一切参照されない（`services/`パッケージのコードは`cli/`をimportしない、一方向の依存のまま）が、`cli/bootstrap.py`は`services/`が公開するProtocol・具象クラスを参照し、合成ルートの一部として`services/`の具象実装を組み立てる。
 
 > **設計変更の経緯**: 当初`config/`を合成ルートとする案を検討したが、[`import-graph.md`](import-graph.md)の循環参照検証により、`repositories/sqlite/ → config/`（接続情報取得のため）と`config/ → repositories/sqlite/`（合成のため）が同時に成立し**循環参照になる**ことが判明した。`config/`は「設定値を提供するだけの末端パッケージ」のままとし、合成（具象実装のimportと組み立て）は依存グラフの最上位に位置する`cli/`に一本化することで循環を解消した。詳細な検証手順は[`import-graph.md`](import-graph.md#循環参照がないことの検証)を参照。**現状（Phase6 Task14-5で`config/`実装済み）**: `config/settings.py`の`AppSettings`（`pydantic_settings.BaseSettings`、`db_path`/`knowledge_root`/`layouts_root`/`parser_code_version`）が、本節が想定する設定値提供を実現する。`cli/bootstrap.py`の`CompositionSettings`は`AppSettings`の別名（`CompositionSettings = AppSettings`）であり、`AppSettings`の生成（`AppSettings(...)`の呼び出し）は`cli/bootstrap.py`の`build_settings()`一箇所に限定される。上記の循環参照回避策（合成は`cli/`に一本化）自体は変更していない。
 
@@ -255,9 +224,9 @@ flowchart LR
     cli -->|JobRunnerRepositories等を個別注入| pipeline["pipeline/job_runner.JobRunner"]
 ```
 
-この例外は、`cli/`が「どの具象実装を選ぶか」という配線の責務を持つことの直接の帰結であり、`cli/`以外のいかなるパッケージにもこの例外を拡大しない。実装済みの`cli/bootstrap.py`は、`repositories/sqlite/`の8具象クラス・`FileKnowledgeService`・`RepositoryLearningService`・`RepositoryReviewService`・`RepositoryExportService`の生成をすべて一箇所に集約しており、他のいかなるパッケージにもこれらの生成は存在しない。
+この例外は、`cli/`が「どの具象実装を選ぶか」という配線の責務を持つことの直接の帰結であり、`cli/`以外のいかなるパッケージにもこの例外を拡大しない。実装済みの`cli/bootstrap.py`は、`repositories/sqlite/`の8具象クラス・`FileKnowledgeService`・`RepositoryLearningService`・`RepositoryReviewService`・`RepositoryExportService`・`HTTPFetchClient`・`StandardFTPClient`・`DefaultJobOrchestrator`・`DefaultScheduler`の生成をすべて一箇所に集約しており、他のいかなるパッケージにもこれらの生成は存在しない（`tests/unit/cli/test_bootstrap.py`のAST検証が機械的に保証する）。
 
-> **Phase7統合（Task17-0、計画中）**: `ftp/`・`fetch/`・`services/`の具象実装（`StandardFTPClient`・`HTTPFetchClient`・`DefaultJobOrchestrator`）の生成位置も、この例外を拡大することなく`cli/bootstrap.py`に一本化する設計を[`docs/phase7-integration-design.md`](../phase7-integration-design.md)が確定した（未実装）。詳細は「[統合後の依存グラフ](#統合後の依存グラフphase7-integration-design計画中)」を参照。
+> **Phase7統合（Task17-0設計・Task17-1/17-4実装、完了）**: `ftp/`・`fetch/`・`services/`の具象実装（`StandardFTPClient`・`HTTPFetchClient`・`DefaultJobOrchestrator`・`DefaultScheduler`）の生成位置は、この例外を拡大することなく`cli/bootstrap.py`に一本化された（[`docs/phase7-integration-design.md`](../phase7-integration-design.md)が確定した設計どおり）。詳細は「[Phase7統合](#phase7統合task17-0設計task17-117-4実装完了)」を参照。
 
 ---
 

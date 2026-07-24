@@ -322,9 +322,9 @@ class FeatureStore(Protocol):
 
 ## `Scheduler`
 
-> 本Protocolは未実装である（`src/`に対応する実装は存在しない）。Phase7 Task16-4で実装した`JobOrchestrator`（後述）は、`fetch/`・`ftp/`・`pipeline/`・`review/`・`export/`を横断的に調整する別契約であり、本節が定める「パイプライン実行のトリガー管理」（cron等の定期実行スケジュール管理）とは責務が異なる。両者の統合は行っていない。
+> 本Protocolは[`src/mod_personnel_db/services/scheduler.py`](../../src/mod_personnel_db/services/scheduler.py)にPhase7 Task17-3で標準実装`DefaultScheduler`を実装している。`JobOrchestrator`（後述）は`fetch/`・`ftp/`・`pipeline/`・`review/`・`export/`を横断的に調整する別契約であり、本節が定める「パイプライン実行のトリガー管理」とは責務が異なる。両者の統合（1つの型・1つのコンポーネントへの統合）は行っていない。
 >
-> **責務境界（Phase7 Task17-0、[`phase7-integration-design.md`](../phase7-integration-design.md#12-scheduler導入予定位置)で整理）**: `Scheduler`は「いつ`JobOrchestrator`（の`run_workflow()`等）を呼び出すか」の決定にのみ責務を持ち、`JobOrchestrator`が担う「`fetch/`・`ftp/`・`pipeline/`・`review/`・`export/`をどう調整するか」には関与しない設計とする。この整理は責務境界の明文化であり、`JobOrchestrator`を`Scheduler`へ統合する（両者を1つの型・1つのコンポーネントにまとめる）ことを意味しない。`Scheduler`の具象実装・生成位置は未確定であり、着手時に新規ADRで確定する。
+> **責務境界（Phase7 Task17-0、[`phase7-integration-design.md`](../phase7-integration-design.md#12-scheduler導入予定位置)で整理、Task17-3で実装）**: `Scheduler`は「いつ`JobOrchestrator`（の`run_pending_pipeline()`）を呼び出すか」の決定にのみ責務を持ち、`JobOrchestrator`が担う「`fetch/`・`ftp/`・`pipeline/`・`review/`・`export/`をどう調整するか」には関与しない。標準実装`DefaultScheduler`は`JobOrchestrator`（Protocol型）のみをコンストラクタで受け取り、`JobRunner`・`ReviewService`・`ExportService`・`FetchClient`・`FTPClient`・Repositoryのいずれにも直接依存しない。`trigger_now(job_type)`が受け付ける`job_type`は現時点で`RUN_PENDING_JOB_TYPE`（`"run_pending_pipeline"`）の1種類のみであり、`JobOrchestrator.run_pending_pipeline()`を呼び出す（未処理PDFが0件の場合は`NoPendingJobError`を送出する）。`list_upcoming()`は、コンストラクタで受け取った`JobSchedule`（起点時刻`anchor`＋固定間隔`interval`によるcron式非依存の周期表現）一覧それぞれの次回実行時刻を文字列化して返す。cron式のパーサ等の外部ライブラリは用いない。Phase7 Task17-4で`cli/bootstrap.py`の`build_scheduler()`経由でCLI（`schedule-now`/`list-schedule`コマンド）へ配線された（下記`JobOrchestrator`節・[`package-design.md`](package-design.md)の`services/`・`cli/`節を参照）。
 
 ```python
 from typing import Protocol
@@ -369,9 +369,9 @@ class JobRunner(Protocol):
 
 ## `JobOrchestrator`
 
-> 本Protocolは[`src/mod_personnel_db/services/__init__.py`](../../src/mod_personnel_db/services/__init__.py)にPhase7 Task16-4で実装している。`fetch/`・`ftp/`・`pipeline/`（`JobRunner`）・`review/`・`export/`を横断的に調整するアプリケーションサービス層であり、`Scheduler`（前掲）とは別契約である。具象実装`DefaultJobOrchestrator`は、依存をコンストラクタインジェクション（`OrchestratorDependencies`、`services.orchestrator`）のみで受け取り、`fetch/`・`ftp/`・`pipeline/`・`review/`・`export/`の具象実装を自ら生成しない（[architecture-contract.md 保証15](../architecture/architecture-contract.md#15-依存生成責務はcomposition-rootcliに一本化される)）。`cli/bootstrap.py`は本パッケージを一切参照しておらず、Composition Rootへの配線は未実施である。詳細は[`package-design.md`](package-design.md)の`services/`節を参照。
+> 本Protocolは[`src/mod_personnel_db/services/__init__.py`](../../src/mod_personnel_db/services/__init__.py)にPhase7 Task16-4で実装している。`fetch/`・`ftp/`・`pipeline/`（`JobRunner`）・`review/`・`export/`を横断的に調整するアプリケーションサービス層であり、`Scheduler`（前掲）とは別契約である。具象実装`DefaultJobOrchestrator`は、依存をコンストラクタインジェクション（`OrchestratorDependencies`、`services.orchestrator`）のみで受け取り、`fetch/`・`ftp/`・`pipeline/`・`review/`・`export/`の具象実装を自ら生成しない（[architecture-contract.md 保証15](../architecture/architecture-contract.md#15-依存生成責務はcomposition-rootcliに一本化される)）。`cli/bootstrap.py`はPhase7 Task17-1で`build_job_orchestrator()`を追加し、本パッケージへ配線した（下記参照）。詳細は[`package-design.md`](package-design.md)の`services/`節を参照。
 >
-> **生成位置（Phase7 Task17-0、[`phase7-integration-design.md`](../phase7-integration-design.md#4-joborchestrator生成位置)で確定）**: `DefaultJobOrchestrator`は、実装された場合も`cli/bootstrap.py`（Composition Root）からのみ生成される設計とする。`services/`自身（`DefaultJobOrchestrator`のコンストラクタを含む）は自らの依存の具象実装を生成しないため、`cli/`以外のいかなるパッケージからも`JobOrchestrator`の具象生成は行われない。この設計は未実装であり、上記のとおり現時点で`cli/bootstrap.py`は本パッケージを参照していない。
+> **生成位置（Phase7 Task17-0、[`phase7-integration-design.md`](../phase7-integration-design.md#4-joborchestrator生成位置)で確定、Task17-1で実装）**: `DefaultJobOrchestrator`は`cli/bootstrap.py`（Composition Root）の`build_job_orchestrator()`からのみ生成される。`services/`自身（`DefaultJobOrchestrator`のコンストラクタを含む）は自らの依存の具象実装を生成しないため、`cli/`以外のいかなるパッケージからも`JobOrchestrator`の具象生成は行われない（`tests/unit/cli/test_bootstrap.py`のAST検証が機械的に保証する）。`cli/commands.py`の`fetch_stage_command`/`run_workflow_command`（`fetch-stage`/`run-workflow`コマンド）、および`schedule_now_command`/`list_schedule_command`が内部で構築する`Scheduler`（前掲）経由で、`JobOrchestrator`はProtocol型としてのみCLIから利用される。
 
 ```python
 from datetime import date
