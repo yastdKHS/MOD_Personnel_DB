@@ -7,15 +7,23 @@
 
 設定項目は、置き換え対象である`cli/bootstrap.py`の旧`CompositionSettings`
 （`db_path`/`knowledge_root`/`layouts_root`/`parser_code_version`の4
-フィールド）と等価になるよう定義する（Phase6 Task14-5）。`docs/configuration.md`
-が設計する`DatabaseSettings`/`FtpSettings`等のネスト構造・`Environment`・
-`SecretStr`は本Taskの対象外（未実装のまま）とし、既存`CompositionSettings`と
-の等価性のみを満たす最小構成にとどめる。
+フィールド）と等価になるよう定義する（Phase6 Task14-5）。Phase8 Task18-1で
+`ftp`（`FtpSettings`、`config/ftp.py`）をネストしたサブ設定として追加した
+（docs/phase8-integration-design.md#2-ftpsettings導入設計）。`docs/configuration.md`
+が設計する`DatabaseSettings`・`Environment`は引き続き本Taskの対象外
+（未実装のまま）とする。
+
+`env_nested_delimiter="__"`により、`MOD_PERSONNEL_DB_FTP__HOST`等の環境変数が
+`ftp.host`へマッピングされる。`ftp`関連の環境変数が一切指定されない場合、
+`ftp`フィールドは`None`のままとなり（既存4フィールドのみのCompositionSettings
+と完全に等価な状態）、既存の呼び出し元・テストへの後方互換性を維持する。
 """
 
 from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+from mod_personnel_db.config.ftp import FtpSettings
 
 
 class AppSettings(BaseSettings):
@@ -31,6 +39,7 @@ class AppSettings(BaseSettings):
         env_prefix="MOD_PERSONNEL_DB_",
         env_file=".env",
         env_file_encoding="utf-8",
+        env_nested_delimiter="__",
         extra="ignore",
         frozen=True,
     )
@@ -39,6 +48,7 @@ class AppSettings(BaseSettings):
     knowledge_root: Path
     layouts_root: Path
     parser_code_version: str = "v1.0.0"
+    ftp: FtpSettings | None = None
 
 
 __all__ = ["AppSettings"]
