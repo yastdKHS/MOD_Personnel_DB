@@ -30,8 +30,13 @@
 ```python
 from typing import Protocol
 from mod_personnel_db.models import (
-    PersonnelSection, PersonnelSectionId, RawRecord, NormalizedRecord,
-    ValidationResult, CandidateId, CandidateRecord,
+    PersonnelSection,
+    PersonnelSectionId,
+    RawRecord,
+    NormalizedRecord,
+    ValidationResult,
+    CandidateId,
+    CandidateRecord,
 )
 
 
@@ -40,7 +45,9 @@ class CandidateRepository(Protocol):
     def get_section(self, section_id: PersonnelSectionId) -> PersonnelSection | None: ...
 
     def add_raw(self, section_id: PersonnelSectionId, record: RawRecord) -> CandidateId: ...
-    def attach_normalized(self, candidate_id: CandidateId, normalized: NormalizedRecord) -> None: ...
+    def attach_normalized(
+        self, candidate_id: CandidateId, normalized: NormalizedRecord
+    ) -> None: ...
     def update_validation(self, candidate_id: CandidateId, result: ValidationResult) -> None: ...
 
     def get(self, candidate_id: CandidateId) -> CandidateRecord | None: ...
@@ -57,7 +64,10 @@ class CandidateRepository(Protocol):
 from typing import Protocol
 from datetime import date, datetime
 from mod_personnel_db.models import (
-    CandidateId, NormalizedRecord, GoldRecordId, GoldRecord,
+    CandidateId,
+    NormalizedRecord,
+    GoldRecordId,
+    GoldRecord,
 )
 
 
@@ -97,7 +107,9 @@ class KnowledgeRepository(Protocol):
         """knowledge/ファイルの内容をロードし、対応する行を追加または無効化する（一方向同期）。"""
         ...
 
-    def get_item(self, category: str, item_key: str, as_of: date | None = None) -> KnowledgeItem | None: ...
+    def get_item(
+        self, category: str, item_key: str, as_of: date | None = None
+    ) -> KnowledgeItem | None: ...
     def list_items(self, category: str) -> tuple[KnowledgeItem, ...]: ...
 
     def get_layout(self, era_id: str, version: int | None = None) -> Layout | None: ...
@@ -110,7 +122,12 @@ class KnowledgeRepository(Protocol):
 
 ```python
 from typing import Protocol
-from mod_personnel_db.models import LearningRecord, LearningRecordId, LearningStatus, ParserVersionId
+from mod_personnel_db.models import (
+    LearningRecord,
+    LearningRecordId,
+    LearningStatus,
+    ParserVersionId,
+)
 
 
 class LearningRepository(Protocol):
@@ -123,7 +140,9 @@ class LearningRepository(Protocol):
     def get(self, record_id: LearningRecordId) -> LearningRecord | None: ...
     def list_by_status(self, status: LearningStatus) -> tuple[LearningRecord, ...]: ...
     def list_by_error_category(self, category: str) -> tuple[LearningRecord, ...]: ...
-    def list_by_parser_version(self, parser_version_id: ParserVersionId) -> tuple[LearningRecord, ...]: ...
+    def list_by_parser_version(
+        self, parser_version_id: ParserVersionId
+    ) -> tuple[LearningRecord, ...]: ...
 ```
 
 ## `PDFRepository`
@@ -139,6 +158,7 @@ class PDFRepository(Protocol):
     def get_by_hash(self, content_hash: str) -> PdfRecord | None:
         """内容アドレス方式の重複排除に用いる（ADR-0018）。"""
         ...
+
     def update_status(self, pdf_id: PdfId, status: str) -> None: ...
     def list_by_status(self, status: str) -> tuple[PdfRecord, ...]: ...
 ```
@@ -163,6 +183,7 @@ class JobRepository(Protocol):
     def record_parser_version(self, version: ParserVersion) -> ParserVersionId:
         """CIのリリースタグ付与をトリガーに呼ばれる（ADR-0023）。"""
         ...
+
     def get_parser_version(self, code_version: str) -> ParserVersion | None: ...
     def get_latest_parser_version(self) -> ParserVersion | None: ...
 ```
@@ -208,8 +229,14 @@ class ReviewRepository(Protocol):
 from typing import Protocol
 from types import TracebackType
 from mod_personnel_db.repositories import (
-    CandidateRepository, GoldRepository, KnowledgeRepository, LearningRepository,
-    PDFRepository, JobRepository, ExportRepository, ReviewRepository,
+    CandidateRepository,
+    GoldRepository,
+    KnowledgeRepository,
+    LearningRepository,
+    PDFRepository,
+    JobRepository,
+    ExportRepository,
+    ReviewRepository,
 )
 
 

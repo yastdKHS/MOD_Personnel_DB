@@ -23,9 +23,18 @@
 ```python
 from typing import Protocol
 from mod_personnel_db.models import (
-    Document, LayoutArtifact, SectionParseResult, PersonnelSection,
-    FieldExtractionResult, RawRecord, NormalizationResult, NormalizedRecord,
-    KnowledgeSnapshot, ValidationResult, ValidationRuleSet, PdfRecord,
+    Document,
+    LayoutArtifact,
+    SectionParseResult,
+    PersonnelSection,
+    FieldExtractionResult,
+    RawRecord,
+    NormalizationResult,
+    NormalizedRecord,
+    KnowledgeSnapshot,
+    ValidationResult,
+    ValidationRuleSet,
+    PdfRecord,
 )
 from mod_personnel_db.pipeline import PipelineContext
 
@@ -161,9 +170,7 @@ class ReviewService(Protocol):
         """検証NG・未レビューの候補一覧を返す。"""
         ...
 
-    def submit_change(
-        self, session_id: ReviewSessionId, item: ReviewItem
-    ) -> None:
+    def submit_change(self, session_id: ReviewSessionId, item: ReviewItem) -> None:
         """1件のフィールド修正を記録する。gold_recordsへの反映は行わない。"""
         ...
 
@@ -259,6 +266,7 @@ class KnowledgeService(Protocol):
     def load_validation_rules(self, as_of: date | None = None) -> ValidationRuleSet:
         """category="validation"のKnowledgeItem群を提供する（ADR-0041, ADR-0043）。"""
         ...
+
     def get_item(self, category: str, item_key: str) -> KnowledgeItem | None: ...
     def reload(self) -> KnowledgeSnapshot:
         """knowledge/ ディレクトリを再読み込みし、KnowledgeRepositoryへ反映する。"""
@@ -307,9 +315,7 @@ from mod_personnel_db.models import FeatureVector, RawRecord, NormalizedRecord
 class FeatureStore(Protocol):
     """Confidence算出等に使う派生特徴量を計算する（V2.0時点では永続化せず都度計算、package-design.md参照）。"""
 
-    def compute(
-        self, subject: RawRecord | NormalizedRecord
-    ) -> FeatureVector: ...
+    def compute(self, subject: RawRecord | NormalizedRecord) -> FeatureVector: ...
 ```
 
 ---
@@ -355,6 +361,7 @@ class JobRunner(Protocol):
     def run_pending(self) -> tuple[PipelineResult, ...]:
         """未処理のPDF（PDFRepository経由で取得）をすべて処理する。"""
         ...
+
     def get_job(self, job_id: JobId) -> Job | None: ...
 ```
 

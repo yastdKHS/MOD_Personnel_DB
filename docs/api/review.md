@@ -78,8 +78,13 @@ class ReviewComment:
 @dataclass(frozen=True, slots=True)
 class ReviewEvent:
     event_type: Literal[
-        "assigned", "session_started", "field_modified", "commented",
-        "decided", "promoted_to_gold", "returned",
+        "assigned",
+        "session_started",
+        "field_modified",
+        "commented",
+        "decided",
+        "promoted_to_gold",
+        "returned",
     ]
     candidate_id: CandidateId
     actor: str
@@ -112,8 +117,15 @@ class ReviewNotification:
 from typing import Protocol
 from mod_personnel_db.models import CandidateId, GoldRecordId
 from mod_personnel_db.review import (
-    ReviewAssignment, ReviewAssignmentId, ReviewComment, ReviewDecision,
-    ReviewDecisionId, ReviewEvent, ReviewHistory, ReviewSessionId, ReviewStatistics,
+    ReviewAssignment,
+    ReviewAssignmentId,
+    ReviewComment,
+    ReviewDecision,
+    ReviewDecisionId,
+    ReviewEvent,
+    ReviewHistory,
+    ReviewSessionId,
+    ReviewStatistics,
 )
 
 
@@ -125,7 +137,9 @@ class ReviewService(Protocol):
         """優先度スコア上位の未割当候補をreviewerへ払い出す（プル型、queue.md）。"""
         ...
 
-    def list_assignments(self, reviewer: str, status: str | None = None) -> tuple[ReviewAssignment, ...]: ...
+    def list_assignments(
+        self, reviewer: str, status: str | None = None
+    ) -> tuple[ReviewAssignment, ...]: ...
 
     # --- セッション ---
     def open_session(self, reviewer: str, reason: str) -> ReviewSessionId: ...
@@ -133,8 +147,13 @@ class ReviewService(Protocol):
 
     # --- フィールド修正・コメント ---
     def submit_field_change(
-        self, session_id: ReviewSessionId, candidate_id: CandidateId,
-        field_name: str, old_value: str | None, new_value: str, reason: str | None,
+        self,
+        session_id: ReviewSessionId,
+        candidate_id: CandidateId,
+        field_name: str,
+        old_value: str | None,
+        new_value: str,
+        reason: str | None,
     ) -> None:
         """ReviewItemを1件記録する。policy.mdのLearning Dataset登録条件を評価する。"""
         ...
@@ -190,6 +209,7 @@ class ReviewRepository(Protocol):
     def list_pending_assignments(self, limit: int | None = None) -> tuple[ReviewAssignment, ...]:
         """priority_score降順で返す（queue.mdの優先順位）。"""
         ...
+
     def get_active_assignment(self, candidate_id: CandidateId) -> ReviewAssignment | None:
         """docs/review/domain.mdの一意割当制約（pending/in_progressは同時に1件）を検証するために使う。"""
         ...
@@ -197,7 +217,9 @@ class ReviewRepository(Protocol):
     # --- 追加: Decision ---
     def add_decision(self, decision: ReviewDecision) -> ReviewDecisionId: ...
     def get_decision(self, decision_id: ReviewDecisionId) -> ReviewDecision | None: ...
-    def list_decisions_by_candidate(self, candidate_id: CandidateId) -> tuple[ReviewDecision, ...]: ...
+    def list_decisions_by_candidate(
+        self, candidate_id: CandidateId
+    ) -> tuple[ReviewDecision, ...]: ...
 
     # --- 追加: Comment ---
     def add_comment(self, comment: ReviewComment) -> ReviewCommentId: ...

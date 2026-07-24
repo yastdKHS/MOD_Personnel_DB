@@ -200,6 +200,7 @@ class NormalizedValue:
     value: str
     raw: str | None
 
+
 @dataclass(frozen=True, slots=True)
 class NormalizedRecord:
     raw_record_ref: RawRecord
@@ -219,16 +220,18 @@ class NormalizedRecord:
 ```python
 @dataclass(frozen=True, slots=True)
 class NormalizedField:
-    name: str               # RawField.nameと同じキー（column_N等）
+    name: str  # RawField.nameと同じキー（column_N等）
     raw: str
     value: str
-    normalization_method: str  # "typography" | "alias" | "organization" | "position" | "rank" | "identity"
+    normalization_method: (
+        str  # "typography" | "alias" | "organization" | "position" | "rank" | "identity"
+    )
 
 
 @dataclass(frozen=True, slots=True)
 class NormalizationEvidence:
     layout_id: str
-    knowledge_version: str     # KnowledgeSnapshot.snapshot_checksum
+    knowledge_version: str  # KnowledgeSnapshot.snapshot_checksum
     matched_item_ids: tuple[KnowledgeItemId, ...]
 
 
@@ -261,16 +264,19 @@ class ValidationError:
     rule_id: str
     message: str
 
+
 @dataclass(frozen=True, slots=True)
 class ValidationWarning:
     rule_id: str
     message: str
+
 
 @dataclass(frozen=True, slots=True)
 class ValidationEvidence:
     record_index: int
     layout_id: str
     rules_evaluated: int
+
 
 @dataclass(frozen=True, slots=True)
 class ValidationCandidate:
@@ -279,6 +285,7 @@ class ValidationCandidate:
     errors: tuple[ValidationError, ...]
     warnings: tuple[ValidationWarning, ...]
     evidence: ValidationEvidence
+
 
 @dataclass(frozen=True, slots=True)
 class ValidationResult:
@@ -337,8 +344,14 @@ class ReviewItem:
 class KnowledgeItem:
     id: KnowledgeItemId
     category: Literal[
-        "organization", "position", "rank", "alias",
-        "historical", "typography", "layout", "validation",
+        "organization",
+        "position",
+        "rank",
+        "alias",
+        "historical",
+        "typography",
+        "layout",
+        "validation",
     ]
     source_file: str
     item_key: str
