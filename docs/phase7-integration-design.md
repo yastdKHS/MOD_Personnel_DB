@@ -70,7 +70,7 @@ def build_fetch_client() -> FetchClient:
 def build_ftp_client(settings: CompositionSettings) -> FTPClient:
     return StandardFTPClient(
         FTPConnectionConfig(
-            host=settings.ftp.host,       # 未実装: settings.ftp は現存しない
+            host=settings.ftp.host,  # 未実装: settings.ftp は現存しない
             port=settings.ftp.port,
             username=settings.ftp.username,
             password=settings.ftp.password.get_secret_value(),

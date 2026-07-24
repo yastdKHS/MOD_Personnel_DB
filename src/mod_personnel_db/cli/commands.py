@@ -3,13 +3,36 @@
 呼び出す。
 
 コマンド関数はいずれも`bootstrap.build_application()`/`build_job_runner()`・
-`cli.init.initialize_database()`のみに依存し、`repositories/sqlite/`・
-`knowledge/`・`learning/`・`review/`・`export/`のいずれも直接importしない
-（`review_*_command`/`export_*_command`は`Application.review_service`/
-`Application.export_service`という、すでに生成済みのオブジェクトのメソッド
-を呼ぶのみで、`RepositoryReviewService`/`RepositoryExportService`を自ら
-生成・importしない）。引数解析（argparse）は`app.py`が担当し、本モジュール
-はコマンドロジックのみを提供する。
+`cli.init.initialize_database()`のみに依存し、`knowledge/`・`learning/`・
+`review/`・`export/`のいずれも直接importしない（`review_*_command`/
+`export_*_command`は`Application.review_service`/`Application.export_service`
+という、すでに生成済みのオブジェクトのメソッドを呼ぶのみで、
+`RepositoryReviewService`/`RepositoryExportService`を自ら生成・importしない）。
+引数解析（argparse）は`app.py`が担当し、本モジュールはコマンドロジックのみを
+提供する。`repositories/sqlite/`からの直接importは、下記Phase7統合の節が
+説明する`connect()`のみの例外を除き行わない。
+
+**Phase7統合（Task17-2）**: `fetch_stage_command`/`run_workflow_command`は
+`bootstrap.build_job_orchestrator()`（Task17-1で追加）が返す`JobOrchestrator`
+をProtocol型としてのみ呼び出す。`HTTPFetchClient`・`StandardFTPClient`・
+`DefaultJobOrchestrator`等の具象実装は、`bootstrap.build_fetch_client()`/
+`build_ftp_client()`/`build_job_orchestrator()`経由でのみ取得し、本モジュール
+が直接インスタンス化することはない（Composition Root一本化、
+architecture-contract.md 保証15）。
+
+`_build_job_orchestrator()`は、`build_job_orchestrator()`が要求する
+`SqliteRepositories`（Task17-1の既存シグネチャ、本Taskでは変更不可）を
+`bootstrap.build_sqlite_repositories()`経由で組み立てるために、
+`repositories.sqlite.connect()`のみを直接importする（他の具象Repository
+クラスは一切importしない）。`connect()`は`bootstrap.py`の`__all__`に
+含まれず`mypy --strict`のno-implicit-reexport制約で参照できないため、
+かつ本Taskは`bootstrap.py`の変更を禁止されているため、この1関数のみ
+`repositories.sqlite`から直接importする。本モジュールの他のいかなる箇所も
+Repository具象クラス・`sqlite3`を直接扱わない。
+
+`Scheduler`（cron・timer・daemon等の定期実行機構）は本Taskの対象外であり
+追加しない。`FeatureStore`（`build_feature_store()`）も呼び出さない
+（`JobRunner`への配線が未実装のため、Task17-1と同様に未使用のまま据え置く）。
 """
 
 from dataclasses import dataclass
@@ -18,11 +41,17 @@ from datetime import date, datetime
 from mod_personnel_db.cli.bootstrap import (
     CompositionSettings,
     build_application,
+    build_fetch_client,
+    build_ftp_client,
+    build_job_orchestrator,
     build_job_runner,
+    build_sqlite_repositories,
 )
 from mod_personnel_db.cli.exceptions import CliCommandError
 from mod_personnel_db.cli.init import initialize_database
+from mod_personnel_db.fetch import FetchRequest
 from mod_personnel_db.models import (
+    ExportFormat,
     GoldRecord,
     LearningRecord,
     LearningRecordId,
@@ -30,6 +59,8 @@ from mod_personnel_db.models import (
     PdfId,
 )
 from mod_personnel_db.pipeline.result import PipelineResult
+from mod_personnel_db.repositories.sqlite import connect
+from mod_personnel_db.services import JobOrchestrator, WorkflowResult
 
 
 def init_db_command(settings: CompositionSettings) -> None:
@@ -124,11 +155,63 @@ def version_command(settings: CompositionSettings) -> VersionInfo:
     )
 
 
+def _build_job_orchestrator(settings: CompositionSettings) -> JobOrchestrator:
+    """`fetch-stage`/`run-workflow`コマンド用に`JobOrchestrator`を取得する。
+
+    `cli/bootstrap.py`（Composition Root、Task17-1）が提供するBuilder
+    （`build_application`/`build_sqlite_repositories`/`build_fetch_client`/
+    `build_ftp_client`/`build_job_orchestrator`）のみを呼び出して依存を組み立て、
+    `HTTPFetchClient`・`StandardFTPClient`・`DefaultJobOrchestrator`等の
+    具象実装を本モジュールが直接生成することはない。戻り値の型は`JobOrchestrator`
+    Protocolであり、呼び出し元（`fetch_stage_command`/`run_workflow_command`）は
+    Protocol経由でのみこれを利用する。
+    """
+    application = build_application(settings)
+    connection = connect(settings.db_path)
+    repositories = build_sqlite_repositories(connection)
+    fetch_client = build_fetch_client()
+    ftp_client = build_ftp_client(settings)
+    return build_job_orchestrator(application, repositories, fetch_client, ftp_client)
+
+
+def fetch_stage_command(
+    settings: CompositionSettings, url: str, destination_path: str, published_date: date
+) -> PdfId | None:
+    """`fetch-stage`コマンド。`JobOrchestrator.fetch_and_stage()`を呼び出す。
+
+    戻り値`None`は、取得した内容の`content_hash`が既存の`PdfRecord`と重複した
+    ため保存しなかったことを意味する（`fetch_and_stage()`自身の既存契約）。
+    """
+    orchestrator = _build_job_orchestrator(settings)
+    return orchestrator.fetch_and_stage(
+        FetchRequest(url=url), destination_path=destination_path, published_date=published_date
+    )
+
+
+def run_workflow_command(
+    settings: CompositionSettings,
+    export_format: ExportFormat,
+    export_destination: str,
+    *,
+    remote_path: str | None = None,
+) -> WorkflowResult:
+    """`run-workflow`コマンド。`JobOrchestrator.run_workflow()`を呼び出す。
+
+    現時点ではCLI引数からのFetch対象一覧指定に対応しないため、`fetch_items`は
+    常に空タプルである（個別のPDF取得は`fetch-stage`コマンドで行う）。
+    `remote_path`を指定した場合のみ、生成したエクスポートをFTPでアップロード
+    する（`JobOrchestrator.export_and_publish()`の既存契約）。
+    """
+    orchestrator = _build_job_orchestrator(settings)
+    return orchestrator.run_workflow([], export_format, export_destination, remote_path=remote_path)
+
+
 __all__ = [
     "VersionInfo",
     "export_all_command",
     "export_person_command",
     "export_since_command",
+    "fetch_stage_command",
     "init_db_command",
     "review_approve_command",
     "review_list_command",
@@ -136,5 +219,6 @@ __all__ = [
     "review_start_command",
     "run_job_command",
     "run_pending_command",
+    "run_workflow_command",
     "version_command",
 ]

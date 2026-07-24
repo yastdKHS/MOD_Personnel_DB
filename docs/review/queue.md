@@ -14,17 +14,19 @@
 
 ```python
 BASE_SCORE = {
-    "layout_unknown": 1000.0,     # 新様式・未知レイアウト（バッチ全体に影響しうる、最優先）
-    "parser_error": 900.0,        # Field Extractor/Normalizer等での例外発生（パイプライン健全性）
-    "confidence": 800.0,          # 上限値。実際のスコアは 800 * (1 - confidence_score)
-    "knowledge_missing": 500.0,   # error_category in {unknown_alias, knowledge_gap}（ADR-0012）
-    "reviewer_request": 300.0,    # 人手による明示的なフラグ立て
+    "layout_unknown": 1000.0,  # 新様式・未知レイアウト（バッチ全体に影響しうる、最優先）
+    "parser_error": 900.0,  # Field Extractor/Normalizer等での例外発生（パイプライン健全性）
+    "confidence": 800.0,  # 上限値。実際のスコアは 800 * (1 - confidence_score)
+    "knowledge_missing": 500.0,  # error_category in {unknown_alias, knowledge_gap}（ADR-0012）
+    "reviewer_request": 300.0,  # 人手による明示的なフラグ立て
 }
-AGING_BOOST_PER_DAY = 20.0        # 1日あたりの経過時間補正
-AGING_CAP = 200.0                 # 経過時間補正の上限（無制限のエスカレーションを防ぐ）
+AGING_BOOST_PER_DAY = 20.0  # 1日あたりの経過時間補正
+AGING_CAP = 200.0  # 経過時間補正の上限（無制限のエスカレーションを防ぐ）
 
 
-def priority_score(reason: str, now: datetime, created_at: datetime, confidence_score: float | None = None) -> float:
+def priority_score(
+    reason: str, now: datetime, created_at: datetime, confidence_score: float | None = None
+) -> float:
     base = BASE_SCORE[reason]
     if reason == "confidence":
         base = BASE_SCORE["confidence"] * (1.0 - confidence_score)

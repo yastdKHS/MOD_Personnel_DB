@@ -9,8 +9,9 @@
 
 import argparse
 from collections.abc import Sequence
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
+from typing import cast
 
 from mod_personnel_db.cli.bootstrap import CompositionSettings, build_settings
 from mod_personnel_db.cli.commands import (
@@ -18,6 +19,7 @@ from mod_personnel_db.cli.commands import (
     export_all_command,
     export_person_command,
     export_since_command,
+    fetch_stage_command,
     init_db_command,
     review_approve_command,
     review_list_command,
@@ -25,16 +27,38 @@ from mod_personnel_db.cli.commands import (
     review_start_command,
     run_job_command,
     run_pending_command,
+    run_workflow_command,
     version_command,
 )
 from mod_personnel_db.cli.exceptions import CliCommandError
-from mod_personnel_db.models import GoldRecord, LearningRecord, LearningRecordId, PdfId
+from mod_personnel_db.models import (
+    ExportFormat,
+    GoldRecord,
+    LearningRecord,
+    LearningRecordId,
+    PdfId,
+)
+from mod_personnel_db.services import WorkflowResult
 
-COMMANDS = ("init-db", "run-pending", "run-job", "version", "review", "export", "help")
+_EXPORT_FORMATS = ("csv", "parquet", "json")
+
+COMMANDS = (
+    "init-db",
+    "run-pending",
+    "run-job",
+    "version",
+    "review",
+    "export",
+    "fetch-stage",
+    "run-workflow",
+    "help",
+)
 
 
 def build_parser() -> argparse.ArgumentParser:
-    """7コマンド（init-db/run-pending/run-job/version/review/export/help）を持つparserを構築する。"""
+    """9コマンド（init-db/run-pending/run-job/version/review/export/
+    fetch-stage/run-workflow/help）を持つparserを構築する。
+    """
     parser = argparse.ArgumentParser(prog="mod-personnel-db")
     parser.add_argument("--db-path", help="SQLiteデータベースファイルのパス")
     parser.add_argument("--knowledge-root", type=Path, help="knowledge/ディレクトリのパス")
@@ -49,8 +73,37 @@ def build_parser() -> argparse.ArgumentParser:
     subparsers.add_parser("version", help="ParserVersion/KnowledgeSnapshotを表示する")
     _add_review_subparser(subparsers)
     _add_export_subparser(subparsers)
+    _add_fetch_stage_subparser(subparsers)
+    _add_run_workflow_subparser(subparsers)
     subparsers.add_parser("help", help="利用可能コマンド一覧を表示する")
     return parser
+
+
+def _add_fetch_stage_subparser(
+    subparsers: "argparse._SubParsersAction[argparse.ArgumentParser]",
+) -> None:
+    fetch_stage_parser = subparsers.add_parser(
+        "fetch-stage", help="PDFをURLから取得し保存する（JobOrchestrator経由）"
+    )
+    fetch_stage_parser.add_argument("url", help="取得元URL")
+    fetch_stage_parser.add_argument("destination_path", help="保存先ファイルパス")
+    fetch_stage_parser.add_argument("published_date", help="発令日（ISO8601形式、YYYY-MM-DD）")
+
+
+def _add_run_workflow_subparser(
+    subparsers: "argparse._SubParsersAction[argparse.ArgumentParser]",
+) -> None:
+    run_workflow_parser = subparsers.add_parser(
+        "run-workflow",
+        help="Pipeline→Review→Exportを一括実行する（JobOrchestrator経由。Fetchフェーズは対象外）",
+    )
+    run_workflow_parser.add_argument(
+        "export_format", choices=_EXPORT_FORMATS, help="エクスポート形式"
+    )
+    run_workflow_parser.add_argument("export_destination", help="エクスポート先ファイルパス")
+    run_workflow_parser.add_argument(
+        "--remote-path", default=None, help="指定時はFTPでこのリモートパスへアップロードする"
+    )
 
 
 def _add_review_subparser(
@@ -142,6 +195,41 @@ def _parse_since(raw: str) -> datetime:
         raise CliCommandError(f"invalid ISO8601 datetime: {raw!r}") from exc
 
 
+def _parse_date(raw: str) -> date:
+    try:
+        return date.fromisoformat(raw)
+    except ValueError as exc:
+        raise CliCommandError(f"invalid ISO8601 date: {raw!r}") from exc
+
+
+def _format_fetch_stage_result(pdf_id: PdfId | None) -> str:
+    if pdf_id is None:
+        return "not staged: content_hash duplicates an existing pdf"
+    return f"staged pdf: id={int(pdf_id)}"
+
+
+def _format_workflow_result(result: WorkflowResult) -> str:
+    fetched_ids = ", ".join(str(int(pdf_id)) for pdf_id in result.fetched_pdf_ids)
+    fetch_errors = "; ".join(f"{error.url}: {error.message}" for error in result.fetch_errors)
+    artifact = result.export_artifact
+    fetched_line = f"fetched {len(result.fetched_pdf_ids)} pdf(s)"
+    if fetched_ids:
+        fetched_line += f" [{fetched_ids}]"
+    export_line = (
+        f"export: format={artifact.format} "
+        f"record_count={artifact.record_count} sha256={artifact.sha256}"
+    )
+    lines = [
+        fetched_line,
+        f"processed {len(result.pipeline_results)} pipeline job(s)",
+        f"pending_reviews: {result.pending_review_count}",
+        export_line,
+    ]
+    if fetch_errors:
+        lines.insert(1, f"fetch_errors: {fetch_errors}")
+    return "\n".join(lines)
+
+
 def _dispatch_review(args: argparse.Namespace, settings: CompositionSettings) -> str:
     action = args.review_action
     if action == "list":
@@ -171,23 +259,42 @@ def _dispatch_export(args: argparse.Namespace, settings: CompositionSettings) ->
     return _format_gold_records(records)
 
 
+def _dispatch_orchestrator(
+    command: str, args: argparse.Namespace, settings: CompositionSettings
+) -> str:
+    if command == "fetch-stage":
+        pdf_id = fetch_stage_command(
+            settings, args.url, args.destination_path, _parse_date(args.published_date)
+        )
+        return _format_fetch_stage_result(pdf_id)
+    export_format = cast(ExportFormat, args.export_format)
+    workflow_result = run_workflow_command(
+        settings, export_format, args.export_destination, remote_path=args.remote_path
+    )
+    return _format_workflow_result(workflow_result)
+
+
 def _dispatch(command: str, args: argparse.Namespace, settings: CompositionSettings) -> str:
     if command == "init-db":
         init_db_command(settings)
-        return "database initialized"
-    if command == "run-pending":
+        message = "database initialized"
+    elif command == "run-pending":
         results = run_pending_command(settings)
-        return f"processed {len(results)} pdf(s)"
-    if command == "run-job":
+        message = f"processed {len(results)} pdf(s)"
+    elif command == "run-job":
         result = run_job_command(settings, PdfId(args.pdf_id))
-        return f"job status: {result.job.status}"
-    if command == "version":
-        return _format_version(version_command(settings))
-    if command == "review":
-        return _dispatch_review(args, settings)
-    if command == "export":
-        return _dispatch_export(args, settings)
-    raise CliCommandError(f"unknown command: {command}")
+        message = f"job status: {result.job.status}"
+    elif command == "version":
+        message = _format_version(version_command(settings))
+    elif command == "review":
+        message = _dispatch_review(args, settings)
+    elif command == "export":
+        message = _dispatch_export(args, settings)
+    elif command in ("fetch-stage", "run-workflow"):
+        message = _dispatch_orchestrator(command, args, settings)
+    else:
+        raise CliCommandError(f"unknown command: {command}")
+    return message
 
 
 def main(argv: Sequence[str] | None = None) -> int:

@@ -47,6 +47,7 @@ class ValidationViolation:
     severity: Literal["error", "warning"]
     message: str
 
+
 @dataclass(frozen=True, slots=True)
 class ValidationResult:
     subject_ref: NormalizedRecord

@@ -16,12 +16,14 @@ class DocumentMetadata:
     pdf_version: str
     encrypted: bool
 
+
 class DocumentStatistics:
     page_count: int
     file_size: int
     text_length: int | None
     image_count: int
     rotation_count: int
+
 
 class DocumentAnalysisResult:
     metadata: DocumentMetadata
