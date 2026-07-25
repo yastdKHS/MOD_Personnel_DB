@@ -23,6 +23,14 @@
 # `cli/app.py::main()`はTask18-4で`NoPendingJobError`（処理対象PDFが0件）を
 # 正常系として捕捉し、終了コード0を返すようになった。本ワークフローは
 # CLIの終了コードのみを信頼し、出力文字列の判定は行わない（Task18-5）。
+#
+# Task18-6: Production FTP接続用のSecrets（`MOD_PERSONNEL_DB_FTP__*`、
+# `config/ftp.py`のFtpSettingsフィールド名にそのまま対応）を先行して整備した。
+# `schedule-now run_pending_pipeline`はFTPClientを一切呼び出さないため、
+# これらのSecretsは現時点では未使用のまま渡される。`run_workflow`系`job_type`
+# が将来追加された際に配線変更なしで利用できるようにするための準備であり、
+# 本ワークフロー自体のCLI呼び出し・ロジックは変更していない（詳細は
+# docs/operations/release.md#production-ftp運用を参照）。
 
 name: Scheduler
 
@@ -54,6 +62,12 @@ jobs:
           MOD_PERSONNEL_DB_DB_PATH: ${{ secrets.MOD_PERSONNEL_DB_DB_PATH }}
           MOD_PERSONNEL_DB_KNOWLEDGE_ROOT: ${{ secrets.MOD_PERSONNEL_DB_KNOWLEDGE_ROOT }}
           MOD_PERSONNEL_DB_LAYOUTS_ROOT: ${{ secrets.MOD_PERSONNEL_DB_LAYOUTS_ROOT }}
+          MOD_PERSONNEL_DB_FTP__HOST: ${{ secrets.MOD_PERSONNEL_DB_FTP__HOST }}
+          MOD_PERSONNEL_DB_FTP__PORT: ${{ secrets.MOD_PERSONNEL_DB_FTP__PORT }}
+          MOD_PERSONNEL_DB_FTP__USERNAME: ${{ secrets.MOD_PERSONNEL_DB_FTP__USERNAME }}
+          MOD_PERSONNEL_DB_FTP__PASSWORD: ${{ secrets.MOD_PERSONNEL_DB_FTP__PASSWORD }}
+          MOD_PERSONNEL_DB_FTP__REMOTE_DIRECTORY: ${{ secrets.MOD_PERSONNEL_DB_FTP__REMOTE_DIRECTORY }}
+          MOD_PERSONNEL_DB_FTP__TIMEOUT: ${{ secrets.MOD_PERSONNEL_DB_FTP__TIMEOUT }}
         run: |
           python -m mod_personnel_db.cli \
             --db-path "$MOD_PERSONNEL_DB_DB_PATH" \

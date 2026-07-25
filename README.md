@@ -256,7 +256,36 @@ GitHub Actions画面の「Actions」タブ →「Scheduler」ワークフロー 
 | `MOD_PERSONNEL_DB_KNOWLEDGE_ROOT` | `--knowledge-root` |
 | `MOD_PERSONNEL_DB_LAYOUTS_ROOT` | `--layouts-root` |
 
-FTP接続情報（[`FtpSettings`](docs/phase8-integration-design.md#2-ftpsettings導入設計)）は`schedule-now`（`run_pending_pipeline`のみ）が呼び出す経路では使用しないため、本ワークフローには含めない。
+これに加え、Phase8 Task18-6でProduction FTP接続用のSecretsを`scheduler.yml`へ整備した。Secret名は[`FtpSettings`](docs/phase8-integration-design.md#2-ftpsettings導入設計)（`config/ftp.py`、Task18-1で実装済み）のフィールド名にそのまま対応させている。
+
+| Secret名 | 対応する`FtpSettings`フィールド | 必須/任意 |
+|---|---|---|
+| `MOD_PERSONNEL_DB_FTP__HOST` | `host` | 必須（Production FTPを利用する場合） |
+| `MOD_PERSONNEL_DB_FTP__PORT` | `port`（既定`21`） | 任意 |
+| `MOD_PERSONNEL_DB_FTP__USERNAME` | `username`（既定空文字列） | 任意 |
+| `MOD_PERSONNEL_DB_FTP__PASSWORD` | `password`（`SecretStr`） | 任意（実運用では登録を強く推奨） |
+| `MOD_PERSONNEL_DB_FTP__REMOTE_DIRECTORY` | `remote_directory`（既定`/`） | 任意 |
+| `MOD_PERSONNEL_DB_FTP__TIMEOUT` | `timeout`（既定`30.0`） | 任意 |
+
+現時点で`scheduler.yml`が起動する`schedule-now run_pending_pipeline`は`FTPClient`を一切呼び出さないため、これらのSecretsは実際には未使用のまま渡される（`export_and_publish()`のみが`FTPClient`を利用する、詳細は[`docs/operations/release.md`](docs/operations/release.md#production-ftp運用)を参照）。
+
+### FTP設定方法
+
+1. 上記のFTP関連Secretsを、リポジトリまたは`production`用のGitHub Environmentへ登録する。
+2. `AppSettings`（`config/settings.py`）は`env_nested_delimiter="__"`により、これらのSecretsを環境変数として渡すだけで`settings.ftp`（`FtpSettings`）へ自動的にマッピングする。CLIオプションでの明示的な指定は不要である。
+3. `MOD_PERSONNEL_DB_FTP__HOST`が未設定（空文字列）の場合、`build_ftp_client()`はプレースホルダ接続情報を生成し、実FTPサーバへは接続しない（既存コマンドの後方互換性を維持する既存の設計、Task18-1）。
+
+### 接続確認方法
+
+`scheduler.yml`（`schedule-now`のみ）はFTPを利用しないため、Production FTP接続の確認は既存CLIコマンド`run-workflow --remote-path`を用いて手動で行う。
+
+```bash
+python -m mod_personnel_db.cli \
+  --db-path <db-path> --knowledge-root <knowledge-root> --layouts-root <layouts-root> \
+  run-workflow json /tmp/ftp-connectivity-check.json --remote-path <検証用リモートパス>
+```
+
+上記のFTP関連Secretsに対応する環境変数（`MOD_PERSONNEL_DB_FTP__HOST`等）をあらかじめエクスポートした環境（運用者のローカル端末、または同等の権限を持つ検証環境）から実行し、`export: format=json ...`という出力とともに正常終了（終了コード0）すれば接続成功である。`FTPConnectionError`/`FTPTransferError`が発生した場合の確認項目は[`docs/operations/release.md`](docs/operations/release.md#障害時の確認項目)を参照。
 
 ### cron運用方法
 

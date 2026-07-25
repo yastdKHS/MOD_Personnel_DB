@@ -49,9 +49,47 @@ flowchart LR
 - **CLI経由のみ**: ワークフローは`python -m mod_personnel_db.cli ... schedule-now run_pending_pipeline`というCLIコマンドのみを呼び出す。`Scheduler`・`JobOrchestrator`等のPythonコードをワークフロー自身が直接importすることはない。
 - **Composition Root**: `schedule-now`は`cli/bootstrap.py`（Composition Root）が構築する`Scheduler`（`DefaultScheduler`）をProtocol型経由で呼び出す。ワークフロー追加によって`cli/`側の配線（Task17-4実装済み）は変更されない。
 - **排他制御**: `concurrency`グループにより、cron起動と手動起動が重なった場合の同時書き込みを防ぐ（[ADR-0025](../adr/0025-deployment-strategy.md)が要求するワークフロー側の排他制御）。
-- **正常系としての「処理対象なし」**: 未処理PDFが0件の場合、`Scheduler.trigger_now()`は`NoPendingJobError`を送出する。これは定期実行のたびに頻発しうる正常な結果であるため、`scheduler.yml`は出力を判定し、この場合のみジョブを成功として扱う（それ以外の失敗は通常どおりジョブ失敗として扱う）。
-- **Secrets**: `MOD_PERSONNEL_DB_DB_PATH`・`MOD_PERSONNEL_DB_KNOWLEDGE_ROOT`・`MOD_PERSONNEL_DB_LAYOUTS_ROOT`の3件（README.mdの「[Scheduler運用（GitHub Actions）](../../README.md#scheduler運用github-actions)」参照）。FTP接続情報は`run_pending_pipeline`が使用しないため対象外。
+- **正常系としての「処理対象なし」**: 未処理PDFが0件の場合、`Scheduler.trigger_now()`は`NoPendingJobError`を送出する。これは定期実行のたびに頻発しうる正常な結果であるため、`cli/app.py::main()`がこれを捕捉し終了コード0（成功）を返す（Task18-4）。`scheduler.yml`はCLIの終了コードのみを信頼し、出力文字列の判定は行わない（Task18-5）。
+- **Secrets**: `MOD_PERSONNEL_DB_DB_PATH`・`MOD_PERSONNEL_DB_KNOWLEDGE_ROOT`・`MOD_PERSONNEL_DB_LAYOUTS_ROOT`の3件に加え、Task18-6でFTP関連Secrets（`MOD_PERSONNEL_DB_FTP__HOST`等）を`scheduler.yml`へ追加した（README.mdの「[Scheduler運用（GitHub Actions）](../../README.md#scheduler運用github-actions)」参照）。FTP接続情報は現時点の`run_pending_pipeline`経路では実際には使用されないが、将来`run_workflow`系`job_type`が追加された際に配線変更なしで利用できるよう、Production FTP運用の一部として先行して整備した（「Production FTP運用」節参照）。
 - **スコープ**: 現時点で自動化されているのは`run_pending_pipeline`（既に`fetch-stage`等で取得済みのPDFの中核パイプライン処理）のみである。Fetch（新規PDF取得）・Export・FTP Publishを含む`run_workflow`系の自動化は、Fetch対象の自動決定方法が未解決のため対象外のまま残る（[`docs/phase8-integration-design.md#4-production-workflow設計`](../phase8-integration-design.md#4-production-workflow設計)）。
+
+## Production FTP運用
+
+Phase8 Task18-6で、Production FTP接続に必要なGitHub Secretsを整理し、`scheduler.yml`へ準備した（実接続処理自体は`ftp/`・`services/`が担い、本Taskでは変更していない）。Secret名は`config/ftp.py`の`FtpSettings`（Task18-1）が実装済みのフィールド名（`host`/`port`/`username`/`password`/`remote_directory`/`timeout`）にそのまま対応させ、新規の命名は導入していない。
+
+### Production運用手順
+
+1. **Secretsの登録**: 下表のSecretsを、リポジトリまたは`production`用のGitHub Environmentに登録する（`docs/configuration.md`の環境分離方針に準じ、`production`専用のEnvironmentへの登録を推奨する）。
+
+   | Secret名 | 対応する`FtpSettings`フィールド | 必須/任意 |
+   |---|---|---|
+   | `MOD_PERSONNEL_DB_FTP__HOST` | `host` | 必須（未設定時は`config/ftp.py`のバリデーションが失敗する） |
+   | `MOD_PERSONNEL_DB_FTP__PORT` | `port`（既定`21`） | 任意 |
+   | `MOD_PERSONNEL_DB_FTP__USERNAME` | `username`（既定空文字列） | 任意 |
+   | `MOD_PERSONNEL_DB_FTP__PASSWORD` | `password`（`SecretStr`） | 任意（実運用では登録を強く推奨） |
+   | `MOD_PERSONNEL_DB_FTP__REMOTE_DIRECTORY` | `remote_directory`（既定`/`） | 任意 |
+   | `MOD_PERSONNEL_DB_FTP__TIMEOUT` | `timeout`（既定`30.0`） | 任意 |
+
+2. **反映方法**: `AppSettings`（`config/settings.py`）は`env_nested_delimiter="__"`により、上記Secretsを環境変数として注入するだけで`settings.ftp`（`FtpSettings`）へ自動的にマッピングする。CLI起動時に追加の引数指定は不要である（`--db-path`等とは異なり、`ftp`はCLIオプション経由では渡さない設計、Task18-1）。
+3. **現状の適用範囲**: `scheduler.yml`が呼び出す`schedule-now run_pending_pipeline`は、`JobOrchestrator.run_pending_pipeline()`を経由するのみで`FTPClient`を一切呼び出さないため、上記Secretsは現時点では**呼び出されない**（`services/orchestrator.py`の`export_and_publish()`のみが`FTPClient`を利用する、Task18-2確認済み）。Fetch/Export/FTP Publishを含む`run_workflow`系の自動化（[`docs/phase8-integration-design.md#4-production-workflow設計`](../phase8-integration-design.md#4-production-workflow設計)が未解決のまま残す設計課題）が実装された時点で、配線変更なしにこれらのSecretsが実際に使用され始める。それまでの間、FTP実接続を要する経路は既存CLIコマンド`run-workflow --remote-path`の手動実行に限られる（下記「接続確認方法」参照）。
+
+### 障害時の確認項目
+
+FTP関連の失敗（`FTPConnectionError`/`FTPTransferError`、`ftp/exceptions.py`）が発生した場合、以下の順に確認する。
+
+1. **Secretsの登録状況**: 上表のSecretsが対象のGitHub Environment（`production`）に登録されているか。`MOD_PERSONNEL_DB_FTP__HOST`が未登録（空文字列）の場合、`build_ftp_client()`はプレースホルダ（`FTPConnectionConfig(host="")`）を返すため、接続自体が空ホストへの接続として失敗する。
+2. **ネットワーク到達性**: GitHub Actions runner（`ubuntu-latest`、GitHub-hosted）からFTPサーバへ到達可能か（サーバ側のIP許可リスト・ファイアウォール設定にrunnerの送信元IPが含まれているか。GitHub-hosted runnerのIPは実行のたびに変わりうるため、固定IP許可リストを用いる場合はセルフホストランナーへの切り替えを検討する）。
+3. **認証情報**: `MOD_PERSONNEL_DB_FTP__USERNAME`/`MOD_PERSONNEL_DB_FTP__PASSWORD`がFTPサーバ側の認証情報と一致しているか（`FTPConnectionError`のメッセージには接続先ホスト・ポートのみが含まれ、認証情報自体はログに出力されない設計、`config/ftp.py`の`SecretStr`）。
+4. **パッシブモード・ポート**: `StandardFTPClient`は既定でパッシブモード（`FTPConnectionConfig.passive=True`、`ftp/config.py`）を用いる。ネットワーク経路上でパッシブモードのデータポート範囲がブロックされていないか、FTPサーバ側の設定を確認する。
+5. **`timeout`の妥当性**: `MOD_PERSONNEL_DB_FTP__TIMEOUT`（既定30秒）がネットワーク遅延に対して短すぎないか。
+6. **復旧確認**: 上記いずれかを是正した後は、下記「接続確認方法」の手順で再確認してから、Production運用（`run-workflow --remote-path`の実行）を再開する。
+
+### Secrets更新方法
+
+1. GitHub Secrets（[`docs/security.md`](../security.md)が定める最小権限方針に従い、更新権限を持つ担当者のみが実施する）の該当Environmentを開き、対象Secretの値を更新する。値そのものはUIから再表示できないため、更新は既存値の上書きのみで行う。
+2. パスワードローテーション時は、FTPサーバ側の認証情報変更とGitHub Secrets側の値更新を同一の作業ウィンドウ内で行う（両者が一時的に不一致になる期間を最小化する）。`docs/configuration.md`の「FTP Secret」節が定める「ローテーションはGitHub Secrets側の値更新のみで完結し、コード・`Settings`の構造自体は変更を要さない」設計により、`config/ftp.py`・`cli/bootstrap.py`側の変更は不要である。
+3. 更新後は「接続確認方法」（README.md）の手順で新しい値が正しく反映されていることを確認する。
+4. Secrets更新自体は`schedule: cron`の実行タイミングと無関係に即座に反映される（次回のワークフロー起動から新しい環境変数が使われる、[ADR-0025](../adr/0025-deployment-strategy.md)のバッチ実行モデルにおける「1回のプロセス起動が最新の設定を読み込む」性質）。
 
 ## Release Candidateからv1.0.0正式版までの残タスク
 
@@ -61,7 +99,7 @@ Phase6 Task15-0の最終監査（[`RELEASE_STATUS.md`](../../RELEASE_STATUS.md)�
 |---|---|---|
 | データ整備 | `layouts/`・`knowledge/`を実運用規模（複数様式・表記ゆれ）へ拡充し、Golden Testフィクスチャを`era_id`ごとに整備する | [`RELEASE_STATUS.md`](../../RELEASE_STATUS.md)のKnown Limitations 1・2 |
 | Composition Root配線・CLI統合（**Task17-1〜17-4で完了**） | ~~Phase7（Task16-1〜16-4）で実装済みの`ftp/`・`fetch/`・`services/`（`JobOrchestrator`による横断オーケストレーション）を`cli/`（Composition Root）へ配線し、CLIサブコマンドとして公開する。~~ Task17-1〜17-4で完了済み（`fetch-stage`/`run-workflow`/`schedule-now`/`list-schedule`の4コマンド、[`docs/reports/phase7-final-audit.md`](../reports/phase7-final-audit.md)）。`features/`（特徴量計算）の統合のみ、`JobRunner`のコンストラクタ拡張を伴うため別途新規ADRが前提のまま未着手（[`docs/phase7-integration-design.md`](../phase7-integration-design.md#7-featurestore生成位置)参照） | 同3（`features/`統合分のみ残存） |
-| Scheduler自動実行（**Task17-3/17-4で本体・CLI統合は完了、自動起動経路はPhase8で設計**） | [`docs/api/interfaces.md`](../api/interfaces.md#scheduler)が定める`Scheduler`Protocol・標準実装`DefaultScheduler`はTask17-3で実装済み、`schedule-now`/`list-schedule`のCLI統合はTask17-4で完了済み。ただしCLIからの手動トリガーのみに対応し、GitHub Actions cron等による自動的な定期実行の経路・`FtpSettings`実装によるFTP実接続はまだ確立していない。実装設計は[`docs/phase8-integration-design.md`](../phase8-integration-design.md)（Task18-0）が確定した（実装は別タスク） | 同3（自動実行経路・FTP実接続分のみ残存） |
+| Scheduler自動実行（**Task17-3〜18-6で本体・CLI統合・自動起動経路・FTP Secrets整備まで完了**） | [`docs/api/interfaces.md`](../api/interfaces.md#scheduler)が定める`Scheduler`Protocol・標準実装`DefaultScheduler`はTask17-3で実装済み、`schedule-now`/`list-schedule`のCLI統合はTask17-4で完了済み。GitHub Actions cronによる自動的な定期実行（`scheduler.yml`）はTask18-3〜18-5で完了し、`FtpSettings`（Task18-1）に対応するGitHub SecretsもTask18-6で`scheduler.yml`へ整備済みである。ただし（a）`run_pending_pipeline`経路はFTPを使用しないため上記Secretsは現時点で未使用のまま、（b）実際のProduction FTPサーバへの接続確認（実サーバ・実認証情報を用いた検証）は運用側の作業として残る（「Production FTP運用」節参照） | 同3（Fetch対象自動決定・実サーバでの接続確認分のみ残存） |
 | Export完全性・監査の強化 | [ADR-0029](../adr/0029-export-integrity-and-audit-log-policy.md)が定めるEd25519署名・GitHub Actionsの`GITHUB_TOKEN`最小権限設定（`permissions:`ブロック）・サードパーティActionsのコミットSHAピン留めを実装する | 同4 |
 | 依存脆弱性スキャン | [ADR-0026](../adr/0026-security-policy.md)が求める`pip-audit`等を3ワークフロー（`ci.yml`/`release.yml`/`nightly.yml`）へ導入する | 同5 |
 | CLI公開範囲の拡張 | `ExportService`の新機能（`PersonnelRecord`/CSV/Parquet/完全性メタデータ、Phase6 Task14-2〜14-4）をCLIサブコマンドとして公開する | 同6 |

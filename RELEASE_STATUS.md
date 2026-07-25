@@ -1,6 +1,6 @@
 # RELEASE_STATUS
 
-> 本ファイルはv1.0.0 Release Candidateとしてのリリース判定を記録する。ソースコード・テストの実装は一切含まない、読み取り専用の判定記録である。判定根拠はPhase6 Task15-0の最終監査（読み取り専用で実施、レポートファイルは作成していない）、[`CHANGELOG.md`](CHANGELOG.md)のPhase6節が記録するTask15-1のDocument Drift是正結果、および[`docs/reports/phase7-final-audit.md`](docs/reports/phase7-final-audit.md)（Task17-5、Phase7 CLI統合完了後の最終監査）に基づく。
+> 本ファイルはv1.0.0 Release Candidateとしてのリリース判定を記録する。ソースコード・テストの実装は一切含まない、読み取り専用の判定記録である。判定根拠はPhase6 Task15-0の最終監査（読み取り専用で実施、レポートファイルは作成していない）、[`CHANGELOG.md`](CHANGELOG.md)のPhase6節が記録するTask15-1のDocument Drift是正結果、[`docs/reports/phase7-final-audit.md`](docs/reports/phase7-final-audit.md)（Task17-5、Phase7 CLI統合完了後の最終監査）、および[`docs/reports/phase8-release-validation.md`](docs/reports/phase8-release-validation.md)（Task18-7、Production Release Validation、GitHub Actions実行履歴・実CLI実行による実測検証）に基づく。
 
 ## Version
 
@@ -8,17 +8,17 @@
 
 ## Date
 
-2026-07-22（Phase6 Task15-4作成時点）。2026-07-24、Task17-5（Phase7最終監査・CLI統合完了後のドキュメント同期）・Task17-6（Phase7 Closeout）で更新。
+2026-07-22（Phase6 Task15-4作成時点）。2026-07-24、Task17-5（Phase7最終監査・CLI統合完了後のドキュメント同期）・Task17-6（Phase7 Closeout）で更新。2026-07-25、Task18-1（`FtpSettings`導入）・Task18-3〜18-5（GitHub Actions Scheduler統合）・Task18-6（Production FTP運用整備）・Task18-7（Production Release Validation、[`docs/reports/phase8-release-validation.md`](docs/reports/phase8-release-validation.md)）で更新。
 
 ## Current Status
 
-**v1.0.0 Release Candidate（Phase7完了、CLI統合済み）**。Phase6 Task15-0で実施した最終監査（Architecture Contract全15 Guarantee・ADR全46本・Dependency Rule・Package Design・Protocol・Composition Root・Workflow・Testの整合性監査、読み取り専用）の結果、設計と実装の間に致命的な不整合は検出されなかった。Task15-1でDocument Drift（`config/`実装状況・`ExportService`実装状況注記・Golden Test配置説明の3件）を是正済み。Task15-2でREADME/CHANGELOGのバージョン整合・既知の制限事項の反映・docs索引の到達性確保・`release.yml`との整合を実施済み。Phase7（Task16-1〜16-4）で`ftp/`・`features/`・`fetch/`・`services/`の4パッケージを実装し、Task16-5の最終監査（読み取り専用）でArchitecture Contract・Dependency Ruleとの矛盾がないことを確認した。続くTask17-0〜17-4で、`ftp/`・`fetch/`・`services/`（`JobOrchestrator`・`Scheduler`）をComposition Root（`cli/`）へ配線し、`fetch-stage`/`run-workflow`/`schedule-now`/`list-schedule`の4コマンドとしてCLIから利用可能にした。Task17-5の最終監査（[`docs/reports/phase7-final-audit.md`](docs/reports/phase7-final-audit.md)）で、循環依存が存在しないこと・Composition Rootが唯一であること・`Scheduler`が`JobOrchestrator`のみに依存すること・CLIがProtocol経由のみ利用していること・`JobOrchestrator`の直接利用箇所が存在しないことを確認した。`features/`のみ、実装済みだが`JobRunner`への統合が未実装のため未接続のパッケージとして残る（詳細はKnown Limitations参照）。Task17-6でPhase7を正式に**Completed**としてクローズした（下記Completed Phases参照）。本Closeoutはドキュメント上の整理のみであり、v1.0.0 Release CandidateとしてのRelease Decisionは変更しない（下記参照）。
+**v1.0.0 Release Candidate（Phase7完了、CLI統合済み）**。Phase6 Task15-0で実施した最終監査（Architecture Contract全15 Guarantee・ADR全46本・Dependency Rule・Package Design・Protocol・Composition Root・Workflow・Testの整合性監査、読み取り専用）の結果、設計と実装の間に致命的な不整合は検出されなかった。Task15-1でDocument Drift（`config/`実装状況・`ExportService`実装状況注記・Golden Test配置説明の3件）を是正済み。Task15-2でREADME/CHANGELOGのバージョン整合・既知の制限事項の反映・docs索引の到達性確保・`release.yml`との整合を実施済み。Phase7（Task16-1〜16-4）で`ftp/`・`features/`・`fetch/`・`services/`の4パッケージを実装し、Task16-5の最終監査（読み取り専用）でArchitecture Contract・Dependency Ruleとの矛盾がないことを確認した。続くTask17-0〜17-4で、`ftp/`・`fetch/`・`services/`（`JobOrchestrator`・`Scheduler`）をComposition Root（`cli/`）へ配線し、`fetch-stage`/`run-workflow`/`schedule-now`/`list-schedule`の4コマンドとしてCLIから利用可能にした。Task17-5の最終監査（[`docs/reports/phase7-final-audit.md`](docs/reports/phase7-final-audit.md)）で、循環依存が存在しないこと・Composition Rootが唯一であること・`Scheduler`が`JobOrchestrator`のみに依存すること・CLIがProtocol経由のみ利用していること・`JobOrchestrator`の直接利用箇所が存在しないことを確認した。`features/`のみ、実装済みだが`JobRunner`への統合が未実装のため未接続のパッケージとして残る（詳細はKnown Limitations参照）。Task17-6でPhase7を正式に**Completed**としてクローズした（下記Completed Phases参照）。本Closeoutはドキュメント上の整理のみであり、v1.0.0 Release CandidateとしてのRelease Decisionは変更しない（下記参照）。続くPhase8では、Task18-0で実装設計（[`docs/phase8-integration-design.md`](docs/phase8-integration-design.md)）を確定した後、Task18-1で`FtpSettings`（`config/ftp.py`）を実装し、Task18-3〜18-5でGitHub Actions（`.github/workflows/scheduler.yml`）による`schedule-now run_pending_pipeline`のcron自動実行を追加し、Task18-6で対応するFTP Secretsの整備・運用手順文書化（[`docs/operations/release.md`](docs/operations/release.md#production-ftp運用)）を行った。Phase8は継続中であり、本Release DecisionはPhase7完了時点の判定を維持する。Task18-7では、GitHub Actions API（実行履歴）・実CLI実行（スクラッチDB）を用いたProduction Release Validationを実施した（[`docs/reports/phase8-release-validation.md`](docs/reports/phase8-release-validation.md)）。その結果、`scheduler.yml`・`release.yml`はいずれも実行履歴ゼロ（Actions API確認）であり、実FTPサーバへの接続実績・GitHub Secretsの実登録状況は本セッションからは確認できないことが判明した（いずれも「未確認」であり「失敗」ではない）。この監査結果に基づき、Production Ready判定は**Release Candidate maintained**とした（下記Release Decision・Release Recommendation参照）。
 
 ## Release Decision
 
-**Not Ready（v1.0.0としての完全な本番リリースには未達）。実装済み範囲（中核パイプライン・Gold Database・Review・Export・CLI・CI/CD、および今回CLI統合が完了した`fetch/`・`ftp/`・`services/`）に限定したRelease Candidateとしては、構造的な不整合なく到達している。**
+**Production Ready判定: Release Candidate maintained**（Task18-7、[`docs/reports/phase8-release-validation.md`](docs/reports/phase8-release-validation.md)の3択判定基準「Ready for v1.0.0 Release」「Release Candidate maintained」「Not Ready」のうち中位を選択）。「Not Ready（v1.0.0としての完全な本番リリースには未達）」であるが、実装済み範囲（中核パイプライン・Gold Database・Review・Export・CLI・CI/CD、および今回CLI統合が完了した`fetch/`・`ftp/`・`services/`）に限定したRelease Candidateとしては、構造的な不整合なく到達している。
 
-判定根拠は「Known Limitations」節および「Release Recommendation」節を参照。
+判定根拠は「Known Limitations」節および「Release Recommendation」節、詳細な実測結果は[`docs/reports/phase8-release-validation.md`](docs/reports/phase8-release-validation.md)を参照。
 
 ## Completed Phases
 
@@ -55,11 +55,11 @@
 - **Integration**: `tests/integration/`配下（`cli/`（`test_cli_e2e.py`・`test_phase7_cli_workflow.py`・`test_phase7_integration.py`・`test_phase7_scheduler_cli.py`）, `config/test_settings_integration.py`, `export/test_export_personnel_records.py`, `export/test_export_csv_parquet.py`, `export/test_export_with_metadata.py`, `golden/test_golden.py`, `services/test_scheduler_integration.py`等）。Phase7でCLI・servicesの結合テストが追加された。
 - **Golden**: [`tests/integration/golden/test_golden.py`](tests/integration/golden/test_golden.py)（Phase6 Task14-1）が実装済み。フィクスチャは`tests/golden/`に合成PDF・期待結果JSONを各1件配置（[ADR-0007](docs/adr/0007-golden-file-testing.md)）。
 - **未着手のテスト層**: Regression / Performance / Acceptance / Benchmark / Mutation（[`docs/testing/test-policy.md`](docs/testing/test-policy.md)が定める8種のうち残り5種）。
-- **実行結果**: `poetry run pytest --cov` → **816 passed**（0 failed、Phase6完了時点は634 passed）。
+- **実行結果**: `poetry run pytest --cov` → **833 passed**（0 failed、Phase6完了時点は634 passed、Phase7完了時点は816 passed。Phase8 Task18-1〜18-4で追加された`FtpSettings`・`NoPendingJobError`ハンドリング等のテストにより17件増加、Task18-7時点で再実行し確認）。
 
 ## Coverage
 
-`poetry run pytest --cov` の TOTAL coverage は **98.98%**（Phase6完了時点は98.99%、Phase7で追加した`services/scheduler.py`の分岐が1件未到達のため僅かに低下）。`pyproject.toml`の`[tool.coverage.report]`が定める閾値（`fail_under = 80`）を大きく上回る。Phase6で追加した`config/`・`export/`の新規モジュール（`csv_writer.py`, `parquet_writer.py`, `tabular.py`, `json_writer.py`, `integrity.py`, `settings.py`等）はいずれも100%カバレッジ。Phase7で追加した`fetch/`・`ftp/`・`features/`・`services/__init__.py`・`services/orchestrator.py`はいずれもほぼ100%カバレッジ（`services/orchestrator.py`は99%、`services/scheduler.py`は97%）。
+`poetry run pytest --cov` の TOTAL coverage は **98.98%**（Phase6完了時点は98.99%、Phase7で追加した`services/scheduler.py`の分岐が1件未到達のため僅かに低下。Task18-7時点で再実行し変化がないことを確認）。`pyproject.toml`の`[tool.coverage.report]`が定める閾値（`fail_under = 80`）を大きく上回る。Phase6で追加した`config/`・`export/`の新規モジュール（`csv_writer.py`, `parquet_writer.py`, `tabular.py`, `json_writer.py`, `integrity.py`, `settings.py`等）はいずれも100%カバレッジ。Phase7で追加した`fetch/`・`ftp/`・`features/`・`services/__init__.py`・`services/orchestrator.py`はいずれもほぼ100%カバレッジ（`services/orchestrator.py`は99%、`services/scheduler.py`は97%）。
 
 ## CI Status
 
@@ -79,7 +79,7 @@ Task15-0監査で確認した既知の制限事項（Task15-1のDocument Drift�
 
 1. `layouts/`（1様式）・`knowledge/`（8カテゴリ各1件）・Golden Testフィクスチャ（1件）とも実運用規模のデータには未到達。複数様式・表記ゆれを網羅したパイプライン実データ検証はできない。
 2. リポジトリ直下の`sample_pdfs/`・`sample_outputs/`は空のまま。実データ（合成フィクスチャ）は`tests/golden/`配下という別の場所に置かれている。
-3. `ftp/`・`fetch/`・`services/`（`JobOrchestrator`・`Scheduler`）パッケージはPhase7 Task16-1〜16-4で実装され、Task17-1〜17-4でComposition Root（`cli/bootstrap.py`）へ配線済みである（[`docs/api/package-design.md`](docs/api/package-design.md)参照）。`fetch-stage`/`run-workflow`/`schedule-now`/`list-schedule`の4コマンドとしてCLIから手動実行できるが、（a）`ftp/`の実接続情報（`config/`の`FtpSettings`）が未実装のため`build_ftp_client()`は`FTPConnectionConfig(host="")`というプレースホルダを生成し、実FTPサーバへは接続できない、（b）`schedule-now`/`list-schedule`はCLIから手動でトリガーする経路のみを提供し、cron等による自動的な定期実行（`JobSchedule`の登録経路自体が未実装）は存在しない（`list-schedule`は現時点で常に0件を返す）、という2点により、PDFの自動取得・実際のデータベース公開（FTP送信等）に至る**自動化された**経路は依然として存在しない。`features/`は`pipeline/`（`JobRunner`）からも呼び出されておらず、独立した未接続のパッケージのままである。
+3. `ftp/`・`fetch/`・`services/`（`JobOrchestrator`・`Scheduler`）パッケージはPhase7 Task16-1〜16-4で実装され、Task17-1〜17-4でComposition Root（`cli/bootstrap.py`）へ配線済みである（[`docs/api/package-design.md`](docs/api/package-design.md)参照）。`fetch-stage`/`run-workflow`/`schedule-now`/`list-schedule`の4コマンドとしてCLIから手動実行できる。Phase8 Task18-1で`FtpSettings`（`config/ftp.py`）を実装し、`build_ftp_client()`は`AppSettings.ftp`が設定されていれば実接続情報を用いる（未設定時は従来どおり`FTPConnectionConfig(host="")`というプレースホルダを生成する）。Task18-3〜18-5でGitHub Actions（`.github/workflows/scheduler.yml`）による`schedule-now run_pending_pipeline`のcron自動実行（毎日17:45 JST）を実装し、Task18-6で対応するFTP Secretsを同ワークフローへ整備した。ただし（a）`run_pending_pipeline`経路は`FTPClient`を一切呼び出さないため、自動実行されるのはPDFの取得・パース・Gold DB反映のみであり、実際のFTP公開（`run_workflow`系）は依然として`run-workflow --remote-path`によるCLI手動実行のみで到達可能、（b）実FTPサーバへの接続確認（実サーバ・実認証情報を用いた検証）はTask18-6時点でも未実施、（c）`schedule-now`/`list-schedule`の周期定義自体をCLI/設定から登録する経路は存在せず（`list-schedule`は現時点で常に0件を返す）、という3点により、PDFの自動取得からデータベース公開（FTP送信等）までを一気通貫で自動化する経路は依然として存在しない。`features/`は`pipeline/`（`JobRunner`）からも呼び出されておらず、独立した未接続のパッケージのままである。
 4. ADR-0029の残部（Ed25519署名、GitHub Actionsの`GITHUB_TOKEN`最小権限設定、サードパーティActionsのコミットSHAピン留め）が未実装。Exportの完全性情報はSHA-256チェックサム（`ExportArtifact`、Phase6 Task14-4）のみ。
 5. ADR-0026が求める依存脆弱性スキャン（`pip-audit`等）が3ワークフローいずれにも存在しない。
 6. `export/`の新機能（`PersonnelRecord`/CSV/Parquet/完全性メタデータ、Phase6 Task14-2〜14-4）はCLIコマンドとして未公開であり、`ExportService`の内部APIとしてのみ利用できる。
@@ -90,24 +90,25 @@ Task15-0監査で確認した既知の制限事項（Task15-1のDocument Drift�
 11. `docs/database/schema.md`が定める`schema_migrations`管理テーブル・`PRAGMA user_version`が未実装（`apply_schema()`は単発DDL適用のみ）。
 12. `review/`・`export/`パッケージは、Phase4で確定した狭い契約（`docs/api/review.md`・`docs/api/interfaces.md`が描く広い契約とは異なる）のまま拡張されている（両パッケージの`__init__.py`docstringが自己申告済み）。
 13. Golden以外のテスト層（Regression/Performance/Acceptance/Benchmark/Mutation）は未着手。
+14. Task18-7の実測により新たに判明した2件（[`docs/reports/phase8-release-validation.md`](docs/reports/phase8-release-validation.md)）: (a) FTP接続失敗時（`FTPConnectionError`）が`cli/app.py::main()`の`except`節（`CliCommandError`/`NoPendingJobError`）のいずれにも該当せず、捕捉されないままPythonの生トレースバックとして出力される。(b) `scheduler.yml`・`release.yml`はGitHub Actions API確認の時点で実行履歴が0件であり、Production環境での実行実績が存在しない。いずれも本Taskでは`src/**`・`.github/**`変更禁止のため是正していない。
 
 ## Phase8開始前の残課題一覧（Task17-6で整理、Task18-0で実装設計を確定）
 
 Phase7 Closeoutにあたり、Phase8着手前に解消が必要な5項目を明示する（下記「Remaining Work」の該当項目と対応する。詳細な設計・実装方針は各項目のリンク先を正とする）。5項目それぞれの実装設計（`AppSettings`拡張方法・環境変数名・Validation方針・`Scheduler`自動起動方式・Production Workflow・Composition Root更新方針・Release Readiness残Task一覧）は[`docs/phase8-integration-design.md`](docs/phase8-integration-design.md)（Task18-0、設計のみ・実装は別タスク）が確定した。
 
-1. **FtpSettings実装**: `config/`に`FtpSettings`（host/port/username/password等、`SecretStr`によるパスワード秘匿を含む）が未実装のため、`cli/bootstrap.py`の`build_ftp_client()`は`FTPConnectionConfig(host="")`というプレースホルダを生成する（[`docs/configuration.md`](docs/configuration.md)、[`docs/reports/phase7-final-audit.md`](docs/reports/phase7-final-audit.md)）。
+1. **FtpSettings実装（Task18-1で完了）**: `config/ftp.py`に`FtpSettings`（host/port/username/password等、`SecretStr`によるパスワード秘匿を含む）を実装した。`cli/bootstrap.py`の`build_ftp_client()`は`AppSettings.ftp`が設定されていれば実接続情報を用いる（未設定時は従来どおり`FTPConnectionConfig(host="")`というプレースホルダを生成する）。
 2. **Scheduler永続化**: `Scheduler`（`DefaultScheduler`）はコンストラクタ注入された`JobSchedule`一覧をメモリ上に保持するのみで、永続化・CLI/設定からの登録経路が存在しない。現状`cli/commands.py`の`_build_scheduler()`は常に空タプルを渡すため、`list-schedule`は常に0件を返す。
-3. **自動実行経路**: `schedule-now`/`list-schedule`はCLIからの手動トリガーのみに対応し、cron等による自動的な定期実行の仕組みが存在しない（`Scheduler`本体・CLI統合自体はTask17-3/17-4で実装済み）。
+3. **自動実行経路（Task18-3〜18-5で完了）**: GitHub Actions（`.github/workflows/scheduler.yml`）による`schedule-now run_pending_pipeline`のcron自動実行（毎日17:45 JST）を実装した。対象は`run_pending_pipeline`のみであり、Fetch/Export/FTP Publishを含む`run_workflow`系の自動化は対象外のまま残る。
 4. **release.yml**: `parser_versions`自動記録・staging/production環境分離・データ公開（Export/FTP送信）の自動化が未実装。現状の`release.yml`は品質ゲートの再実行のみを行う（[`docs/operations/release.md`](docs/operations/release.md#release-flow)）。
-5. **Production FTP接続**: 上記1（`FtpSettings`）が前提条件のため、実FTPサーバへの接続・アップロードは現時点で検証できていない（`run-workflow --remote-path`はプレースホルダ接続情報のまま実行されると失敗する）。
+5. **Production FTP接続**: 上記1（`FtpSettings`）はTask18-1で実装済みであり、対応するGitHub SecretsもTask18-6で`scheduler.yml`へ整備済みである。ただし実FTPサーバへの接続・アップロードの実地検証（実サーバ・実認証情報を用いた確認）はTask18-6時点でも未実施のまま残る（[`docs/operations/release.md`](docs/operations/release.md#production-ftp運用)参照）。
 
 ## Remaining Work
 
 v1.0.0正式版に向けた残タスクの一覧は、[`docs/operations/release.md`](docs/operations/release.md#release-candidateからv100正式版までの残タスク)に集約した（本ファイルとの重複記載を避けるため、詳細は同節を正とする）。主要カテゴリは以下のとおり。
 
 - データ整備（`layouts/`・`knowledge/`・Golden Testフィクスチャの実運用規模への拡充）
-- `ftp/`の実接続情報整備（`config/`への`FtpSettings`追加、`SecretStr`によるパスワード秘匿を含む）、および`cli/bootstrap.py`の`build_ftp_client()`を実接続情報を用いる実装へ更新すること
-- 定期実行の自動化（`JobSchedule`をCLI/設定から登録する経路の実装、cron・`nightly.yml`等から`schedule-now`相当を定期起動する仕組み）。`Scheduler`本体（`trigger_now`/`list_upcoming`）・CLI統合（`schedule-now`/`list-schedule`）はTask17-3/17-4で実装済み
+- `ftp/`の実接続情報整備は`config/`への`FtpSettings`追加・`build_ftp_client()`更新（Task18-1）、対応するGitHub Secrets整備（Task18-6）まで完了した。残るのは実FTPサーバへの接続確認（実サーバ・実認証情報を用いた検証、運用側の作業）のみである（[`docs/operations/release.md`](docs/operations/release.md#production-ftp運用)参照）。Task18-7の実測でも、GitHub Secretsの実登録状況・実FTPサーバへの接続実績はいずれも本セッションから確認不能であり「未確認」のまま残ることを確認した（[`docs/reports/phase8-release-validation.md`](docs/reports/phase8-release-validation.md)）
+- 定期実行の自動化のうち、cronによる`schedule-now run_pending_pipeline`の起動（`.github/workflows/scheduler.yml`）はTask18-3〜18-5で完了した。`Scheduler`本体（`trigger_now`/`list_upcoming`）・CLI統合（`schedule-now`/`list-schedule`）はTask17-3/17-4で実装済み。ただし`JobSchedule`をCLI/設定から登録する経路（周期定義自体の永続化）は未実装のまま残り、`list-schedule`は現時点で常に0件を返す。Task18-7でGitHub Actions APIを用いて実行履歴を直接確認したところ、`scheduler.yml`・`release.yml`とも実行回数`0`であり、Production環境でのcron起動実績が存在しないことが判明した（[`docs/reports/phase8-release-validation.md`](docs/reports/phase8-release-validation.md)）
 - `features/`の`JobRunner`への統合（`FeatureVector`を`Normalizer`/`Validator`のコンストラクタへ注入する設計、新規ADR起票が前提）
 - セキュリティ強化（ADR-0026の依存脆弱性スキャン、ADR-0029の署名・`GITHUB_TOKEN`最小権限）
 - リリース自動化（`parser_versions`自動記録、staging/production環境分離）
@@ -116,9 +117,10 @@ v1.0.0正式版に向けた残タスクの一覧は、[`docs/operations/release.
 
 ## Release Recommendation
 
-- **v1.0.0タグ付与（正式リリース）は推奨しない。** 上記Known Limitations、特に(a)`ftp/`の実接続情報未整備・定期実行の自動化未実装により、CLI統合が完了した後もPDFの自動取得・実際の外部公開への**自動化された**経路が存在しないこと、(b)`layouts/`・`knowledge/`・Golden Testフィクスチャが実運用規模に未到達であること、(c)ADR-0026・ADR-0029が求めるセキュリティ関連実装が未着手であること、の3点は「継続的にPDFを収集・公開する」というプロジェクトの中核目的に直接関わるため、これらの解消を待つべきである。
-- **v1.0.0-rc1等のPre-releaseタグ付与、または内部的なRelease Candidateとしての継続利用は妥当である。** Architecture Contract 15/15維持、ADR間の矛盾ゼロ、テスト816件全通過・Coverage 98.98%、mypy --strict / ruffとも成功しており、実装済み範囲（中核パイプライン・Gold Database・Review・Export・CLI・CI/CD基盤、およびCLI統合が完了した`fetch/`・`ftp/`・`services/`）における構造的な健全性は監査により裏付けられている。Phase6時点からの前進として、`fetch-stage`/`run-workflow`/`schedule-now`/`list-schedule`の4コマンドが手動実行可能になった。
-- 次のマイルストーンは「Remaining Work」節の各カテゴリのうち、特にデータ整備・`FtpSettings`整備・定期実行自動化・セキュリティ強化を優先することを推奨する（詳細な優先順位付けは本ファイルの範囲外とし、`docs/roadmap.md`等の別途の意思決定に委ねる）。
+- **v1.0.0タグ付与（正式リリース）は推奨しない。** 上記Known Limitations、特に(a)`ftp/`の実接続情報整備（Task18-1）・定期実行の自動化（Task18-3〜18-5）は完了したものの、`run_pending_pipeline`経路がFTP送信を含まないため実際の外部公開（FTP送信）への**自動化された**経路は依然として存在しないこと、また実FTPサーバへの接続確認自体もTask18-6時点で未実施であること、(b)`layouts/`・`knowledge/`・Golden Testフィクスチャが実運用規模に未到達であること、(c)ADR-0026・ADR-0029が求めるセキュリティ関連実装が未着手であること、の3点は「継続的にPDFを収集・公開する」というプロジェクトの中核目的に直接関わるため、これらの解消を待つべきである。
+- **v1.0.0-rc1等のPre-releaseタグ付与、または内部的なRelease Candidateとしての継続利用は妥当である。** Architecture Contract 15/15維持、ADR間の矛盾ゼロ、テスト816件全通過・Coverage 98.98%、mypy --strict / ruffとも成功しており、実装済み範囲（中核パイプライン・Gold Database・Review・Export・CLI・CI/CD基盤、およびCLI統合が完了した`fetch/`・`ftp/`・`services/`）における構造的な健全性は監査により裏付けられている。Phase6時点からの前進として、`fetch-stage`/`run-workflow`/`schedule-now`/`list-schedule`の4コマンドが手動実行可能になった。Phase8ではさらに`FtpSettings`実装（Task18-1）・cron自動実行（Task18-3〜18-5）・FTP Secrets整備（Task18-6）が加わった。
+- 次のマイルストーンは「Remaining Work」節の各カテゴリのうち、特にデータ整備・実FTPサーバでの接続確認・セキュリティ強化を優先することを推奨する（`FtpSettings`整備・cron定期実行自動化はTask18-1〜18-6で完了したため優先順位から外れた）（詳細な優先順位付けは本ファイルの範囲外とし、`docs/roadmap.md`等の別途の意思決定に委ねる）。
+- **Task18-7 Production Ready判定: Release Candidate maintained。** GitHub Actions API・実CLI実行による実測検証（[`docs/reports/phase8-release-validation.md`](docs/reports/phase8-release-validation.md)）の結果、構造面・実装面の欠陥は確認されなかった一方、（1）実FTPサーバへの接続実績、（2）GitHub Secretsの実登録状況、（3）`scheduler.yml`のGitHub Actions runner上での実行実績、の3点がいずれも本セッションからは確認不能な「未確認」のまま残っている。運用担当者によるこれら3点の実地確認が完了し次第、改めてValidationを実施し「Ready for v1.0.0 Release」への昇格を判断することを推奨する。
 
 ## 関連ドキュメント
 
@@ -132,3 +134,4 @@ v1.0.0正式版に向けた残タスクの一覧は、[`docs/operations/release.
 - [`docs/phase7-implementation-roadmap.md`](docs/phase7-implementation-roadmap.md) — Phase7 4パッケージの設計方針・実装ロードマップ（Task16-0）
 - [`docs/phase7-integration-design.md`](docs/phase7-integration-design.md) — Phase7 Composition Root統合設計（Task17-0、Task17-1/17-4で実装済み）
 - [`docs/phase8-integration-design.md`](docs/phase8-integration-design.md) — Phase8統合設計（Task18-0、`FtpSettings`・`Scheduler`自動起動・Production Workflow・Composition Root更新方針・Release Readiness残Task。設計のみ、実装は別タスク）
+- [`docs/reports/phase8-release-validation.md`](docs/reports/phase8-release-validation.md) — Production Release Validationレポート（Task18-7、GitHub Actions実行履歴・実CLI実行による実測検証、Production Ready判定）
