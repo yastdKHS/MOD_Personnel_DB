@@ -19,7 +19,7 @@
 
 「コードのリリース」と「データの公開」は別の意思決定ステップである（[ADR-0010](../adr/0010-ci-cd-and-publish-strategy.md)）。本節はこの2つを1つの一貫したフローとして順序づける。
 
-> **実装状況（Phase7 Task17-6完了・Phase8 Task18-0設計時点）**: [`.github/workflows/release.yml`](../../.github/workflows/release.yml)は現在、`workflow_dispatch`・`v*`タグpushをトリガーに、[`ci.yml`](../../.github/workflows/ci.yml)と同じ品質ゲート（ruff lint・ruff format check・mypy・pytest）をPoetry経由で再実行するのみである。下記9段階のうち2（CI検証）・3（マージ）に相当する部分はci.ymlが担い、4はrelease.ymlのトリガー（タグpush）に対応するが、`parser_versions`テーブルへの自動記録自体は未実装である。`ftp/`・`fetch/`・`services/`（`JobOrchestrator`・`Scheduler`）は、Phase7 Task17-1〜17-4で`cli/`（Composition Root）へ配線済みであり、`fetch-stage`/`run-workflow`/`schedule-now`/`list-schedule`の4コマンドとしてCLIから手動実行できる（[`docs/reports/phase7-final-audit.md`](../reports/phase7-final-audit.md)）。しかし、5〜9（`staging`検証・`production`昇格・データ生成・Human Review・公開）に対応する自動化（環境分離・`FtpSettings`実接続・GitHub Actions cronからの定期起動・CI/CDワークフローからの呼び出し）は依然未実装であり、その実装設計は[`docs/phase8-integration-design.md`](../phase8-integration-design.md)（Task18-0）が確定した（実装は別タスク）。以下のフローは、この自動化が完了した後の設計目標として記載する。
+> **実装状況（Phase8 Task18-3時点）**: [`.github/workflows/release.yml`](../../.github/workflows/release.yml)は現在、`workflow_dispatch`・`v*`タグpushをトリガーに、[`ci.yml`](../../.github/workflows/ci.yml)と同じ品質ゲート（ruff lint・ruff format check・mypy・pytest）をPoetry経由で再実行するのみである。下記9段階のうち2（CI検証）・3（マージ）に相当する部分はci.ymlが担い、4はrelease.ymlのトリガー（タグpush）に対応するが、`parser_versions`テーブルへの自動記録自体は未実装である。`ftp/`・`fetch/`・`services/`（`JobOrchestrator`・`Scheduler`）は、Phase7 Task17-1〜17-4で`cli/`（Composition Root）へ配線済みであり、`fetch-stage`/`run-workflow`/`schedule-now`/`list-schedule`の4コマンドとしてCLIから手動実行できる（[`docs/reports/phase7-final-audit.md`](../reports/phase7-final-audit.md)）。Task18-3で、[`.github/workflows/scheduler.yml`](../../.github/workflows/scheduler.yml)がGitHub Actions cronから`schedule-now run_pending_pipeline`（中核パイプライン処理のみ）を自動起動するようになった（詳細は「[Scheduler運用フロー](#scheduler運用フローgithub-actions--schedule-now--scheduler--joborchestrator)」を参照）。しかし、`staging`検証・`production`昇格・Fetch（新規PDF取得）・Human Review・Export/FTP Publishを含む5〜9段階全体の自動化（環境分離・`FtpSettings`実接続・Fetch対象の自動決定・CI/CDワークフローからの呼び出し）は依然未実装であり、その実装設計は[`docs/phase8-integration-design.md`](../phase8-integration-design.md)（Task18-0）が確定した（実装は別タスク）。以下のフローは、この自動化が完了した後の設計目標として記載する。
 
 1. **開発**: `dev`環境でのローカル作業。1PR1責務（[ADR-0014](../adr/0014-development-discipline.md)）。
 2. **CI検証**: PRごとにlint・型チェック・テスト（ゴールデンファイル含む、[ADR-0007](../adr/0007-golden-file-testing.md)）を実行（`test`環境、[`docs/configuration.md`](../configuration.md#environment)）。
@@ -32,6 +32,26 @@
 9. **公開（Export/FTP送信）**: [ADR-0022](../adr/0022-export-policy.md)のExport Policyに従い、検証済みデータのみがエクスポート・配布される。
 
 **この9段階のうち、1〜6は「コードリリース」、7〜9は「データ公開」であり、両者は独立して失敗しうる**。コードリリースが成功しても、Human Reviewが承認しなければデータは公開されない。この分離こそが[ADR-0010](../adr/0010-ci-cd-and-publish-strategy.md)の意図である。
+
+## Scheduler運用フロー（GitHub Actions → schedule-now → Scheduler → JobOrchestrator）
+
+Phase8 Task18-3で実装した、`schedule-now`（`run_pending_pipeline`）の自動起動経路の運用フローを示す（[`docs/phase8-integration-design.md#3-scheduler自動起動設計`](../phase8-integration-design.md#3-scheduler自動起動設計)の設計に基づく）。
+
+```mermaid
+flowchart LR
+    trigger["GitHub Actions\n(scheduler.yml, cron/workflow_dispatch)"] --> cli["CLI\n(schedule-now run_pending_pipeline)"]
+    cli --> scheduler["Scheduler\n(DefaultScheduler.trigger_now)"]
+    scheduler --> orchestrator["JobOrchestrator\n(run_pending_pipeline)"]
+    orchestrator --> pipeline["中核パイプライン\n(JobRunner.run_pending)"]
+```
+
+- **起動主体**: [`.github/workflows/scheduler.yml`](../../.github/workflows/scheduler.yml)。`schedule: cron`（毎日17:45 JST）・`workflow_dispatch`（手動実行）の2経路。常駐プロセスは持たない（[ADR-0025](../adr/0025-deployment-strategy.md)のバッチ実行モデル）。
+- **CLI経由のみ**: ワークフローは`python -m mod_personnel_db.cli ... schedule-now run_pending_pipeline`というCLIコマンドのみを呼び出す。`Scheduler`・`JobOrchestrator`等のPythonコードをワークフロー自身が直接importすることはない。
+- **Composition Root**: `schedule-now`は`cli/bootstrap.py`（Composition Root）が構築する`Scheduler`（`DefaultScheduler`）をProtocol型経由で呼び出す。ワークフロー追加によって`cli/`側の配線（Task17-4実装済み）は変更されない。
+- **排他制御**: `concurrency`グループにより、cron起動と手動起動が重なった場合の同時書き込みを防ぐ（[ADR-0025](../adr/0025-deployment-strategy.md)が要求するワークフロー側の排他制御）。
+- **正常系としての「処理対象なし」**: 未処理PDFが0件の場合、`Scheduler.trigger_now()`は`NoPendingJobError`を送出する。これは定期実行のたびに頻発しうる正常な結果であるため、`scheduler.yml`は出力を判定し、この場合のみジョブを成功として扱う（それ以外の失敗は通常どおりジョブ失敗として扱う）。
+- **Secrets**: `MOD_PERSONNEL_DB_DB_PATH`・`MOD_PERSONNEL_DB_KNOWLEDGE_ROOT`・`MOD_PERSONNEL_DB_LAYOUTS_ROOT`の3件（README.mdの「[Scheduler運用（GitHub Actions）](../../README.md#scheduler運用github-actions)」参照）。FTP接続情報は`run_pending_pipeline`が使用しないため対象外。
+- **スコープ**: 現時点で自動化されているのは`run_pending_pipeline`（既に`fetch-stage`等で取得済みのPDFの中核パイプライン処理）のみである。Fetch（新規PDF取得）・Export・FTP Publishを含む`run_workflow`系の自動化は、Fetch対象の自動決定方法が未解決のため対象外のまま残る（[`docs/phase8-integration-design.md#4-production-workflow設計`](../phase8-integration-design.md#4-production-workflow設計)）。
 
 ## Release Candidateからv1.0.0正式版までの残タスク
 
