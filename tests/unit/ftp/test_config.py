@@ -16,6 +16,7 @@ def test_default_values() -> None:
     assert config.password == ""
     assert config.timeout == 30.0
     assert config.passive is True
+    assert config.remote_directory == ""
 
 
 def test_all_fields_can_be_overridden() -> None:
@@ -26,6 +27,7 @@ def test_all_fields_can_be_overridden() -> None:
         password="secret",
         timeout=5.0,
         passive=False,
+        remote_directory="/incoming",
     )
 
     assert config.port == 2121
@@ -33,6 +35,7 @@ def test_all_fields_can_be_overridden() -> None:
     assert config.password == "secret"
     assert config.timeout == 5.0
     assert config.passive is False
+    assert config.remote_directory == "/incoming"
 
 
 def test_config_is_frozen() -> None:

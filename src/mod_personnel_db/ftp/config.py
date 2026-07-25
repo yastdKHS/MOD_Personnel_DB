@@ -12,7 +12,11 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True)
 class FTPConnectionConfig:
-    """FTP接続先を表す不変の値オブジェクト。ドメインモデル（`models/`）ではない。"""
+    """FTP接続先を表す不変の値オブジェクト。ドメインモデル（`models/`）ではない。
+
+    `remote_directory`は空文字列（既定）の場合、接続後の`cwd()`を行わない
+    （後方互換: 既存の呼び出し元は挙動を変えずにそのまま動作する）。
+    """
 
     host: str
     port: int = 21
@@ -20,6 +24,7 @@ class FTPConnectionConfig:
     password: str = ""
     timeout: float = 30.0
     passive: bool = True
+    remote_directory: str = ""
 
 
 __all__ = ["FTPConnectionConfig"]

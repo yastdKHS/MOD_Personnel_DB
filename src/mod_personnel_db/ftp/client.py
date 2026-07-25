@@ -21,7 +21,15 @@ class StandardFTPClient:
         self._connection: ftplib.FTP | None = None
 
     def connect(self) -> None:
-        """FTPサーバへ接続しログインする。接続済みの場合は何もしない。"""
+        """FTPサーバへ接続しログインする。接続済みの場合は何もしない。
+
+        `config.remote_directory`が空文字列でない場合、ログイン直後に
+        当該ディレクトリへ`cwd()`する。以降の`upload()`/`download()`/
+        `list_remote()`に渡す`remote_path`は、このディレクトリからの
+        相対パスとして解決される。`remote_directory`が空文字列（既定）の
+        場合は`cwd()`を呼び出さず、従来どおりログイン直後のディレクトリを
+        維持する（後方互換）。
+        """
         if self._connection is not None:
             return
         connection = ftplib.FTP()
@@ -29,6 +37,8 @@ class StandardFTPClient:
             connection.connect(self._config.host, self._config.port, timeout=self._config.timeout)
             connection.login(self._config.username, self._config.password)
             connection.set_pasv(self._config.passive)
+            if self._config.remote_directory:
+                connection.cwd(self._config.remote_directory)
         except (OSError, ftplib.Error) as exc:
             raise FTPConnectionError(
                 f"FTPサーバへの接続に失敗しました: {self._config.host}:{self._config.port}"
