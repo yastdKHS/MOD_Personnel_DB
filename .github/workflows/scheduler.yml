@@ -20,12 +20,9 @@
 # Publishを含む`run_workflow`系の自動化は対象外（docs/phase8-integration-design.md
 # #4-production-workflow設計の未解決事項を参照）。
 #
-# `cli/app.py::main()`は現時点で`NoPendingJobError`（処理対象PDFが0件、
-# docs/phase8-integration-design.md#34-例外処理が指摘済みの既知のギャップ）を
-# 専用ハンドリングせず、Pythonの未処理例外として終了コード1で終了する。
-# `src/`の変更は本Taskのscope外のため、ワークフロー側で出力を判定し、
-# 「処理対象PDFが0件」という正常系の結果のみをジョブ成功として扱う
-# （それ以外の失敗は従来どおりジョブ失敗のまま伝播させる）。
+# `cli/app.py::main()`はTask18-4で`NoPendingJobError`（処理対象PDFが0件）を
+# 正常系として捕捉し、終了コード0を返すようになった。本ワークフローは
+# CLIの終了コードのみを信頼し、出力文字列の判定は行わない（Task18-5）。
 
 name: Scheduler
 
@@ -58,16 +55,8 @@ jobs:
           MOD_PERSONNEL_DB_KNOWLEDGE_ROOT: ${{ secrets.MOD_PERSONNEL_DB_KNOWLEDGE_ROOT }}
           MOD_PERSONNEL_DB_LAYOUTS_ROOT: ${{ secrets.MOD_PERSONNEL_DB_LAYOUTS_ROOT }}
         run: |
-          set +e
-          output=$(python -m mod_personnel_db.cli \
+          python -m mod_personnel_db.cli \
             --db-path "$MOD_PERSONNEL_DB_DB_PATH" \
             --knowledge-root "$MOD_PERSONNEL_DB_KNOWLEDGE_ROOT" \
             --layouts-root "$MOD_PERSONNEL_DB_LAYOUTS_ROOT" \
-            schedule-now run_pending_pipeline 2>&1)
-          exit_code=$?
-          echo "$output"
-          if [ "$exit_code" -ne 0 ] && echo "$output" | grep -q "NoPendingJobError"; then
-            echo "no pending PDF to process (normal outcome, not treated as a failure)"
-            exit 0
-          fi
-          exit "$exit_code"
+            schedule-now run_pending_pipeline
