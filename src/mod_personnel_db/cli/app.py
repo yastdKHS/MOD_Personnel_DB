@@ -16,6 +16,7 @@ from typing import cast
 from mod_personnel_db.cli.bootstrap import CompositionSettings, build_settings
 from mod_personnel_db.cli.commands import (
     VersionInfo,
+    download_db_command,
     export_all_command,
     export_person_command,
     export_since_command,
@@ -30,6 +31,7 @@ from mod_personnel_db.cli.commands import (
     run_pending_command,
     run_workflow_command,
     schedule_now_command,
+    upload_db_command,
     version_command,
 )
 from mod_personnel_db.cli.exceptions import CliCommandError
@@ -57,14 +59,16 @@ COMMANDS = (
     "run-workflow",
     "schedule-now",
     "list-schedule",
+    "download-db",
+    "upload-db",
     "help",
 )
 
 
 def build_parser() -> argparse.ArgumentParser:
-    """11コマンド（init-db/run-pending/run-job/version/review/export/
-    fetch-stage/run-workflow/schedule-now/list-schedule/help）を持つparserを
-    構築する。
+    """13コマンド（init-db/run-pending/run-job/version/review/export/
+    fetch-stage/run-workflow/schedule-now/list-schedule/download-db/
+    upload-db/help）を持つparserを構築する。
     """
     parser = argparse.ArgumentParser(prog="mod-personnel-db")
     parser.add_argument("--db-path", help="SQLiteデータベースファイルのパス")
@@ -86,8 +90,28 @@ def build_parser() -> argparse.ArgumentParser:
     subparsers.add_parser(
         "list-schedule", help="登録済み周期実行対象の次回実行予定を表示する（Scheduler経由）"
     )
+    _add_download_db_subparser(subparsers)
+    _add_upload_db_subparser(subparsers)
     subparsers.add_parser("help", help="利用可能コマンド一覧を表示する")
     return parser
+
+
+def _add_download_db_subparser(
+    subparsers: "argparse._SubParsersAction[argparse.ArgumentParser]",
+) -> None:
+    download_db_parser = subparsers.add_parser(
+        "download-db", help="FTPサーバからDBファイルを取得する（FTPClient.download()経由）"
+    )
+    download_db_parser.add_argument("remote_path", help="取得元のリモートパス")
+
+
+def _add_upload_db_subparser(
+    subparsers: "argparse._SubParsersAction[argparse.ArgumentParser]",
+) -> None:
+    upload_db_parser = subparsers.add_parser(
+        "upload-db", help="DBファイルをFTPサーバへ書き戻す（FTPClient.upload()経由）"
+    )
+    upload_db_parser.add_argument("remote_path", help="書き戻し先のリモートパス")
 
 
 def _add_schedule_now_subparser(
@@ -316,13 +340,29 @@ def _dispatch_scheduler(
     return _format_list_schedule_result(upcoming)
 
 
+def _dispatch_db_transfer(
+    command: str, args: argparse.Namespace, settings: CompositionSettings
+) -> str:
+    """`download-db`/`upload-db`コマンド。`FTPClient.download()`/`upload()`
+    のみを呼び出す（Task18-17）。
+    """
+    if command == "download-db":
+        download_db_command(settings, args.remote_path)
+        return "database downloaded"
+    upload_db_command(settings, args.remote_path)
+    return "database uploaded"
+
+
 def _dispatch_service(command: str, args: argparse.Namespace, settings: CompositionSettings) -> str:
-    """`JobOrchestrator`/`Scheduler`経由のコマンド4種をまとめて振り分ける
+    """`JobOrchestrator`/`Scheduler`/DB転送経由のコマンド6種をまとめて振り分ける
     （`_dispatch`の分岐数を規律上の上限内に収めるための集約、
-    `_dispatch_orchestrator`/`_dispatch_scheduler`自体の責務は変更しない）。
+    `_dispatch_orchestrator`/`_dispatch_scheduler`/`_dispatch_db_transfer`自体の
+    責務は変更しない）。
     """
     if command in ("fetch-stage", "run-workflow"):
         return _dispatch_orchestrator(command, args, settings)
+    if command in ("download-db", "upload-db"):
+        return _dispatch_db_transfer(command, args, settings)
     return _dispatch_scheduler(command, args, settings)
 
 
@@ -342,7 +382,14 @@ def _dispatch(command: str, args: argparse.Namespace, settings: CompositionSetti
         message = _dispatch_review(args, settings)
     elif command == "export":
         message = _dispatch_export(args, settings)
-    elif command in ("fetch-stage", "run-workflow", "schedule-now", "list-schedule"):
+    elif command in (
+        "fetch-stage",
+        "run-workflow",
+        "schedule-now",
+        "list-schedule",
+        "download-db",
+        "upload-db",
+    ):
         message = _dispatch_service(command, args, settings)
     else:
         raise CliCommandError(f"unknown command: {command}")

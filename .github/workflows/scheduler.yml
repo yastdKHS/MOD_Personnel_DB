@@ -57,6 +57,25 @@ jobs:
       - name: Install package
         run: pip install -e .
 
+      - name: Download DB from FTP
+        env:
+          MOD_PERSONNEL_DB_DB_PATH: ${{ secrets.MOD_PERSONNEL_DB_DB_PATH }}
+          MOD_PERSONNEL_DB_KNOWLEDGE_ROOT: ${{ secrets.MOD_PERSONNEL_DB_KNOWLEDGE_ROOT }}
+          MOD_PERSONNEL_DB_LAYOUTS_ROOT: ${{ secrets.MOD_PERSONNEL_DB_LAYOUTS_ROOT }}
+          MOD_PERSONNEL_DB_FTP__HOST: ${{ secrets.MOD_PERSONNEL_DB_FTP__HOST }}
+          MOD_PERSONNEL_DB_FTP__PORT: ${{ secrets.MOD_PERSONNEL_DB_FTP__PORT }}
+          MOD_PERSONNEL_DB_FTP__USERNAME: ${{ secrets.MOD_PERSONNEL_DB_FTP__USERNAME }}
+          MOD_PERSONNEL_DB_FTP__PASSWORD: ${{ secrets.MOD_PERSONNEL_DB_FTP__PASSWORD }}
+          MOD_PERSONNEL_DB_FTP__REMOTE_DIRECTORY: ${{ secrets.MOD_PERSONNEL_DB_FTP__REMOTE_DIRECTORY }}
+          MOD_PERSONNEL_DB_FTP__TIMEOUT: ${{ secrets.MOD_PERSONNEL_DB_FTP__TIMEOUT }}
+          MOD_PERSONNEL_DB_DB_REMOTE_PATH: ${{ secrets.MOD_PERSONNEL_DB_DB_REMOTE_PATH }}
+        run: |
+          python -m mod_personnel_db.cli \
+            --db-path "$MOD_PERSONNEL_DB_DB_PATH" \
+            --knowledge-root "$MOD_PERSONNEL_DB_KNOWLEDGE_ROOT" \
+            --layouts-root "$MOD_PERSONNEL_DB_LAYOUTS_ROOT" \
+            download-db "$MOD_PERSONNEL_DB_DB_REMOTE_PATH"
+
       - name: Run schedule-now via CLI
         env:
           MOD_PERSONNEL_DB_DB_PATH: ${{ secrets.MOD_PERSONNEL_DB_DB_PATH }}
@@ -74,3 +93,22 @@ jobs:
             --knowledge-root "$MOD_PERSONNEL_DB_KNOWLEDGE_ROOT" \
             --layouts-root "$MOD_PERSONNEL_DB_LAYOUTS_ROOT" \
             schedule-now run_pending_pipeline
+
+      - name: Upload DB to FTP
+        env:
+          MOD_PERSONNEL_DB_DB_PATH: ${{ secrets.MOD_PERSONNEL_DB_DB_PATH }}
+          MOD_PERSONNEL_DB_KNOWLEDGE_ROOT: ${{ secrets.MOD_PERSONNEL_DB_KNOWLEDGE_ROOT }}
+          MOD_PERSONNEL_DB_LAYOUTS_ROOT: ${{ secrets.MOD_PERSONNEL_DB_LAYOUTS_ROOT }}
+          MOD_PERSONNEL_DB_FTP__HOST: ${{ secrets.MOD_PERSONNEL_DB_FTP__HOST }}
+          MOD_PERSONNEL_DB_FTP__PORT: ${{ secrets.MOD_PERSONNEL_DB_FTP__PORT }}
+          MOD_PERSONNEL_DB_FTP__USERNAME: ${{ secrets.MOD_PERSONNEL_DB_FTP__USERNAME }}
+          MOD_PERSONNEL_DB_FTP__PASSWORD: ${{ secrets.MOD_PERSONNEL_DB_FTP__PASSWORD }}
+          MOD_PERSONNEL_DB_FTP__REMOTE_DIRECTORY: ${{ secrets.MOD_PERSONNEL_DB_FTP__REMOTE_DIRECTORY }}
+          MOD_PERSONNEL_DB_FTP__TIMEOUT: ${{ secrets.MOD_PERSONNEL_DB_FTP__TIMEOUT }}
+          MOD_PERSONNEL_DB_DB_REMOTE_PATH: ${{ secrets.MOD_PERSONNEL_DB_DB_REMOTE_PATH }}
+        run: |
+          python -m mod_personnel_db.cli \
+            --db-path "$MOD_PERSONNEL_DB_DB_PATH" \
+            --knowledge-root "$MOD_PERSONNEL_DB_KNOWLEDGE_ROOT" \
+            --layouts-root "$MOD_PERSONNEL_DB_LAYOUTS_ROOT" \
+            upload-db "$MOD_PERSONNEL_DB_DB_REMOTE_PATH"

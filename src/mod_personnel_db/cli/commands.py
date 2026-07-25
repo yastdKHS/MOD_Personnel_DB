@@ -241,8 +241,35 @@ def list_schedule_command(settings: CompositionSettings) -> tuple[str, ...]:
     return scheduler.list_upcoming()
 
 
+def download_db_command(settings: CompositionSettings, remote_path: str) -> None:
+    """`download-db`コマンド。`FTPClient.download()`のみを呼び出し、
+    `remote_path`のDBファイルを`settings.db_path`へ取得する（Task18-17）。
+    `bootstrap.build_ftp_client()`が返す`FTPClient`をProtocol経由でのみ
+    利用し、`StandardFTPClient`等の具象実装は本モジュールが直接生成しない。
+    """
+    ftp_client = build_ftp_client(settings)
+    ftp_client.connect()
+    try:
+        ftp_client.download(remote_path, settings.db_path)
+    finally:
+        ftp_client.disconnect()
+
+
+def upload_db_command(settings: CompositionSettings, remote_path: str) -> None:
+    """`upload-db`コマンド。`FTPClient.upload()`のみを呼び出し、
+    `settings.db_path`のDBファイルを`remote_path`へ書き戻す（Task18-17）。
+    """
+    ftp_client = build_ftp_client(settings)
+    ftp_client.connect()
+    try:
+        ftp_client.upload(settings.db_path, remote_path)
+    finally:
+        ftp_client.disconnect()
+
+
 __all__ = [
     "VersionInfo",
+    "download_db_command",
     "export_all_command",
     "export_person_command",
     "export_since_command",
@@ -257,5 +284,6 @@ __all__ = [
     "run_pending_command",
     "run_workflow_command",
     "schedule_now_command",
+    "upload_db_command",
     "version_command",
 ]
