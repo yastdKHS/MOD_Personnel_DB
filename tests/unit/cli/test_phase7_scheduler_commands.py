@@ -277,6 +277,36 @@ def test_main_list_schedule_dispatches_and_formats_nonempty_result(
     assert f"{RUN_PENDING_JOB_TYPE} at 2026-01-01T00:00:00+00:00" in out
 
 
+def test_main_schedule_now_treats_no_pending_job_error_as_success(
+    settings: CompositionSettings,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Phase8 Task18-4: `NoPendingJobError`は定期実行のたびに頻発しうる正常な
+    結果であるため、`main()`は情報メッセージを表示した上で終了コード0を返す
+    （`CliCommandError`（終了コード1）とは区別する）。
+    """
+    fake_scheduler = _RecordingScheduler(trigger_now_error=NoPendingJobError("no pending pdf"))
+    monkeypatch.setattr(commands, "_build_scheduler", lambda _settings: fake_scheduler)
+
+    exit_code = app.main(
+        [
+            "--db-path",
+            settings.db_path,
+            "--knowledge-root",
+            str(settings.knowledge_root),
+            "--layouts-root",
+            str(settings.layouts_root),
+            "schedule-now",
+            RUN_PENDING_JOB_TYPE,
+        ]
+    )
+
+    assert exit_code == 0
+    assert "no pending job" in capsys.readouterr().out
+    assert fake_scheduler.trigger_now_calls == [RUN_PENDING_JOB_TYPE]
+
+
 # --- 既存CLI回帰: schedule-now/list-schedule追加後も既存コマンドが変わらず動作する ---
 
 
