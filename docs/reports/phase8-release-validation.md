@@ -4,7 +4,7 @@
 >
 > 前提: [`docs/reports/phase7-final-audit.md`](phase7-final-audit.md)（Task17-5、Phase7完了時点の監査）・[RELEASE_STATUS.md](../../RELEASE_STATUS.md)（Task18-6時点）を引き継ぎ、Task18-1（`FtpSettings`）〜Task18-6（Production FTP運用整備）で追加された内容を対象に追加検証する。
 >
-> **2026-07-25 追記**: 本レポート初版の公開後、運用担当者が実際のProduction FTPサーバに対して「接続確認方法」節の手順を手動実行し、その結果を「5. FTP Upload確認」「6. Secrets確認」「8. Known Limitations確認」「11. Production Ready判定」の各節、および新設した「12. 追記」節に反映した。ホスト名・ユーザー名・パスワード等の実認証情報は本レポートに一切記載しない（運用担当者の手元でのみ扱われ、本セッションには開示されていない）。
+> **2026-07-25 追記（2回）**: 本レポート初版の公開後、運用担当者が実際のProduction FTPサーバに対して「接続確認方法」節の手順を手動実行した。1回目は接続・認証は成功したがアップロードが`530`エラーで失敗し、2回目はFTPアカウントの許可ディレクトリを含むフルパスを`--remote-path`に指定した再試行でアップロードも成功した。これらの結果を「5. FTP Upload確認」「6. Secrets確認」「8. Known Limitations確認」「11. Production Ready判定」の各節、および新設した「12. 追記サマリ」節に反映した。ホスト名・ユーザー名・パスワード等の実認証情報は本レポートに一切記載しない（運用担当者の手元でのみ扱われ、本セッションには開示されていない）。
 
 ## 1. Scheduler実行確認
 
@@ -65,7 +65,8 @@ GitHub Actions APIで4ワークフローすべての登録状況・実行履歴�
   - **アップロード（`STOR`）は失敗した。** サーバから`530 You cannot upload file here`が返された。この時点で`--remote-path`には絶対パス（例: `/incoming/_connectivity_check_<timestamp>.json`）を指定していた。
   - **原因をコード読解で特定した**: `ftp/config.py`の`FTPConnectionConfig`には`remote_directory`フィールドが存在せず、`cli/bootstrap.py`の`build_ftp_client()`も`FtpSettings.remote_directory`をマッピングしていない。さらに`ftp/client.py`の`StandardFTPClient.connect()`は`cwd()`を一切呼び出さない。したがって`MOD_PERSONNEL_DB_FTP__REMOTE_DIRECTORY`（Task18-6でSecrets一覧に追加した6項目の1つ）は**現在のコードでは静かに無視される**。ログイン直後のカレントディレクトリ（サーバ既定、多くの場合ホームディレクトリまたはchrootのルート）に対して、`--remote-path`に渡した絶対パスがそのまま`STOR`されるため、そのFTPアカウントの書き込み許可範囲外のパスを指してしまい`530`になったと推定される（推定である旨を明記。サーバ側の正確な権限設定は運用担当者・FTPサーバ管理者のみが確認可能であり、本セッションからは**未確認**）。
   - **切り分け・是正の推奨手順**: (1) `--remote-path`をファイル名のみの相対パスにして再試行し、ログイン直後のディレクトリへの書き込み可否を切り分ける、(2) FTPサーバ管理者に当該アカウントの書き込み許可ディレクトリを確認してもらう、(3) 許可ディレクトリが判明次第、そのフルパスを`--remote-path`に指定する。`remote_directory`をコード側で実際に`cwd()`する改修（`src/**`変更）は本Taskの範囲外であり、実施する場合は別Taskとする。
-- **判定（更新後）**: 実FTPサーバへの**接続・認証は実測で確認済み**。**アップロード（実際のファイル到達）は現時点でも未確認**（`530`により失敗、原因はコード側の`remote_directory`未配線と権限設定の組み合わせであることをコード読解で特定したが、切り分け・是正はまだ完了していない）。
+- **2026-07-25 再追記（アップロード成功）**: 運用担当者が、当該FTPアカウントの書き込み許可ディレクトリを含む**フルパス**を`--remote-path`に指定して再実行したところ、**アップロードが成功した**（`export: format=json ...`の出力・終了コード0を確認）。これにより「実FTPサーバへのアップロード成功」は**確認済み**に更新する。原因は当初の推定どおり、`530`エラーは`remote_directory`の未配線そのものによる機能欠陥ではなく、**`--remote-path`に指定したパスがそのFTPアカウントの許可範囲外だったこと**にあったと判明した。`--remote-path`にフルパスを渡す運用を徹底すれば、`remote_directory`（`MOD_PERSONNEL_DB_FTP__REMOTE_DIRECTORY`）が配線されていなくても実用上のアップロードは成立する。ただし`remote_directory`自体が実行時に一切参照されない**未使用の設定値**であるという事実（コード上の設計不備）自体は変わらず残る（下記「8. Known Limitations確認」参照）。
+- **判定（最終更新）**: 実FTPサーバへの**接続・認証・アップロードのいずれも実測で確認済み**。フルパスを`--remote-path`に指定する運用であれば、Production FTPサーバへの公開経路は手動実行（`run-workflow --remote-path`）で実際に機能することが確認できた。
 
 ## 6. Secrets確認
 
@@ -99,7 +100,8 @@ GitHub Actions APIで4ワークフローすべての登録状況・実行履歴�
   - **新規確認事項A**: `FTPConnectionError`が`cli/app.py::main()`で捕捉されず生トレースバックとして出力される（上記5.参照）。ユーザー向けCLIとしてはエラーメッセージの整形余地があるが、`src/**`変更禁止のため本Taskでは是正しない。
   - **新規確認事項B**: `scheduler.yml`・`release.yml`はいずれも実行履歴がゼロであり、GitHub Actions上での実動作は未検証のまま本番判定を迎えている（上記1・2参照）。
 - **判定**: 既存Known Limitationsの記述は現時点でも正確である。新規確認事項A・Bを追加の限界事項として本レポートに記録した（RELEASE_STATUS.md本体への転記は次節「4. Architecture Contract整合性確認」後のRELEASE_STATUS.md更新で行う）。
-- **2026-07-25 追記・新規確認事項C**: 運用担当者による実FTPサーバ検証（上記5.参照）で、`FtpSettings.remote_directory`（Task18-1で追加、Task18-6でGitHub Secretsにも追加した`MOD_PERSONNEL_DB_FTP__REMOTE_DIRECTORY`に対応するフィールド）が、`FTPConnectionConfig`（`ftp/config.py`）にそもそもフィールドとして存在せず、`build_ftp_client()`（`cli/bootstrap.py`）でもマッピングされず、`StandardFTPClient.connect()`（`ftp/client.py`）も`cwd()`を呼ばないため、**実行時に一切参照されない**ことをコード読解で確認した。運用者が`_REMOTE_DIRECTORY`を設定していても無視され、`--remote-path`に渡した絶対パスがサーバ側の権限範囲外であれば`530`エラーでアップロードが失敗する（実測で再現済み）。これは新規確認事項A・Bと並ぶ第3の確認事項であり、`src/**`変更を要する是正（`remote_directory`を用いた`cwd()`呼び出しの追加、または`--remote-path`との統合方針の設計）は本Taskの範囲外のため実施していない。
+- **2026-07-25 追記・新規確認事項C**: 運用担当者による実FTPサーバ検証（上記5.参照）で、`FtpSettings.remote_directory`（Task18-1で追加、Task18-6でGitHub Secretsにも追加した`MOD_PERSONNEL_DB_FTP__REMOTE_DIRECTORY`に対応するフィールド）が、`FTPConnectionConfig`（`ftp/config.py`）にそもそもフィールドとして存在せず、`build_ftp_client()`（`cli/bootstrap.py`）でもマッピングされず、`StandardFTPClient.connect()`（`ftp/client.py`）も`cwd()`を呼ばないため、**実行時に一切参照されない**ことをコード読解で確認した。
+- **2026-07-25 再追記（影響範囲の確定）**: 運用担当者がフルパスを`--remote-path`に指定して再実行した結果、アップロードは成功した（上記5.参照）。したがって新規確認事項Cは「アップロードを機能不全にするブロッカー」ではなく、「`MOD_PERSONNEL_DB_FTP__REMOTE_DIRECTORY`というSecret/設定項目が実質的に未使用（デッドコンフィグ）である」という**設定の整合性・ドキュメント精度の問題**に性質が確定した。運用上は`--remote-path`に常にフルパスを指定することで回避できるが、`_REMOTE_DIRECTORY`という項目が存在するにもかかわらず何の効果も持たない点は、運用者に誤解を与えうる設計不備として残る。是正の選択肢は（a）`remote_directory`を実際に`cwd()`へ反映するコード変更、（b）`remote_directory`自体を削除し「`--remote-path`には常にフルパスを指定する」运用を正式仕様として文書化する、のいずれか。どちらも`src/**`変更を伴う可能性があるため本Taskの範囲外とし、実施する場合は別Task・必要に応じてADR起票を要する。
 
 ## 9. Remaining Work確認
 
@@ -121,10 +123,12 @@ GitHub Actions APIで4ワークフローすべての登録状況・実行履歴�
 
 以下の理由により、「Ready for v1.0.0 Release」と「Not Ready」のいずれの断定も避け、Phase6 Task15-4以来維持されている「Release Candidate」の状態を継続することが妥当と判断する。
 
-- **v1.0.0 Release Recommendation（Ready）を選ばない理由**: 上記5・6・1・2で確認したとおり、（a）実FTPサーバへのアップロード成功、（b）GitHub SecretsのProduction Environmentへの実登録、（c）`scheduler.yml`のGitHub Actions runner上での実行実績、の3点がいずれも未確認のまま残っている。これらは「継続的にPDFを収集・公開する」というプロジェクトの中核機能が実運用で動作することの直接的な証拠であり、証拠が揃わない状態でのReady判定はしない。
-- **Not Readyを選ばない理由**: 構造面（Architecture Contract 15/15維持、ADR間の矛盾ゼロ、依存方向の一方向性）・実装面（CLI主要コマンドの実測動作確認、Export実行成功、FTP未設定時の失敗挙動がドキュメントどおりであることの実測確認）はいずれも本Taskの実測により裏付けられており、「構造的な欠陥がある」という意味でのNot Readyではない。未確認事項は実装の欠陥ではなく、本番環境（実FTPサーバ・実Secrets・実cron起動）に依存する運用上の検証待ちである。
-- **推奨される次のアクション**: 実運用担当者が、（1）Production GitHub EnvironmentへのSecrets登録を実施・確認し、（2）`workflow_dispatch`による`scheduler.yml`の手動初回実行、または次回cron到来（毎日17:45 JST）を待って実行結果を確認し、（3）`run-workflow --remote-path`を実FTPサーバに対して一度手動実行して接続・アップロードの成功を確認する。この3点が確認され次第、改めてRelease Validationを実施し「Ready for v1.0.0 Release」への昇格を判断することを推奨する（本Taskの範囲外の提案であるため、実施は別Taskとする）。
-- **2026-07-25 追記**: 上記（3）を運用担当者が実際に試行した結果、**接続・認証（`connect()`/`login()`）は成功したが、アップロード（`STOR`）は`530`エラーで失敗した**（上記5.参照）。原因はコード側の`remote_directory`未配線（新規確認事項C、上記8.参照）と、FTPサーバ側の書き込み権限設定の組み合わせと推定される。この結果、判定は引き続き**Release Candidate maintained**を維持するが、根拠がより具体的になった。「未確認だから判定を保留する」状態から、「実接続は確認できたが、アップロード自体にコード上の欠陥（`remote_directory`未配線）が新たに判明したため、その是正または回避策の確立が完了するまでReadyにはできない」という、より明確な理由に更新する。是正（`src/**`変更）は本Taskの範囲外のため、別Taskでの対応を推奨する。
+- **v1.0.0 Release Recommendation（Ready）を選ばない理由（当初）**: 上記5・6・1・2で確認したとおり、（a）実FTPサーバへのアップロード成功、（b）GitHub SecretsのProduction Environmentへの実登録、（c）`scheduler.yml`のGitHub Actions runner上での実行実績、の3点がいずれも未確認のまま残っていた。
+- **Not Readyを選ばない理由**: 構造面（Architecture Contract 15/15維持、ADR間の矛盾ゼロ、依存方向の一方向性）・実装面（CLI主要コマンドの実測動作確認、Export実行成功、FTP未設定時の失敗挙動がドキュメントどおりであることの実測確認）はいずれも本Taskの実測により裏付けられており、「構造的な欠陥がある」という意味でのNot Readyではない。
+- **推奨された次のアクション（当初）**: 実運用担当者が、（1）Production GitHub EnvironmentへのSecrets登録を実施・確認し、（2）`workflow_dispatch`による`scheduler.yml`の手動初回実行、または次回cron到来（毎日17:45 JST）を待って実行結果を確認し、（3）`run-workflow --remote-path`を実FTPサーバに対して一度手動実行して接続・アップロードの成功を確認する、の3点を挙げていた。
+- **2026-07-25 追記1**: 上記（3）を運用担当者が実際に試行した結果、**接続・認証（`connect()`/`login()`）は成功したが、アップロード（`STOR`）は`530`エラーで失敗した**（上記5.参照）。原因はコード側の`remote_directory`未配線（新規確認事項C、上記8.参照）と推定した。
+- **2026-07-25 追記2（アップロード成功、最終）**: 運用担当者が、FTPアカウントの許可ディレクトリを含む**フルパス**を`--remote-path`に指定して再実行した結果、**アップロードが成功した**。これにより上記（a）**実FTPサーバへのアップロード成功が確認済みとなった**。（b）GitHub SecretsのProduction Environmentへの実登録、（c）`scheduler.yml`のGitHub Actions runner上での実行実績の2点は、本追記の調査範囲では依然として未確認のまま残る（（b）は今回の手動検証がローカルのシェル変数経由でありGitHub Secrets経由の実行ではないため、（c）はGitHub Actions APIの実行履歴が引き続き0件であるため）。
+  - **判定は「Release Candidate maintained」を維持する。** 理由: FTP公開経路（手動`run-workflow --remote-path`）が実サーバに対して機能することは実証されたが、これは「運用担当者が正しいフルパスを手で指定して手動実行した場合」の確認であり、（i）GitHub Actions（`scheduler.yml`/`release.yml`）を経由した自動実行での動作は依然未検証、（ii）FTP公開自体が`schedule-now`の自動実行経路には含まれない設計上の制約（[`docs/phase8-integration-design.md#4-production-workflow設計`](../phase8-integration-design.md#4-production-workflow設計)）は変わらない、（iii）データ整備・セキュリティ強化等、FTP接続以外のKnown Limitations（RELEASE_STATUS.md参照）は本追記の対象外で未解消のまま、という理由から「Ready for v1.0.0 Release」への昇格は時期尚早と判断する。一方、「実接続すら検証できていない」状態から「実サーバへの手動公開が実証済み」へ前進したことは、v1.0.0への到達に向けた重要な進捗として記録する。
 
 ## 検証結果
 
@@ -134,18 +138,19 @@ GitHub Actions APIで4ワークフローすべての登録状況・実行履歴�
 - `poetry run ruff format --check .` → `387 files already formatted`（本レポート追加により386→387）
 - `poetry run pytest --cov` → `833 passed`、TOTAL coverage `98.98%`（`fail_under = 80`を大きく上回る。Phase8 Task18-6完了時点から件数・カバレッジとも変化なし。本Taskはsrc/tests変更を伴わないため）
 - CLI実測（`init-db`/`list-schedule`/`schedule-now`/`run-workflow`、`run-workflow --remote-path`によるFTP接続失敗の再現）→ 上記1〜5節に記載のとおり、いずれも実行しドキュメント記載と一致する結果を得た
-- **2026-07-25 追記**: 運用担当者による実Production FTPサーバへの手動接続確認 → `connect()`/`login()`成功、`upload()`（`STOR`）は`530 You cannot upload file here`で失敗。原因は`ftp/config.py`の`FTPConnectionConfig`に`remote_directory`フィールドが存在しないこと、`cli/bootstrap.py`の`build_ftp_client()`が`FtpSettings.remote_directory`をマッピングしていないこと、`ftp/client.py`の`StandardFTPClient.connect()`が`cwd()`を呼ばないことをコード読解で特定した（詳細は上記5.参照）。この追記に伴うコード変更（`src/**`）は本セッションでは一切行っていない。
+- **2026-07-25 追記1**: 運用担当者による実Production FTPサーバへの手動接続確認 → `connect()`/`login()`成功、`upload()`（`STOR`）は絶対パス指定時に`530 You cannot upload file here`で失敗。原因は`ftp/config.py`の`FTPConnectionConfig`に`remote_directory`フィールドが存在しないこと、`cli/bootstrap.py`の`build_ftp_client()`が`FtpSettings.remote_directory`をマッピングしていないこと、`ftp/client.py`の`StandardFTPClient.connect()`が`cwd()`を呼ばないことをコード読解で特定した（詳細は上記5.参照）。
+- **2026-07-25 追記2**: 運用担当者が許可ディレクトリを含むフルパスを`--remote-path`に指定して再実行 → **アップロード成功**（終了コード0、`export: format=json ...`出力を確認）。実FTPサーバへの接続・認証・アップロードのすべてが実測で確認済みとなった。この追記に伴うコード変更（`src/**`）は本セッションでは一切行っていない。
 
-## 13. 追記サマリ（2026-07-25、運用担当者による実地検証を反映）
+## 12. 追記サマリ（2026-07-25、運用担当者による実地検証を反映。フルパス再試行によるアップロード成功で最終更新）
 
-| 項目 | 初版（Task18-7時点） | 追記後（本日時点） |
-|---|---|---|
-| 実FTPサーバへの接続・認証 | 未確認 | **確認済み**（`connect()`/`login()`成功を実測） |
-| 実FTPサーバへのアップロード成功 | 未確認 | **未確認のまま**（`530`で失敗、原因はコード側の`remote_directory`未配線＋サーバ側権限設定と推定） |
-| GitHub SecretsのProduction Environment登録 | 未確認 | **未確認のまま**（手動検証はローカルのシェル変数経由であり、GitHub Secrets経由の実行ではないため） |
-| `scheduler.yml`/`release.yml`のGitHub Actions実行実績 | 実行履歴0件（未確認） | 変化なし（本追記調査の対象外） |
-| Production Ready判定 | Release Candidate maintained | **Release Candidate maintained（変更なし、ただし根拠がより具体的に）** |
-| 新規判明事項 | — | `remote_directory`（`MOD_PERSONNEL_DB_FTP__REMOTE_DIRECTORY`）が実行時に一切参照されないコード上の欠落（新規確認事項C、上記8.参照） |
+| 項目 | 初版（Task18-7時点） | 追記1（接続成功・アップロード失敗） | 追記2（フルパスでアップロード成功、最終） |
+|---|---|---|---|
+| 実FTPサーバへの接続・認証 | 未確認 | **確認済み**（`connect()`/`login()`成功を実測） | 確認済み（変化なし） |
+| 実FTPサーバへのアップロード成功 | 未確認 | 未確認のまま（`530`で失敗） | **確認済み**（フルパス指定で成功、`export: format=json ...`出力・終了コード0を実測） |
+| GitHub SecretsのProduction Environment登録 | 未確認 | 未確認のまま | **未確認のまま**（今回もローカルのシェル変数経由の手動検証であり、GitHub Secrets経由の実行ではないため） |
+| `scheduler.yml`/`release.yml`のGitHub Actions実行実績 | 実行履歴0件（未確認） | 変化なし | **変化なし**（本追記調査の対象外、GitHub Actions API上は引き続き0件） |
+| Production Ready判定 | Release Candidate maintained | Release Candidate maintained（根拠を具体化） | **Release Candidate maintained（変更なし。FTP公開経路の手動実行での実証という重要な進捗を記録した上で維持）** |
+| 新規判明事項 | — | `remote_directory`が実行時に一切参照されない | `remote_directory`未配線は**アップロードのブロッカーではなく**、`--remote-path`にフルパスを指定すれば運用上は回避できることが判明。ただし`_REMOTE_DIRECTORY`という設定項目自体が実質無効なデッドコンフィグである点は未解消 |
 
 ## 関連ドキュメント
 
