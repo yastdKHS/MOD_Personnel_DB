@@ -264,7 +264,7 @@ GitHub Actions画面の「Actions」タブ →「Scheduler」ワークフロー 
 | `MOD_PERSONNEL_DB_FTP__PORT` | `port`（既定`21`） | 任意 |
 | `MOD_PERSONNEL_DB_FTP__USERNAME` | `username`（既定空文字列） | 任意 |
 | `MOD_PERSONNEL_DB_FTP__PASSWORD` | `password`（`SecretStr`） | 任意（実運用では登録を強く推奨） |
-| `MOD_PERSONNEL_DB_FTP__REMOTE_DIRECTORY` | `remote_directory`（既定`/`） | 任意 |
+| `MOD_PERSONNEL_DB_FTP__REMOTE_DIRECTORY` | `remote_directory`（既定`/`、接続時に`cwd()`される。Task18-8/18-9で実装・配線済み） | 任意 |
 | `MOD_PERSONNEL_DB_FTP__TIMEOUT` | `timeout`（既定`30.0`） | 任意 |
 
 現時点で`scheduler.yml`が起動する`schedule-now run_pending_pipeline`は`FTPClient`を一切呼び出さないため、これらのSecretsは実際には未使用のまま渡される（`export_and_publish()`のみが`FTPClient`を利用する、詳細は[`docs/operations/release.md`](docs/operations/release.md#production-ftp運用)を参照）。
