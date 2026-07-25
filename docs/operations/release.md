@@ -67,11 +67,12 @@ Phase8 Task18-6で、Production FTP接続に必要なGitHub Secretsを整理し�
    | `MOD_PERSONNEL_DB_FTP__PORT` | `port`（既定`21`） | 任意 |
    | `MOD_PERSONNEL_DB_FTP__USERNAME` | `username`（既定空文字列） | 任意 |
    | `MOD_PERSONNEL_DB_FTP__PASSWORD` | `password`（`SecretStr`） | 任意（実運用では登録を強く推奨） |
-   | `MOD_PERSONNEL_DB_FTP__REMOTE_DIRECTORY` | `remote_directory`（既定`/`） | 任意 |
+   | `MOD_PERSONNEL_DB_FTP__REMOTE_DIRECTORY` | `remote_directory`（既定`/`、`StandardFTPClient.connect()`が`cwd()`へ用いる。Task18-8/18-9で実装・配線済み） | 任意 |
    | `MOD_PERSONNEL_DB_FTP__TIMEOUT` | `timeout`（既定`30.0`） | 任意 |
 
 2. **反映方法**: `AppSettings`（`config/settings.py`）は`env_nested_delimiter="__"`により、上記Secretsを環境変数として注入するだけで`settings.ftp`（`FtpSettings`）へ自動的にマッピングする。CLI起動時に追加の引数指定は不要である（`--db-path`等とは異なり、`ftp`はCLIオプション経由では渡さない設計、Task18-1）。
 3. **現状の適用範囲**: `scheduler.yml`が呼び出す`schedule-now run_pending_pipeline`は、`JobOrchestrator.run_pending_pipeline()`を経由するのみで`FTPClient`を一切呼び出さないため、上記Secretsは現時点では**呼び出されない**（`services/orchestrator.py`の`export_and_publish()`のみが`FTPClient`を利用する、Task18-2確認済み）。Fetch/Export/FTP Publishを含む`run_workflow`系の自動化（[`docs/phase8-integration-design.md#4-production-workflow設計`](../phase8-integration-design.md#4-production-workflow設計)が未解決のまま残す設計課題）が実装された時点で、配線変更なしにこれらのSecretsが実際に使用され始める。それまでの間、FTP実接続を要する経路は既存CLIコマンド`run-workflow --remote-path`の手動実行に限られる（下記「接続確認方法」参照）。
+4. **`remote_directory`の実装状況**: `MOD_PERSONNEL_DB_FTP__REMOTE_DIRECTORY`（`FtpSettings.remote_directory`、既定`/`）は、当初（Task18-6時点）`FTPConnectionConfig`にフィールドが存在せず`StandardFTPClient.connect()`も`cwd()`を呼ばないため実行時に一切参照されない状態だった。Task18-8（`ftp/config.py`へのフィールド追加・`ftp/client.py`での`cwd()`実装）・Task18-9（`cli/bootstrap.py`の`build_ftp_client()`による配線）で解消済みであり、`settings.ftp`が設定されている場合（＝`MOD_PERSONNEL_DB_FTP__HOST`を設定した場合）、`run-workflow --remote-path`等でFTP接続する際にログイン直後`remote_directory`へ`cwd()`される（未設定時は`FtpSettings`側の既定値`/`が使われる）。`settings.ftp`自体が未設定（FTP環境変数が一切ない）の場合は、従来どおりプレースホルダ接続（`cwd()`なし）のままである。
 
 ### 障害時の確認項目
 
