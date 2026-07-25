@@ -1,4 +1,4 @@
-- name: Debug FTP env
+ name: Debug FTP env
   run: |
     echo "HOST=${MOD_PERSONNEL_DB_FTP__HOST:+SET}"
     echo "USER=${MOD_PERSONNEL_DB_FTP__USERNAME:+SET}"
