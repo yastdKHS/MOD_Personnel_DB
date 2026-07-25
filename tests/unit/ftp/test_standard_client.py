@@ -28,6 +28,63 @@ def test_connect_logs_in_and_sets_passive_mode(ftp_cls: MagicMock) -> None:
 
 
 @patch("mod_personnel_db.ftp.client.ftplib.FTP")
+def test_connect_calls_cwd_when_remote_directory_configured(ftp_cls: MagicMock) -> None:
+    connection = ftp_cls.return_value
+    config = FTPConnectionConfig(host="ftp.example.jp", remote_directory="/incoming")
+    client = StandardFTPClient(config)
+
+    client.connect()
+
+    connection.cwd.assert_called_once_with("/incoming")
+
+
+@patch("mod_personnel_db.ftp.client.ftplib.FTP")
+def test_connect_does_not_call_cwd_when_remote_directory_not_configured(
+    ftp_cls: MagicMock,
+) -> None:
+    connection = ftp_cls.return_value
+    config = FTPConnectionConfig(host="ftp.example.jp")
+    client = StandardFTPClient(config)
+
+    client.connect()
+
+    connection.cwd.assert_not_called()
+
+
+@patch("mod_personnel_db.ftp.client.ftplib.FTP")
+def test_connect_wraps_cwd_error(ftp_cls: MagicMock) -> None:
+    connection = ftp_cls.return_value
+    connection.cwd.side_effect = ftplib.error_perm("550 No such directory")
+    config = FTPConnectionConfig(host="ftp.example.jp", remote_directory="/missing")
+    client = StandardFTPClient(config)
+
+    with pytest.raises(FTPConnectionError):
+        client.connect()
+
+
+@patch("mod_personnel_db.ftp.client.ftplib.FTP")
+def test_upload_uses_remote_path_relative_to_configured_directory(
+    ftp_cls: MagicMock, tmp_path: Path
+) -> None:
+    """`remote_directory`設定後は`cwd()`のみが行われ、`upload()`に渡す
+    `remote_path`自体はそのまま`STOR`コマンドへ渡る（サーバ側でカレント
+    ディレクトリからの相対パスとして解決される）。
+    """
+    connection = ftp_cls.return_value
+    config = FTPConnectionConfig(host="ftp.example.jp", remote_directory="/incoming")
+    client = StandardFTPClient(config)
+    client.connect()
+    local_file = tmp_path / "source.pdf"
+    local_file.write_bytes(b"content")
+
+    client.upload(str(local_file), "source.pdf")
+
+    connection.cwd.assert_called_once_with("/incoming")
+    args, _ = connection.storbinary.call_args
+    assert args[0] == "STOR source.pdf"
+
+
+@patch("mod_personnel_db.ftp.client.ftplib.FTP")
 def test_connect_is_idempotent(ftp_cls: MagicMock) -> None:
     config = FTPConnectionConfig(host="ftp.example.jp")
     client = StandardFTPClient(config)
