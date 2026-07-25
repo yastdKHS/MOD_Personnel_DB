@@ -255,6 +255,7 @@ GitHub Actions画面の「Actions」タブ →「Scheduler」ワークフロー 
 | `MOD_PERSONNEL_DB_DB_PATH` | `--db-path` |
 | `MOD_PERSONNEL_DB_KNOWLEDGE_ROOT` | `--knowledge-root` |
 | `MOD_PERSONNEL_DB_LAYOUTS_ROOT` | `--layouts-root` |
+| `MOD_PERSONNEL_DB_DB_REMOTE_PATH` | `download-db`/`upload-db`の`remote_path`位置引数（Phase8 Task18-17、下記「FTP DB同期フロー」参照）。未登録の場合は空文字列がそのまま渡され、`FTPTransferError: 500 Invalid argument`（`RETR`/`STOR`コマンドへの空引数、Task18-18〜18-21で実ログにより確認済み）で失敗する必須Secretである。 |
 
 これに加え、Phase8 Task18-6でProduction FTP接続用のSecretsを`scheduler.yml`へ整備した。Secret名は[`FtpSettings`](docs/phase8-integration-design.md#2-ftpsettings導入設計)（`config/ftp.py`、Task18-1で実装済み）のフィールド名にそのまま対応させている。
 
@@ -267,7 +268,29 @@ GitHub Actions画面の「Actions」タブ →「Scheduler」ワークフロー 
 | `MOD_PERSONNEL_DB_FTP__REMOTE_DIRECTORY` | `remote_directory`（既定`/`、接続時に`cwd()`される。Task18-8/18-9で実装・配線済み） | 任意 |
 | `MOD_PERSONNEL_DB_FTP__TIMEOUT` | `timeout`（既定`30.0`） | 任意 |
 
-現時点で`scheduler.yml`が起動する`schedule-now run_pending_pipeline`は`FTPClient`を一切呼び出さないため、これらのSecretsは実際には未使用のまま渡される（`export_and_publish()`のみが`FTPClient`を利用する、詳細は[`docs/operations/release.md`](docs/operations/release.md#production-ftp運用)を参照）。
+`schedule-now run_pending_pipeline`自体は`FTPClient`を呼び出さないが、Phase8 Task18-17で`scheduler.yml`へ追加された前後の「Download DB from FTP」「Upload DB to FTP」ステップ（下記「FTP DB同期フロー」参照）が`download-db`/`upload-db`コマンド経由で`FTPClient`を利用するため、上記FTP関連Secretsは`scheduler-now`実行のたびに実際に使用される（`export_and_publish()`が利用する経路とは別に、DB本体の同期にも使われる）。
+
+### FTP DB同期フロー（Phase8 Task18-17）
+
+ADR-0025が要求する「実行のたびに永続ストレージから読み込み、処理後に書き戻す」バッチ実行モデルに従い、`scheduler.yml`は1回の起動につき以下の3ステップを順に実行する。
+
+```
+Download DB from FTP  (download-db "$MOD_PERSONNEL_DB_DB_REMOTE_PATH")
+        ↓
+Run schedule-now via CLI  (schedule-now run_pending_pipeline)
+        ↓
+Upload DB to FTP  (upload-db "$MOD_PERSONNEL_DB_DB_REMOTE_PATH")
+```
+
+`download-db`/`upload-db`はいずれも既存の`FTPClient.download()`/`upload()`（`ftp/`、Phase7 Task16-1）のみを呼び出す薄いCLIコマンドであり、FTPプロトコルロジック自体には手を加えていない。
+
+#### 復旧手順（`FTPTransferError: 500 Invalid argument`が発生した場合）
+
+Task18-18〜18-21の実FTPログ調査により、本エラーは`remote_path`（＝`MOD_PERSONNEL_DB_DB_REMOTE_PATH`）が空文字列のまま`RETR`/`STOR`コマンドへ渡されたことが原因であると確認済み（`CWD`/`remote_directory`側の問題ではない）。
+
+1. リポジトリ（またはEnvironment）のGitHub Secretsに`MOD_PERSONNEL_DB_DB_REMOTE_PATH`が登録されているか確認する。GitHub Secretsは未登録の場合、参照時に空文字列に評価される（存在しないSecretへの参照はエラーにならず空文字列になる点に注意）。
+2. 値が実FTPサーバ上の実在するファイルパス（例: `personnel.db`）を指しているか確認する。
+3. 「Actions」タブ →「Scheduler」ワークフロー →「Run workflow」で手動再実行し、「Download DB from FTP」ステップが成功することを確認する。
 
 ### FTP設定方法
 
