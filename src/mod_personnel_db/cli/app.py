@@ -41,7 +41,7 @@ from mod_personnel_db.models import (
     LearningRecordId,
     PdfId,
 )
-from mod_personnel_db.services import RUN_PENDING_JOB_TYPE, WorkflowResult
+from mod_personnel_db.services import RUN_PENDING_JOB_TYPE, NoPendingJobError, WorkflowResult
 
 _EXPORT_FORMATS = ("csv", "parquet", "json")
 _SCHEDULER_JOB_TYPES = (RUN_PENDING_JOB_TYPE,)
@@ -350,7 +350,16 @@ def _dispatch(command: str, args: argparse.Namespace, settings: CompositionSetti
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    """CLIエントリポイント。戻り値0が成功、1がコマンドレベルのエラーを表す。"""
+    """CLIエントリポイント。戻り値0が成功、1がコマンドレベルのエラーを表す。
+
+    `NoPendingJobError`（`services.scheduler`、`schedule-now`が処理対象PDFを
+    1件も見つけられなかった場合に送出）は、定期実行のたびに頻発しうる正常な
+    結果であるため、コマンドレベルのエラー（`CliCommandError`、終了コード1）
+    とは区別し、情報メッセージを表示した上で終了コード0（成功）を返す
+    （docs/phase8-integration-design.md#34-例外処理）。外部のワークフロー
+    ランナー（GitHub Actions等）の出力判定に依存せず、CLI単体でこの区別が
+    完結する。
+    """
     parser = build_parser()
     args = parser.parse_args(argv)
     if args.command == "help":
@@ -359,6 +368,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     try:
         settings = _require_settings(args)
         print(_dispatch(args.command, args, settings))
+    except NoPendingJobError as exc:
+        print(f"no pending job: {exc}")
+        return 0
     except CliCommandError as exc:
         print(f"error: {exc}")
         return 1

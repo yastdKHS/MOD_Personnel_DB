@@ -1,4 +1,4 @@
-"""Phase7統合Step4（Task17-4）の結合テスト。
+"""Phase7統合Step4（Task17-4）・Phase8 Task18-4の結合テスト。
 
 `app.main([...])`（CLI公開API、実際のargparse解析込み）を起点に、
 `cli/commands.py`の`schedule-now`/`list-schedule`コマンドが`cli/bootstrap.py`
@@ -7,10 +7,10 @@
 ことを確認する。`tests/integration/services/test_scheduler_integration.py`と
 同じく、パイプライン実解析結果の正しさはGolden Test（ADR-0007）が別途担保する
 ため、本テストは`trigger_now()`がCLI経由で`JobId`を取得できること、
-未処理PDFが存在しない場合に`NoPendingJobError`が伝播すること、
-`list-schedule`が現時点では常に「0件」を表示すること（CLIから周期定義を
-まだ設定できないため、`_build_scheduler()`が空タプルを渡す既存契約）のみを
-確認する。
+未処理PDFが存在しない場合に`main()`が`NoPendingJobError`を正常系として扱い
+終了コード0を返すこと（Task18-4）、`list-schedule`が現時点では常に「0件」を
+表示すること（CLIから周期定義をまだ設定できないため、`_build_scheduler()`が
+空タプルを渡す既存契約）のみを確認する。
 """
 
 from datetime import UTC, date, datetime
@@ -22,7 +22,7 @@ from mod_personnel_db.cli import app
 from mod_personnel_db.cli.bootstrap import CompositionSettings
 from mod_personnel_db.models import PdfRecord
 from mod_personnel_db.repositories.sqlite import SqlitePdfRepository, connect
-from mod_personnel_db.services import RUN_PENDING_JOB_TYPE, NoPendingJobError
+from mod_personnel_db.services import RUN_PENDING_JOB_TYPE
 
 _REPO_ROOT = Path(__file__).resolve().parents[3]
 _SAMPLE_PDF_PATH = (
@@ -43,11 +43,17 @@ def _base_argv(settings: CompositionSettings) -> list[str]:
     ]
 
 
-def test_schedule_now_raises_no_pending_job_error_via_real_empty_database(
+def test_schedule_now_treats_no_pending_job_error_as_success_via_real_empty_database(
     initialized_settings: CompositionSettings,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
-    with pytest.raises(NoPendingJobError):
-        app.main([*_base_argv(initialized_settings), "schedule-now", RUN_PENDING_JOB_TYPE])
+    """Phase8 Task18-4: 未処理PDFが1件も存在しない場合、`main()`は`NoPendingJobError`
+    を捕捉し、情報メッセージを表示した上で終了コード0（成功）を返す。
+    """
+    exit_code = app.main([*_base_argv(initialized_settings), "schedule-now", RUN_PENDING_JOB_TYPE])
+
+    assert exit_code == 0
+    assert "no pending job" in capsys.readouterr().out
 
 
 def test_schedule_now_processes_real_pending_pdf_via_bootstrap(
