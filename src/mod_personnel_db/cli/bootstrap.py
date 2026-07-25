@@ -285,19 +285,21 @@ def build_fetch_client() -> HTTPFetchClient:
 
 
 def build_ftp_client(settings: CompositionSettings) -> StandardFTPClient:
-    """生成順序9（Phase7 Task17-0/17-1、Phase8 Task18-1で更新）: `FTPClient`を生成する。
+    """生成順序9（Phase7 Task17-0/17-1、Phase8 Task18-1/18-9で更新）: `FTPClient`を生成する。
 
     `StandardFTPClient`（`ftplib`ベース）のみを生成する。テスト用の
     `InMemoryFTPClient`は合成ルートでは生成しない。
 
     `settings.ftp`（`FtpSettings`、`config/ftp.py`、Task18-1で追加）が
-    設定されている場合はその接続情報（host/port/username/password/timeout）を
-    `FTPConnectionConfig`へそのまま渡す。`settings.ftp`が`None`（FTP関連の
-    環境変数が一切指定されていない、`dev`/`test`等の既定状態）の場合は、
-    Task17-1時点のプレースホルダと同じ`FTPConnectionConfig(host="")`を返し、
-    FTPを利用しない既存コマンド（`fetch-stage`・`schedule-now`・
-    `run-workflow`（`--remote-path`未指定）等）の後方互換性を維持する
-    （docs/phase8-integration-design.md#25-build_ftp_client更新方法）。
+    設定されている場合はその接続情報（host/port/username/password/
+    remote_directory/timeout）を`FTPConnectionConfig`へそのまま渡す。
+    `remote_directory`は`StandardFTPClient.connect()`が`cwd()`へ用いる
+    （`ftp/`側の対応はTask18-8で実装済み、本関数は値を渡すのみ）。
+    `settings.ftp`が`None`（FTP関連の環境変数が一切指定されていない、
+    `dev`/`test`等の既定状態）の場合は、Task17-1時点のプレースホルダと
+    同じ`FTPConnectionConfig(host="")`を返し、FTPを利用しない既存コマンド
+    （`fetch-stage`・`schedule-now`・`run-workflow`（`--remote-path`未指定）等）
+    の後方互換性を維持する（docs/phase8-integration-design.md#25-build_ftp_client更新方法）。
     """
     ftp_settings = settings.ftp
     if ftp_settings is None:
@@ -309,6 +311,7 @@ def build_ftp_client(settings: CompositionSettings) -> StandardFTPClient:
             username=ftp_settings.username,
             password=ftp_settings.password.get_secret_value(),
             timeout=ftp_settings.timeout,
+            remote_directory=ftp_settings.remote_directory,
         )
     )
 

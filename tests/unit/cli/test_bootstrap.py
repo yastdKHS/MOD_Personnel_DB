@@ -235,6 +235,7 @@ def test_build_ftp_client_falls_back_to_placeholder_when_ftp_settings_unset(
 
     assert isinstance(ftp_client, StandardFTPClient)
     assert ftp_client._config.host == ""
+    assert ftp_client._config.remote_directory == ""
 
 
 def test_build_ftp_client_uses_app_settings_ftp_when_configured(
@@ -242,7 +243,8 @@ def test_build_ftp_client_uses_app_settings_ftp_when_configured(
 ) -> None:
     """`settings.ftp`（`FtpSettings`）が設定されている場合、`build_ftp_client()`は
     プレースホルダではなくその実接続情報を`FTPConnectionConfig`へ反映する
-    （レビュー項目「プレースホルダは禁止」）。
+    （レビュー項目「プレースホルダは禁止」）。`remote_directory`（Task18-9で
+    配線）も含め、`FtpSettings`の全フィールドが漏れなく渡ることを確認する。
     """
     configured_settings = settings.model_copy(
         update={
@@ -266,6 +268,22 @@ def test_build_ftp_client_uses_app_settings_ftp_when_configured(
     assert config.username == "publisher"
     assert config.password == "s3cret"
     assert config.timeout == 45.0
+    assert config.remote_directory == "/public"
+
+
+def test_build_ftp_client_passes_default_remote_directory_when_unspecified(
+    settings: CompositionSettings,
+) -> None:
+    """`FtpSettings.remote_directory`を明示的に指定しない場合でも、`FtpSettings`
+    自身の既定値（`"/"`）がそのまま`FTPConnectionConfig.remote_directory`へ渡る
+    （Task18-9、`build_ftp_client()`は値を素通しするのみで独自の既定値判断は
+    行わない）。
+    """
+    configured_settings = settings.model_copy(update={"ftp": FtpSettings(host="ftp.example.com")})
+
+    ftp_client = bootstrap.build_ftp_client(configured_settings)
+
+    assert ftp_client._config.remote_directory == "/"
 
 
 def test_build_feature_store_returns_default_feature_store() -> None:
