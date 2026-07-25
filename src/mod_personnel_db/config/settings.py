@@ -17,6 +17,11 @@
 `ftp.host`へマッピングされる。`ftp`関連の環境変数が一切指定されない場合、
 `ftp`フィールドは`None`のままとなり（既存4フィールドのみのCompositionSettings
 と完全に等価な状態）、既存の呼び出し元・テストへの後方互換性を維持する。
+
+`env_ignore_empty=True`（Phase8 Task18-12）により、環境変数が空文字列
+（GitHub Actionsで未登録のSecretsを`${{ secrets.X }}`として参照した場合に
+生じる値）の場合は「未設定」として扱い、各フィールドの既定値へフォールバック
+する（`pydantic-settings`の標準機能、独自のvalidatorは追加しない）。
 """
 
 from pathlib import Path
@@ -40,6 +45,7 @@ class AppSettings(BaseSettings):
         env_file=".env",
         env_file_encoding="utf-8",
         env_nested_delimiter="__",
+        env_ignore_empty=True,
         extra="ignore",
         frozen=True,
     )

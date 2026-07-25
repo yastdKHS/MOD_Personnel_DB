@@ -124,6 +124,86 @@ def test_app_settings_ftp_partial_env_without_host_raises(monkeypatch: pytest.Mo
         AppSettings(**_base_kwargs(), _env_file=None)  # type: ignore[call-arg]
 
 
+def test_app_settings_ftp_port_empty_string_does_not_raise(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Task18-12: GitHub Actionsで未登録のSecretsは空文字列として渡されうる
+    （`${{ secrets.X }}`が存在しないSecretに対して空文字列を返すため）。
+    `env_ignore_empty=True`により、`FTP__PORT=""`は「未設定」として扱われ、
+    `ValidationError`にならず`FtpSettings.port`の既定値（`21`）へフォールバック
+    する。
+    """
+    monkeypatch.setenv("MOD_PERSONNEL_DB_FTP__HOST", "ftp.example.com")
+    monkeypatch.setenv("MOD_PERSONNEL_DB_FTP__PORT", "")
+
+    settings = AppSettings(**_base_kwargs(), _env_file=None)  # type: ignore[call-arg]
+
+    assert settings.ftp is not None
+    assert settings.ftp.host == "ftp.example.com"
+    assert settings.ftp.port == 21
+
+
+def test_app_settings_ftp_timeout_empty_string_does_not_raise(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Task18-12: `FTP__TIMEOUT=""`も同様に`ValidationError`にならず、
+    `FtpSettings.timeout`の既定値（`30.0`）へフォールバックする。
+    """
+    monkeypatch.setenv("MOD_PERSONNEL_DB_FTP__HOST", "ftp.example.com")
+    monkeypatch.setenv("MOD_PERSONNEL_DB_FTP__TIMEOUT", "")
+
+    settings = AppSettings(**_base_kwargs(), _env_file=None)  # type: ignore[call-arg]
+
+    assert settings.ftp is not None
+    assert settings.ftp.host == "ftp.example.com"
+    assert settings.ftp.timeout == 30.0
+
+
+def test_app_settings_ftp_remote_directory_empty_string_falls_back_to_default(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Task18-12: `FTP__REMOTE_DIRECTORY=""`も`FtpSettings.remote_directory`の
+    既定値（`"/"`）へフォールバックする（本番incidentの再現、`scheduler.yml`が
+    未登録のSecretsをすべて空文字列として渡すケースに対応）。
+    """
+    monkeypatch.setenv("MOD_PERSONNEL_DB_FTP__HOST", "ftp.example.com")
+    monkeypatch.setenv("MOD_PERSONNEL_DB_FTP__PORT", "")
+    monkeypatch.setenv("MOD_PERSONNEL_DB_FTP__USERNAME", "")
+    monkeypatch.setenv("MOD_PERSONNEL_DB_FTP__PASSWORD", "")
+    monkeypatch.setenv("MOD_PERSONNEL_DB_FTP__REMOTE_DIRECTORY", "")
+    monkeypatch.setenv("MOD_PERSONNEL_DB_FTP__TIMEOUT", "")
+
+    settings = AppSettings(**_base_kwargs(), _env_file=None)  # type: ignore[call-arg]
+
+    assert settings.ftp is not None
+    assert settings.ftp.host == "ftp.example.com"
+    assert settings.ftp.port == 21
+    assert settings.ftp.username == ""
+    assert settings.ftp.password.get_secret_value() == ""
+    assert settings.ftp.remote_directory == "/"
+    assert settings.ftp.timeout == 30.0
+
+
+def test_app_settings_ftp_all_env_vars_empty_string_results_in_none(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Task18-12: `MOD_PERSONNEL_DB_FTP__*`が全件空文字列（=Secretsが1件も
+    登録されていないGitHub Actions環境で`scheduler.yml`がすべて`env:`へ渡す
+    構成に相当）の場合、`env_ignore_empty=True`によりいずれも「未設定」扱いと
+    なり、`host`も含めどのFTP関連環境変数も実質的に与えられていない状態になる。
+    したがって`settings.ftp`は（`FTP__HOST`が全く指定されない場合と同様）
+    `None`のままとなる。
+    """
+    monkeypatch.setenv("MOD_PERSONNEL_DB_FTP__HOST", "")
+    monkeypatch.setenv("MOD_PERSONNEL_DB_FTP__PORT", "")
+    monkeypatch.setenv("MOD_PERSONNEL_DB_FTP__USERNAME", "")
+    monkeypatch.setenv("MOD_PERSONNEL_DB_FTP__PASSWORD", "")
+    monkeypatch.setenv("MOD_PERSONNEL_DB_FTP__REMOTE_DIRECTORY", "")
+    monkeypatch.setenv("MOD_PERSONNEL_DB_FTP__TIMEOUT", "")
+
+    settings = AppSettings(**_base_kwargs(), _env_file=None)  # type: ignore[call-arg]
+
+    assert settings.ftp is None
+
+
 def test_app_settings_reads_ftp_from_dotenv_file(tmp_path: Path) -> None:
     env_file = tmp_path / ".env.test"
     env_file.write_text(
