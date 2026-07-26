@@ -1,7 +1,7 @@
 import sqlite3
 from datetime import UTC, datetime
 
-from mod_personnel_db.models import Job, JobId, ParserVersion
+from mod_personnel_db.models import Job, JobId, ParserVersion, PdfId
 from mod_personnel_db.models.job import JobType
 from mod_personnel_db.repositories.sqlite.job import SqliteJobRepository
 
@@ -144,3 +144,25 @@ def test_duplicate_code_version_rejected(conn: sqlite3.Connection) -> None:
     except sqlite3.IntegrityError:
         return
     raise AssertionError("expected sqlite3.IntegrityError for duplicate code_version")
+
+
+def test_add_rejects_unknown_pdf_id(conn: sqlite3.Connection) -> None:
+    repo = SqliteJobRepository(conn)
+    job = Job(
+        id=None,
+        job_type="core_pipeline",
+        pdf_id=PdfId(999),
+        parser_version_id=None,
+        status="running",
+        started_at=datetime(2026, 1, 1, tzinfo=UTC),
+        finished_at=None,
+        processed_count=0,
+        failed_count=0,
+        error_summary=None,
+    )
+
+    try:
+        repo.add(job)
+    except sqlite3.IntegrityError:
+        return
+    raise AssertionError("expected sqlite3.IntegrityError for unknown pdf_id (FK violation)")

@@ -68,6 +68,32 @@ def test_upsert_changed_item_closes_old_and_adds_new(conn: sqlite3.Connection) -
     assert old.effective_to == date(2026, 1, 1)
 
 
+def test_list_items_filters_by_category(conn: sqlite3.Connection) -> None:
+    repo = SqliteKnowledgeRepository(conn)
+    repo.upsert_item(_make_item(item_key="陸将", canonical_value="陸将"))
+    repo.upsert_item(
+        KnowledgeItem(
+            id=KnowledgeItemId(0),
+            category="position",
+            source_file="knowledge/positions/gsdf.yaml",
+            item_key="幕僚長",
+            canonical_value="陸上幕僚長",
+            effective_from=date(2020, 1, 1),
+            effective_to=None,
+            provenance_source="組織要覧",
+            version=1,
+        )
+    )
+
+    ranks = repo.list_items("rank")
+    positions = repo.list_items("position")
+    aliases = repo.list_items("alias")
+
+    assert [i.item_key for i in ranks] == ["陸将"]
+    assert [i.item_key for i in positions] == ["幕僚長"]
+    assert aliases == ()
+
+
 def test_get_item_as_of_returns_historical_value(conn: sqlite3.Connection) -> None:
     repo = SqliteKnowledgeRepository(conn)
     repo.upsert_item(_make_item(canonical_value="陸将（旧）"))

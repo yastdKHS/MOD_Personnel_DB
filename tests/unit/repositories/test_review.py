@@ -18,6 +18,20 @@ def test_create_and_close_session(conn: sqlite3.Connection) -> None:
     assert session_id not in repo.list_open_sessions()
 
 
+def test_list_open_sessions_excludes_closed_among_multiple(conn: sqlite3.Connection) -> None:
+    repo = SqliteReviewRepository(conn)
+
+    open_id_1 = repo.create_session(reviewer="alice", reason="検証NGキューの確認")
+    closed_id = repo.create_session(reviewer="bob", reason="表記ゆれ修正")
+    open_id_2 = repo.create_session(reviewer="carol", reason="別件の確認")
+    repo.close_session(closed_id, "completed")
+
+    open_sessions = repo.list_open_sessions()
+
+    assert set(open_sessions) == {open_id_1, open_id_2}
+    assert closed_id not in open_sessions
+
+
 def test_add_change_and_list_changes(conn: sqlite3.Connection) -> None:
     repo = SqliteReviewRepository(conn)
     session_id = repo.create_session(reviewer="bob", reason="表記ゆれ修正")
