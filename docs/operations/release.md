@@ -74,22 +74,34 @@ Phase8 Task18-6で、Production FTP接続に必要なGitHub Secretsを整理し�
 3. **現状の適用範囲**: `scheduler.yml`が呼び出す`schedule-now run_pending_pipeline`は、`JobOrchestrator.run_pending_pipeline()`を経由するのみで`FTPClient`を一切呼び出さないため、上記Secretsは現時点では**呼び出されない**（`services/orchestrator.py`の`export_and_publish()`のみが`FTPClient`を利用する、Task18-2確認済み）。Fetch/Export/FTP Publishを含む`run_workflow`系の自動化（[`docs/phase8-integration-design.md#4-production-workflow設計`](../phase8-integration-design.md#4-production-workflow設計)が未解決のまま残す設計課題）が実装された時点で、配線変更なしにこれらのSecretsが実際に使用され始める。それまでの間、FTP実接続を要する経路は既存CLIコマンド`run-workflow --remote-path`の手動実行に限られる（下記「接続確認方法」参照）。
 4. **`remote_directory`の実装状況**: `MOD_PERSONNEL_DB_FTP__REMOTE_DIRECTORY`（`FtpSettings.remote_directory`、既定`/`）は、当初（Task18-6時点）`FTPConnectionConfig`にフィールドが存在せず`StandardFTPClient.connect()`も`cwd()`を呼ばないため実行時に一切参照されない状態だった。Task18-8（`ftp/config.py`へのフィールド追加・`ftp/client.py`での`cwd()`実装）・Task18-9（`cli/bootstrap.py`の`build_ftp_client()`による配線）で解消済みであり、`settings.ftp`が設定されている場合（＝`MOD_PERSONNEL_DB_FTP__HOST`を設定した場合）、`run-workflow --remote-path`等でFTP接続する際にログイン直後`remote_directory`へ`cwd()`される（未設定時は`FtpSettings`側の既定値`/`が使われる）。`settings.ftp`自体が未設定（FTP環境変数が一切ない）の場合は、従来どおりプレースホルダ接続（`cwd()`なし）のままである。
 
-### Atomic upload方式（Task19-5）
+### Atomic upload方式（Task19-5、Task19-15/19-17で更新）
 
 `upload-db`が呼び出す`FTPClient.upload()`（`StandardFTPClient`、`ftp/client.py`）は、一時ファイル方式でアップロードする。
 
 1. `local_path`のファイルを`remote_path.uploading`へ`STOR`する。
-2. `STOR`成功後、既存の`remote_path`が存在する場合のみ`remote_path.bak`へ`rename`する（下記「Backup方針」参照）。
+2. `STOR`成功後、既存の`remote_path`が存在する場合のみ、backup手順へ進む（存在確認は`SIZE`を用いる。下記「実FTP検証結果（ATSON FTPd v0.9.14.9）」参照）。
+   1. `remote_path.bak`が既に存在する場合は`DELE`で削除する（Task19-17）。
+   2. `remote_path`を`remote_path.bak`へ`rename`する（下記「Backup方針」参照）。
 3. 最終的に`remote_path.uploading`を正式名称`remote_path`へ`rename`する。
 
-`STOR`失敗時・backup rename失敗時のいずれも、正式ファイル`remote_path`は変更されない（最終rename失敗時のみ`remote_path`が一時的に存在しない状態になりうるが、`remote_path.bak`から復旧可能）。実行前には`upload_db_command()`（`cli/commands.py`）が`PRAGMA integrity_check`でローカルDBの健全性を検証し、異常があればFTP通信自体を行わない。障害発生時の具体的な状態と復旧手順は下記「Atomic upload障害時の復旧手順」を参照。
+`STOR`失敗時・backup delete失敗時・backup rename失敗時のいずれも、正式ファイル`remote_path`は変更されない（最終rename失敗時のみ`remote_path`が一時的に存在しない状態になりうるが、`remote_path.bak`から復旧可能）。正常終了時は`remote_path.uploading`は`rename`によって正式名称へ移動済みのため残らない。実行前には`upload_db_command()`（`cli/commands.py`）が`PRAGMA integrity_check`でローカルDBの健全性を検証し、異常があればFTP通信自体を行わない。障害発生時の具体的な状態と復旧手順は下記「Atomic upload障害時の復旧手順」を参照。
 
-### Backup方針（Task19-5/19-7）
+### 実FTP検証結果（ATSON FTPd v0.9.14.9）
+
+Task19-13・Task19-16の実FTP検証（運用担当者による実サーバでの確認）により、以下が判明している。
+
+- **`NLST`は単一ファイルの存在確認に使えない**: `NLST`で単一ファイルの存在確認を行うと`TYPE A`への切り替えが発生し、後続の`PASV`で`426 ASCII Transfer aborted`となる。既存ファイルでも存在確認が失敗するため、`_remote_file_exists()`は`NLST`を採用しない。
+- **`SIZE`は正しく動作する**: 存在するファイルには数値サイズを返し（0byteファイルも同様）、存在しないファイルには`550`を返す。このため`_remote_file_exists()`は`SIZE`を用いる（Task19-15）。
+- **`RNTO`は既存ファイルへの上書きを拒否する**: 既存ファイルへ`RNTO`すると`553 already exist`となり失敗する。このため`upload()`は、既存の`remote_path.bak`がある場合は`rename`の前に`DELE`で削除する（Task19-17）。
+
+これらは個々のFTPコマンド挙動としての実FTP検証結果である。`DELE`→`rename`→`rename`という一連のatomic upload手順全体をATSON FTPd v0.9.14.9上でend-to-endに実行して確認する検証（Task19-18）は、実FTP認証情報の制約により未実施のまま残っている。
+
+### Backup方針（Task19-5/19-7、Task19-17で更新）
 
 - **backup名称**: `remote_path.bak`（例: `personnel.db.bak`）。
-- **保持世代**: 1世代のみ。既存の`.bak`が存在する場合、次回アップロード時に同名へのrenameが試行される。既存ファイルへの上書きをFTPサーバが許可するかはサーバ実装依存であり、ATSON FTPd v0.9.14.9での実挙動は未検証である。
-- **採用理由**: 複数世代管理には、`ftplib`標準にない削除・タイムスタンプ取得機能の追加実装が必要となる（「不足するFTPClient機能」として特定済み）ため、復旧可能性の確保と実装複雑性のバランスを取り、最小構成である1世代管理を採用した（Task19-7）。
-- **制限事項**: 世代管理・自動削除は未実装。運用上、`.bak`が古い内容のまま長期間残り続ける可能性がある。
+- **保持世代**: 1世代のみ。既存の`.bak`が存在する場合、次回アップロード時に先に`DELE`で削除してから`rename`する（上記「実FTP検証結果」のとおり、既存ファイルへの直接`rename`は`553 already exist`で失敗するため）。
+- **採用理由**: 複数世代管理には、`ftplib`標準にないタイムスタンプ取得機能の追加実装が必要となる（「不足するFTPClient機能」として特定済み）ため、復旧可能性の確保と実装複雑性のバランスを取り、最小構成である1世代管理を採用した（Task19-7）。
+- **制限事項**: 世代管理は未実装。運用上、`.bak`が古い内容のまま次回アップロード時に上書きされる。
 
 ### 障害時の確認項目
 
