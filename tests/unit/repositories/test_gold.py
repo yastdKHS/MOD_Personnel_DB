@@ -112,6 +112,41 @@ def test_supersede_missing_old_id_raises(conn: sqlite3.Connection) -> None:
     raise AssertionError("expected RepositoryError for missing old_id")
 
 
+def test_get_history_returns_empty_tuple_for_unknown_person(conn: sqlite3.Connection) -> None:
+    repo = SqliteGoldRepository(conn)
+    assert repo.get_history("nobody") == ()
+
+
+def test_get_history_orders_three_versions_by_version(
+    conn: sqlite3.Connection, pdf_id: PdfId, layout_era_id: str, parser_version_id: ParserVersionId
+) -> None:
+    candidate_id, normalized = _make_candidate(conn, pdf_id, layout_era_id, parser_version_id)
+    repo = SqliteGoldRepository(conn)
+    v1_id = repo.add_version(candidate_id, normalized, "yamada-taro", date(2026, 4, 1), "補職")
+    v2_fields = NormalizedRecord(
+        raw_record_ref=normalized.raw_record_ref,
+        normalized_fields={"rank": NormalizedValue(value="陸将", raw="陸将")},
+        normalization_applied=(),
+        normalized_at=datetime(2026, 4, 2, tzinfo=UTC),
+    )
+    v2_id = repo.add_version(candidate_id, v2_fields, "yamada-taro", date(2026, 4, 1), "補職")
+    repo.supersede(v1_id, v2_id)
+    v3_fields = NormalizedRecord(
+        raw_record_ref=normalized.raw_record_ref,
+        normalized_fields={"rank": NormalizedValue(value="中将", raw="中将")},
+        normalization_applied=(),
+        normalized_at=datetime(2026, 4, 3, tzinfo=UTC),
+    )
+    v3_id = repo.add_version(candidate_id, v3_fields, "yamada-taro", date(2026, 4, 1), "補職")
+    repo.supersede(v2_id, v3_id)
+
+    history = repo.get_history("yamada-taro")
+
+    assert [r.id for r in history] == [v1_id, v2_id, v3_id]
+    assert [r.version for r in history] == [1, 2, 3]
+    assert [r.is_current for r in history] == [False, False, True]
+
+
 def test_list_current(
     conn: sqlite3.Connection, pdf_id: PdfId, layout_era_id: str, parser_version_id: ParserVersionId
 ) -> None:
