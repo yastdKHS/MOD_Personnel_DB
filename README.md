@@ -270,7 +270,7 @@ GitHub Actions画面の「Actions」タブ →「Scheduler」ワークフロー 
 
 `schedule-now run_pending_pipeline`自体は`FTPClient`を呼び出さないが、Phase8 Task18-17で`scheduler.yml`へ追加された前後の「Download DB from FTP」「Upload DB to FTP」ステップ（下記「FTP DB同期フロー」参照）が`download-db`/`upload-db`コマンド経由で`FTPClient`を利用するため、上記FTP関連Secretsは`scheduler-now`実行のたびに実際に使用される（`export_and_publish()`が利用する経路とは別に、DB本体の同期にも使われる）。
 
-### FTP DB同期フロー（Phase8 Task18-17、Task19-5でatomic化）
+### FTP DB同期フロー（Phase8 Task18-17、Task19-5でatomic化、Task19-15/19-17で更新）
 
 ADR-0025が要求する「実行のたびに永続ストレージから読み込み、処理後に書き戻す」バッチ実行モデルに従い、`scheduler.yml`は1回の起動につき以下の順序で処理する。
 
@@ -285,19 +285,24 @@ upload前DB integrity_check  (PRAGMA integrity_check、Task19-5)
     ↓
 一時ファイルへFTP転送  (remote_path.uploadingへSTOR)
     ↓
-既存DBをbackup  (remote_path → remote_path.bakへrename、既存ファイルがある場合のみ)
+SIZEによる存在確認  (remote_pathの存在をSIZEで確認、Task19-15)
     ↓
-rename  (remote_path.uploading → remote_path)
+(.bak存在時のみDELE)  (remote_path.bakが既に存在する場合のみ削除、Task19-17)
+    ↓
+remote→.bak rename  (remote_path → remote_path.bakへrename、remote_pathが存在する場合のみ)
+    ↓
+.uploading→正式名 rename  (remote_path.uploading → remote_path)
     ↓
 更新完了
 ```
 
-`download-db`は既存の`FTPClient.download()`（`ftp/`、Phase7 Task16-1）を変更なく呼び出す薄いCLIコマンドである。一方`upload-db`が呼び出す`FTPClient.upload()`は、Task19-5でatomicな手順に変更されている。
+`download-db`は既存の`FTPClient.download()`（`ftp/`、Phase7 Task16-1）を変更なく呼び出す薄いCLIコマンドである。一方`upload-db`が呼び出す`FTPClient.upload()`は、Task19-5でatomicな手順に変更され、Task19-15（存在確認方式）・Task19-17（backup更新処理）でさらに更新されている。
 
 - **直接上書きではない**: `remote_path`へ直接`STOR`せず、一時ファイル名（`remote_path.uploading`）へ転送してから正式名称へ`rename`する。
-- **転送失敗時は正式DBを維持する**: `STOR`失敗時・backup rename失敗時のいずれも、`remote_path`（正式ファイル）は変更されない。
-- **backupは1世代保持**: 既存の`remote_path`が存在する場合、最終renameの直前に`remote_path.bak`へ退避する。世代管理・自動削除は行わない。
-- 詳細（`upload()`内部の手順・backup方針の理由）は[`docs/operations/release.md`](docs/operations/release.md#production-ftp運用)を参照。
+- **存在確認は`SIZE`**: `remote_path`/`remote_path.bak`の存在確認には`SIZE`コマンドを用いる（Task19-15）。
+- **転送失敗時は正式DBを維持する**: `STOR`失敗時・backup delete/rename失敗時のいずれも、`remote_path`（正式ファイル）は変更されない。
+- **backupは1世代保持**: 既存の`remote_path`が存在する場合、最終renameの直前に`remote_path.bak`へ退避する。既存の`.bak`が存在する場合は、先に`DELE`で削除してからrenameする（Task19-17）。世代管理・自動削除は行わない。
+- 詳細（`upload()`内部の手順・backup方針の理由・実FTP検証結果）は[`docs/operations/release.md`](docs/operations/release.md#production-ftp運用)を参照。
 
 #### 復旧手順（`FTPTransferError: 500 Invalid argument`が発生した場合）
 
