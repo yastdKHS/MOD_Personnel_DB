@@ -114,15 +114,24 @@ class StandardFTPClient:
         return self._connection
 
     def _remote_file_exists(self, remote_path: str) -> bool:
-        """`remote_path`が既に存在するかを`NLST`で確認する（Task19-5、backup要否判定用）。"""
+        """`remote_path`が既に存在するかを`SIZE`で確認する（backup要否判定用）。
+
+        Task19-13の実FTP検証により、ATSON FTPd v0.9.14.9では単一ファイルの
+        存在確認に`NLST`を用いると`TYPE A`への切り替えが発生し、後続の`PASV`で
+        `426 ASCII Transfer aborted`となり既存ファイルでも存在確認に失敗する
+        ことが判明した。`SIZE`は同サーバで正しく動作する（存在時はサイズを
+        返し、不存在時は`550`を返す）ことを実FTP検証済みのため、Task19-15で
+        `SIZE`方式へ変更した。サイズの値自体は判定に用いず、`SIZE`が成功した
+        かどうかのみを見る（0byteファイルも存在扱いとする）。
+        """
         connection = self._require_connection()
         try:
-            names = connection.nlst(remote_path)
+            connection.size(remote_path)
         except ftplib.error_perm:
             return False
         except (OSError, ftplib.Error) as exc:
             raise FTPTransferError(f"存在確認に失敗しました: {remote_path}") from exc
-        return len(names) > 0
+        return True
 
 
 __all__ = ["StandardFTPClient"]
