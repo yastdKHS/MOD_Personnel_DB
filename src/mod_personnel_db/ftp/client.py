@@ -51,8 +51,11 @@ class StandardFTPClient:
         転送途中の失敗で`remote_path`（正式ファイル）を破損・消失させないよう、
         一時ファイル名へSTORしてから正式名称へrenameするatomicな手順を踏む
         （Task19-5）。既存の`remote_path`が存在する場合は、最終renameの直前に
-        バックアップ名（`remote_path + ".bak"`）へ退避する。STOR失敗時・
-        バックアップrename失敗時のいずれも`remote_path`は変更されない。
+        バックアップ名（`remote_path + ".bak"`）へ退避する。ATSON FTPd
+        v0.9.14.9は既存ファイルへの`RNTO`を`553 already exist`で拒否するため
+        （Task19-16実FTP検証）、バックアップ名が既に存在する場合は`rename()`
+        の前に`delete()`で削除する（Task19-17）。STOR失敗時・バックアップ
+        delete/rename失敗時のいずれも`remote_path`は変更されない。
         """
         connection = self._require_connection()
         temp_remote_path = f"{remote_path}.uploading"
@@ -64,7 +67,10 @@ class StandardFTPClient:
                 f"アップロードに失敗しました: {local_path} -> {remote_path}"
             ) from exc
         if self._remote_file_exists(remote_path):
-            self.rename(remote_path, f"{remote_path}.bak")
+            backup_path = f"{remote_path}.bak"
+            if self._remote_file_exists(backup_path):
+                self.delete(backup_path)
+            self.rename(remote_path, backup_path)
         self.rename(temp_remote_path, remote_path)
 
     def rename(self, from_name: str, to_name: str) -> None:
@@ -74,6 +80,14 @@ class StandardFTPClient:
             connection.rename(from_name, to_name)
         except (OSError, ftplib.Error) as exc:
             raise FTPTransferError(f"リネームに失敗しました: {from_name} -> {to_name}") from exc
+
+    def delete(self, remote_path: str) -> None:
+        """`remote_path`を削除する（`DELE`、Task19-17）。"""
+        connection = self._require_connection()
+        try:
+            connection.delete(remote_path)
+        except (OSError, ftplib.Error) as exc:
+            raise FTPTransferError(f"削除に失敗しました: {remote_path}") from exc
 
     def download(self, remote_path: str, local_path: str) -> None:
         """`remote_path`のファイルをバイナリモードで`local_path`へダウンロードする。"""

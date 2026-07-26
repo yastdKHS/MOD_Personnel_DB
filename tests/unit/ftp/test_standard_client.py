@@ -199,7 +199,39 @@ def test_upload_does_not_rename_when_stor_fails(ftp_cls: MagicMock, tmp_path: Pa
 def test_upload_backs_up_existing_remote_file_before_final_rename(
     ftp_cls: MagicMock, tmp_path: Path
 ) -> None:
-    """既存`remote_path`が存在する場合、最終renameの前にbackup名へrenameする。"""
+    """既存`remote_path`が存在し、既存`.bak`が存在しない場合、`delete()`は
+    呼ばれず、最終renameの前にbackup名へrenameする。
+    """
+    connection = ftp_cls.return_value
+
+    def fake_size(path: str) -> int:
+        if path == "remote/source.pdf":
+            return 123
+        raise ftplib.error_perm("550 No such file")
+
+    connection.size.side_effect = fake_size
+    client = StandardFTPClient(FTPConnectionConfig(host="ftp.example.jp"))
+    client.connect()
+    local_file = tmp_path / "source.pdf"
+    local_file.write_bytes(b"content")
+
+    client.upload(str(local_file), "remote/source.pdf")
+
+    connection.delete.assert_not_called()
+    assert connection.rename.call_args_list == [
+        call("remote/source.pdf", "remote/source.pdf.bak"),
+        call("remote/source.pdf.uploading", "remote/source.pdf"),
+    ]
+
+
+@patch("mod_personnel_db.ftp.client.ftplib.FTP")
+def test_upload_deletes_existing_backup_before_backup_rename(
+    ftp_cls: MagicMock, tmp_path: Path
+) -> None:
+    """既存`remote_path`・既存`.bak`の両方が存在する場合、`.bak`を`delete()`
+    してからbackup renameする（ATSON FTPd v0.9.14.9がRNTOを`553 already
+    exist`で拒否する対策、Task19-16/19-17）。
+    """
     connection = ftp_cls.return_value
     connection.size.return_value = 123
     client = StandardFTPClient(FTPConnectionConfig(host="ftp.example.jp"))
@@ -209,10 +241,32 @@ def test_upload_backs_up_existing_remote_file_before_final_rename(
 
     client.upload(str(local_file), "remote/source.pdf")
 
+    connection.delete.assert_called_once_with("remote/source.pdf.bak")
     assert connection.rename.call_args_list == [
         call("remote/source.pdf", "remote/source.pdf.bak"),
         call("remote/source.pdf.uploading", "remote/source.pdf"),
     ]
+
+
+@patch("mod_personnel_db.ftp.client.ftplib.FTP")
+def test_upload_propagates_backup_delete_failure_without_rename(
+    ftp_cls: MagicMock, tmp_path: Path
+) -> None:
+    """既存`.bak`の`delete()`に失敗した場合、backup rename・最終renameの
+    いずれも実行されない。
+    """
+    connection = ftp_cls.return_value
+    connection.size.return_value = 123
+    connection.delete.side_effect = ftplib.error_perm("550 Permission denied")
+    client = StandardFTPClient(FTPConnectionConfig(host="ftp.example.jp"))
+    client.connect()
+    local_file = tmp_path / "source.pdf"
+    local_file.write_bytes(b"content")
+
+    with pytest.raises(FTPTransferError):
+        client.upload(str(local_file), "remote/source.pdf")
+
+    connection.rename.assert_not_called()
 
 
 @patch("mod_personnel_db.ftp.client.ftplib.FTP")
@@ -302,6 +356,35 @@ def test_rename_without_connect_raises() -> None:
 
     with pytest.raises(FTPConnectionError):
         client.rename("old.txt", "new.txt")
+
+
+@patch("mod_personnel_db.ftp.client.ftplib.FTP")
+def test_delete_calls_ftplib_delete(ftp_cls: MagicMock) -> None:
+    connection = ftp_cls.return_value
+    client = StandardFTPClient(FTPConnectionConfig(host="ftp.example.jp"))
+    client.connect()
+
+    client.delete("old.txt")
+
+    connection.delete.assert_called_once_with("old.txt")
+
+
+@patch("mod_personnel_db.ftp.client.ftplib.FTP")
+def test_delete_wraps_ftplib_error(ftp_cls: MagicMock) -> None:
+    connection = ftp_cls.return_value
+    connection.delete.side_effect = ftplib.error_perm("550 No such file")
+    client = StandardFTPClient(FTPConnectionConfig(host="ftp.example.jp"))
+    client.connect()
+
+    with pytest.raises(FTPTransferError):
+        client.delete("old.txt")
+
+
+def test_delete_without_connect_raises() -> None:
+    client = StandardFTPClient(FTPConnectionConfig(host="ftp.example.jp"))
+
+    with pytest.raises(FTPConnectionError):
+        client.delete("old.txt")
 
 
 @patch("mod_personnel_db.ftp.client.ftplib.FTP")

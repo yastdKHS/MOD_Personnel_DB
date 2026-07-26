@@ -11,6 +11,10 @@ Protocolである。両者はメソッド名の一部が重複するが別の型
 `rename()`はTask19-5で追加した拡張であり、`docs/api/interfaces.md#ftpservice`
 が定める`FTPService`契約には含まれない（`upload()`のatomic化・リモート
 バックアップ生成のために`StandardFTPClient.upload()`内部が利用する）。
+`delete()`はTask19-17で追加した拡張であり、同じく`FTPService`契約には
+含まれない（ATSON FTPd v0.9.14.9が既存ファイルへの`RNTO`を`553 already
+exist`で拒否するため、`upload()`が既存の`.bak`を`rename()`前に削除する
+用途で利用する）。
 
 バイト列・パス文字列のみを扱うプロトコル層に徹し、ドメインモデル（`models/`）・
 `repositories/`（抽象含む）のいずれにも依存しない（依存先は`utils/`のみ）。
@@ -50,6 +54,10 @@ class FTPClient(Protocol):
 
     def rename(self, from_name: str, to_name: str) -> None:
         """`from_name`を`to_name`へリネームする（Task19-5）。"""
+        ...
+
+    def delete(self, remote_path: str) -> None:
+        """`remote_path`を削除する（Task19-17）。"""
         ...
 
     def disconnect(self) -> None:

@@ -52,6 +52,12 @@ class InMemoryFTPClient:
             raise FTPTransferError(f"リネーム元が存在しません: {from_name}")
         self._files[to_name] = self._files.pop(from_name)
 
+    def delete(self, remote_path: str) -> None:
+        self._require_connected()
+        if remote_path not in self._files:
+            raise FTPTransferError(f"削除対象が存在しません: {remote_path}")
+        del self._files[remote_path]
+
     def disconnect(self) -> None:
         self._connected = False
 
