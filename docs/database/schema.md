@@ -757,8 +757,11 @@ CREATE TABLE schema_migrations (
 
 ## 運用上の注意事項
 
-- **外部キー制約の有効化**: SQLiteはデフォルトでFK制約を強制しない。すべての接続確立時に `PRAGMA foreign_keys = ON;` を実行することを必須とする。
-- **WALモードの検討**: 書き込み中の読み取り（エクスポート処理・分析クエリ等）をブロックしないよう、`PRAGMA journal_mode = WAL;` の採用を実装時に検討する。
+- **外部キー制約の有効化**: SQLiteはデフォルトでFK制約を強制しない。すべての接続確立時に `PRAGMA foreign_keys = ON;` を実行することを必須とする。実装（`_base.py`・`_schema.py`）は本方針どおり接続確立時に毎回 `PRAGMA foreign_keys = ON` を実行しており、FK制約違反が実際に拒否されることはテストで確認済みである（`tests/unit/repositories/test_job.py::test_add_rejects_unknown_pdf_id`、Task20-6）。
+- **journal_mode**: `PRAGMA journal_mode = WAL;` を含め、`journal_mode` に関する明示的な設定は行っていない（SQLiteの既定値のまま）。書き込み中の読み取りをブロックしない特性から実装時の採用候補として本節に記載していたが、2026-07-26時点（Task20-4/Task20-7で確認）でも未採用である。
+- **busy_timeout**: `PRAGMA busy_timeout` の設定は行っていない（`_base.py`・`_schema.py`とも未設定、Task20-4/Task20-7で確認）。
+- **VACUUMの運用方針**: `VACUUM` の実行方針（手動実行か `PRAGMA auto_vacuum` による自動化か、実行頻度）は未定である。現状のDDL・接続初期化処理（`_base.py`・`_schema.py`）に `auto_vacuum` 関連の設定はない（Task20-4/Task20-7で確認）。
+- **インデックス未整備のFK列**: [インデックス一覧](#インデックス一覧)が定める「全FK列には…必ずインデックスを張る」方針に反し、以下5列は外部キーでありながら対応するインデックスが存在しない（Task20-4で判明、Task20-7時点で既知課題として整理。DDL自体は本ドキュメントの改訂範囲外）: `gold_records.superseded_by`、`learning_dataset.source_review_change_id`、`learning_dataset.reflected_in_knowledge_item_id`、`learning_dataset.reflected_in_layout_id`、`jobs.parser_version_id`。
 - **JSON列のバリデーション範囲**: `raw_fields` / `normalized_fields` / `fields` 等のJSON列は、`CHECK (json_valid(...))` により構文の妥当性のみをDB層で保証する。必須フィールドの有無等のスキーマレベルの妥当性は、Validator（アプリケーション層、[ADR-0011](../adr/0011-fixed-core-pipeline.md)）の責務とする。
 - **個人情報の取り扱い**: `candidate_records` / `gold_records` / `learning_dataset` 等、個人に関する情報を含むテーブルへのアクセス範囲・エクスポート範囲は、[ADR-0008](../adr/0008-data-ethics-policy.md) の方針に従う。
 

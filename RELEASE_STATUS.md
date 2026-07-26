@@ -8,7 +8,7 @@
 
 ## Date
 
-2026-07-22（Phase6 Task15-4作成時点）。2026-07-24、Task17-5（Phase7最終監査・CLI統合完了後のドキュメント同期）・Task17-6（Phase7 Closeout）で更新。2026-07-25、Task18-1（`FtpSettings`導入）・Task18-3〜18-5（GitHub Actions Scheduler統合）・Task18-6（Production FTP運用整備）・Task18-7（Production Release Validation、[`docs/reports/phase8-release-validation.md`](docs/reports/phase8-release-validation.md)）・Task18-7追記（運用担当者による実Production FTPサーバへの手動接続確認、`remote_directory`未配線の発見。続報でフルパス指定によるアップロード成功も確認）・Task18-8/18-9（`remote_directory`の`ftp/`実装・Composition Root配線）・Task18-10（デッドコンフィグ記述をドキュメントから解消）で更新。2026-07-25〜26、Task18-17（SQLite永続化Phase1、`download-db`/`upload-db`CLIコマンド追加）・Task19-5（`upload()`のatomic化・DB `integrity_check`追加）・Task19-15（既存ファイル確認方式を`NLST`から`SIZE`へ変更、ATSON FTPd v0.9.14.9の実挙動に対応）・Task19-17（既存`.bak`を`DELE`してから`rename`する対応、同サーバの`RNTO`拒否への対応）・Task19-20（運用ドキュメントの追従）で更新。2026-07-26、Task19-21（本ファイルの最新化）で更新。
+2026-07-22（Phase6 Task15-4作成時点）。2026-07-24、Task17-5（Phase7最終監査・CLI統合完了後のドキュメント同期）・Task17-6（Phase7 Closeout）で更新。2026-07-25、Task18-1（`FtpSettings`導入）・Task18-3〜18-5（GitHub Actions Scheduler統合）・Task18-6（Production FTP運用整備）・Task18-7（Production Release Validation、[`docs/reports/phase8-release-validation.md`](docs/reports/phase8-release-validation.md)）・Task18-7追記（運用担当者による実Production FTPサーバへの手動接続確認、`remote_directory`未配線の発見。続報でフルパス指定によるアップロード成功も確認）・Task18-8/18-9（`remote_directory`の`ftp/`実装・Composition Root配線）・Task18-10（デッドコンフィグ記述をドキュメントから解消）で更新。2026-07-25〜26、Task18-17（SQLite永続化Phase1、`download-db`/`upload-db`CLIコマンド追加）・Task19-5（`upload()`のatomic化・DB `integrity_check`追加）・Task19-15（既存ファイル確認方式を`NLST`から`SIZE`へ変更、ATSON FTPd v0.9.14.9の実挙動に対応）・Task19-17（既存`.bak`を`DELE`してから`rename`する対応、同サーバの`RNTO`拒否への対応）・Task19-20（運用ドキュメントの追従）で更新。2026-07-26、Task19-21（本ファイルの最新化）で更新。2026-07-26、Task20-7（Task20-1〜20-6のSQLiteレビュー結果をKnown Limitationsへ反映、ドキュメントのみの変更）で更新。
 
 ## Current Status
 
@@ -96,7 +96,7 @@ Task15-0監査で確認した既知の制限事項（Task15-1のDocument Drift�
 8. `repositories/__init__.py`に`UnitOfWork`が未定義（`docs/api/package-design.md`該当節が自己申告済み。`JobRunner`が`UnitOfWork`を使わない設計自体はADR-0046と整合）。
 9. Architecture Contract Guarantee 8の文言（`promote_to_gold()`）と実装のprivateメソッド名（`_promote_to_gold()`、`approve()`から呼び出し）が完全一致しない（保証の実体は成立）。
 10. `models/enums.py`の`PipelineStageName`が5値（Document Analyzerを含まない）。ADR-0032による正当な再定義が根拠だが、ADR-0011単体の字面とは異なる。
-11. `docs/database/schema.md`が定める`schema_migrations`管理テーブル・`PRAGMA user_version`が未実装（`apply_schema()`は単発DDL適用のみ）。
+11. `docs/database/schema.md`が定める`schema_migrations`管理テーブル・`PRAGMA user_version`が未実装（`apply_schema()`は単発DDL適用のみ）。あわせて`journal_mode=WAL`・`busy_timeout`・`VACUUM`運用方針もいずれも未実装/未定である（Task20-4/Task20-7で確認、詳細は[`docs/database/schema.md`](docs/database/schema.md#運用上の注意事項)）。
 12. `review/`・`export/`パッケージは、Phase4で確定した狭い契約（`docs/api/review.md`・`docs/api/interfaces.md`が描く広い契約とは異なる）のまま拡張されている（両パッケージの`__init__.py`docstringが自己申告済み）。
 13. Golden以外のテスト層（Regression/Performance/Acceptance/Benchmark/Mutation）は未着手。
 14. Task18-7の実測により新たに判明した2件（[`docs/reports/phase8-release-validation.md`](docs/reports/phase8-release-validation.md)）: (a) FTP接続失敗時（`FTPConnectionError`）が`cli/app.py::main()`の`except`節（`CliCommandError`/`NoPendingJobError`）のいずれにも該当せず、捕捉されないままPythonの生トレースバックとして出力される（未是正のまま残る）。(b) **（Task18-22で解消・実行実績を確認済み）** Task18-7確認時点では`scheduler.yml`・`release.yml`とも実行履歴が0件だったが、Task18-17（SQLite永続化Phase1）実装後、Task18-22でGitHub Actions API（`actions_list`/`actions_get`）により直近の実行を確認したところ、`workflow_dispatch`によるScheduler実行（run ID `30175995974`）が`success`で完了しており、「Download DB from FTP」「Run schedule-now via CLI」「Upload DB to FTP」の3ステップすべてが成功していることを実測で確認した。Production環境での実行実績は存在する。
@@ -107,6 +107,9 @@ Task15-0監査で確認した既知の制限事項（Task15-1のDocument Drift�
 19. **（残存）** `.uploading`（アップロード中の一時ファイル名）の自動清掃機構がない。誤削除リスクを避けるための意図的な設計判断（Task19-7）であり、失敗が続いた場合はリモートに`.uploading`が蓄積しうる。
 20. **（残存）** `remote_path.bak`は1世代のみ保持し、複数世代管理・自動削除の機構がない（Task19-7、実装複雑性とのバランスを取った意図的な設計判断）。
 21. **（残存）** `.bak`からの手動復旧（`rename(remote_path.bak, remote_path)`等）を行う専用CLIコマンド（`restore-db-backup`等）が存在しない。復旧には汎用FTPクライアントでの手動操作が必要（Task19-7/19-8で指摘済み）。
+22. **（残存、Task20-2確認）** SQLite接続の二重生成: `fetch-stage`/`run-workflow`/`schedule-now`/`list-schedule`実行時、`cli/bootstrap.py::build_application()`と`cli/commands.py::_build_job_orchestrator()`が、同一`db_path`へ独立した2本目のSQLite接続をそれぞれ生成する。また両接続とも明示的な`close()`を行わない。CLI呼び出しは短命プロセスでありプロセス終了時にOSがハンドルを回収するため実害は小さいが、設計上のconnection lifecycle管理は徹底されていない。
+23. **（残存、Task20-4確認）** 未インデックスFK列: `gold_records.superseded_by`・`learning_dataset.source_review_change_id`・`learning_dataset.reflected_in_knowledge_item_id`・`learning_dataset.reflected_in_layout_id`・`jobs.parser_version_id`の5列は外部キーだがインデックスが存在しない（詳細は[`docs/database/schema.md`](docs/database/schema.md#運用上の注意事項)）。
+24. **（Task20-6で強化）** SQLite Repository境界テスト: `SqliteJobRepository.add()`が外部キー制約違反（存在しない`pdf_id`）を`sqlite3.IntegrityError`として拒否することを保証するテストを追加した。あわせて`SqliteGoldRepository.get_history()`・`SqliteKnowledgeRepository.list_items()`・`SqliteReviewRepository.list_open_sessions()`について、既存テストが未証明だった境界・フィルタ条件（空結果、複数カテゴリ、複数セッション混在時の除外）を明示的に検証するテストを追加した（いずれのメソッドも既存テストで部分的に呼び出し済みだった点はTask20-6完了報告で訂正済み）。
 
 ## Phase8開始前の残課題一覧（Task17-6で整理、Task18-0で実装設計を確定）
 
