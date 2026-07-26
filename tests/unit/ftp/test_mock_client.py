@@ -74,6 +74,37 @@ def test_list_remote_filters_by_directory_prefix(tmp_path: Path) -> None:
     assert set(entries) == {"remote/2026/a.pdf", "remote/2026/b.pdf"}
 
 
+def test_rename_moves_entry_to_new_key(tmp_path: Path) -> None:
+    client = InMemoryFTPClient()
+    client.connect()
+    local_file = tmp_path / "source.pdf"
+    local_file.write_bytes(b"content")
+    client.upload(str(local_file), "remote/source.pdf")
+
+    client.rename("remote/source.pdf", "remote/source.pdf.bak")
+
+    dest_file = tmp_path / "dest.pdf"
+    client.download("remote/source.pdf.bak", str(dest_file))
+    assert dest_file.read_bytes() == b"content"
+    with pytest.raises(FTPTransferError):
+        client.download("remote/source.pdf", str(tmp_path / "missing.pdf"))
+
+
+def test_rename_missing_source_raises_transfer_error() -> None:
+    client = InMemoryFTPClient()
+    client.connect()
+
+    with pytest.raises(FTPTransferError):
+        client.rename("remote/missing.pdf", "remote/missing.pdf.bak")
+
+
+def test_rename_requires_connect() -> None:
+    client = InMemoryFTPClient()
+
+    with pytest.raises(FTPConnectionError):
+        client.rename("remote/a.pdf", "remote/b.pdf")
+
+
 def test_disconnect_then_upload_raises(tmp_path: Path) -> None:
     client = InMemoryFTPClient()
     client.connect()

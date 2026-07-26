@@ -270,19 +270,34 @@ GitHub Actions画面の「Actions」タブ →「Scheduler」ワークフロー 
 
 `schedule-now run_pending_pipeline`自体は`FTPClient`を呼び出さないが、Phase8 Task18-17で`scheduler.yml`へ追加された前後の「Download DB from FTP」「Upload DB to FTP」ステップ（下記「FTP DB同期フロー」参照）が`download-db`/`upload-db`コマンド経由で`FTPClient`を利用するため、上記FTP関連Secretsは`scheduler-now`実行のたびに実際に使用される（`export_and_publish()`が利用する経路とは別に、DB本体の同期にも使われる）。
 
-### FTP DB同期フロー（Phase8 Task18-17）
+### FTP DB同期フロー（Phase8 Task18-17、Task19-5でatomic化）
 
-ADR-0025が要求する「実行のたびに永続ストレージから読み込み、処理後に書き戻す」バッチ実行モデルに従い、`scheduler.yml`は1回の起動につき以下の3ステップを順に実行する。
+ADR-0025が要求する「実行のたびに永続ストレージから読み込み、処理後に書き戻す」バッチ実行モデルに従い、`scheduler.yml`は1回の起動につき以下の順序で処理する。
 
 ```
-Download DB from FTP  (download-db "$MOD_PERSONNEL_DB_DB_REMOTE_PATH")
-        ↓
-Run schedule-now via CLI  (schedule-now run_pending_pipeline)
-        ↓
-Upload DB to FTP  (upload-db "$MOD_PERSONNEL_DB_DB_REMOTE_PATH")
+Remote DB
+    ↓
+Download DB  (download-db "$MOD_PERSONNEL_DB_DB_REMOTE_PATH")
+    ↓
+schedule-now実行  (schedule-now run_pending_pipeline)
+    ↓
+upload前DB integrity_check  (PRAGMA integrity_check、Task19-5)
+    ↓
+一時ファイルへFTP転送  (remote_path.uploadingへSTOR)
+    ↓
+既存DBをbackup  (remote_path → remote_path.bakへrename、既存ファイルがある場合のみ)
+    ↓
+rename  (remote_path.uploading → remote_path)
+    ↓
+更新完了
 ```
 
-`download-db`/`upload-db`はいずれも既存の`FTPClient.download()`/`upload()`（`ftp/`、Phase7 Task16-1）のみを呼び出す薄いCLIコマンドであり、FTPプロトコルロジック自体には手を加えていない。
+`download-db`は既存の`FTPClient.download()`（`ftp/`、Phase7 Task16-1）を変更なく呼び出す薄いCLIコマンドである。一方`upload-db`が呼び出す`FTPClient.upload()`は、Task19-5でatomicな手順に変更されている。
+
+- **直接上書きではない**: `remote_path`へ直接`STOR`せず、一時ファイル名（`remote_path.uploading`）へ転送してから正式名称へ`rename`する。
+- **転送失敗時は正式DBを維持する**: `STOR`失敗時・backup rename失敗時のいずれも、`remote_path`（正式ファイル）は変更されない。
+- **backupは1世代保持**: 既存の`remote_path`が存在する場合、最終renameの直前に`remote_path.bak`へ退避する。世代管理・自動削除は行わない。
+- 詳細（`upload()`内部の手順・backup方針の理由）は[`docs/operations/release.md`](docs/operations/release.md#production-ftp運用)を参照。
 
 #### 復旧手順（`FTPTransferError: 500 Invalid argument`が発生した場合）
 
@@ -291,6 +306,8 @@ Task18-18〜18-21の実FTPログ調査により、本エラーは`remote_path`�
 1. リポジトリ（またはEnvironment）のGitHub Secretsに`MOD_PERSONNEL_DB_DB_REMOTE_PATH`が登録されているか確認する。GitHub Secretsは未登録の場合、参照時に空文字列に評価される（存在しないSecretへの参照はエラーにならず空文字列になる点に注意）。
 2. 値が実FTPサーバ上の実在するファイルパス（例: `personnel.db`）を指しているか確認する。
 3. 「Actions」タブ →「Scheduler」ワークフロー →「Run workflow」で手動再実行し、「Download DB from FTP」ステップが成功することを確認する。
+
+atomic upload障害時（`.uploading`/`.bak`が想定外の状態で残存する場合等）の詳細な復旧手順は、本READMEには概要のみとし、[`docs/operations/release.md`](docs/operations/release.md#atomic-upload障害時の復旧手順)を正とする。
 
 ### FTP設定方法
 

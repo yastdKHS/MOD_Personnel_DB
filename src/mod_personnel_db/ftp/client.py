@@ -46,15 +46,34 @@ class StandardFTPClient:
         self._connection = connection
 
     def upload(self, local_path: str, remote_path: str) -> None:
-        """`local_path`のファイルをバイナリモードで`remote_path`へアップロードする。"""
+        """`local_path`のファイルをバイナリモードで`remote_path`へアップロードする。
+
+        転送途中の失敗で`remote_path`（正式ファイル）を破損・消失させないよう、
+        一時ファイル名へSTORしてから正式名称へrenameするatomicな手順を踏む
+        （Task19-5）。既存の`remote_path`が存在する場合は、最終renameの直前に
+        バックアップ名（`remote_path + ".bak"`）へ退避する。STOR失敗時・
+        バックアップrename失敗時のいずれも`remote_path`は変更されない。
+        """
         connection = self._require_connection()
+        temp_remote_path = f"{remote_path}.uploading"
         try:
             with Path(local_path).open("rb") as source:
-                connection.storbinary(f"STOR {remote_path}", source)
+                connection.storbinary(f"STOR {temp_remote_path}", source)
         except (OSError, ftplib.Error) as exc:
             raise FTPTransferError(
                 f"アップロードに失敗しました: {local_path} -> {remote_path}"
             ) from exc
+        if self._remote_file_exists(remote_path):
+            self.rename(remote_path, f"{remote_path}.bak")
+        self.rename(temp_remote_path, remote_path)
+
+    def rename(self, from_name: str, to_name: str) -> None:
+        """`from_name`を`to_name`へリネームする（`RNFR`/`RNTO`、Task19-5）。"""
+        connection = self._require_connection()
+        try:
+            connection.rename(from_name, to_name)
+        except (OSError, ftplib.Error) as exc:
+            raise FTPTransferError(f"リネームに失敗しました: {from_name} -> {to_name}") from exc
 
     def download(self, remote_path: str, local_path: str) -> None:
         """`remote_path`のファイルをバイナリモードで`local_path`へダウンロードする。"""
@@ -93,6 +112,17 @@ class StandardFTPClient:
         if self._connection is None:
             raise FTPConnectionError("connect()が呼び出されていません。")
         return self._connection
+
+    def _remote_file_exists(self, remote_path: str) -> bool:
+        """`remote_path`が既に存在するかを`NLST`で確認する（Task19-5、backup要否判定用）。"""
+        connection = self._require_connection()
+        try:
+            names = connection.nlst(remote_path)
+        except ftplib.error_perm:
+            return False
+        except (OSError, ftplib.Error) as exc:
+            raise FTPTransferError(f"存在確認に失敗しました: {remote_path}") from exc
+        return len(names) > 0
 
 
 __all__ = ["StandardFTPClient"]

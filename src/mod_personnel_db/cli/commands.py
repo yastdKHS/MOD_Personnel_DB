@@ -26,8 +26,14 @@ architecture-contract.md 保証15）。
 `repositories.sqlite.connect()`のみを直接importする（他の具象Repository
 クラスは一切importしない）。`connect()`は`bootstrap.py`の`__all__`に
 含まれず`mypy --strict`のno-implicit-reexport制約で参照できないため、この
-1関数のみ`repositories.sqlite`から直接importする。本モジュールの他のいかなる
-箇所もRepository具象クラス・`sqlite3`を直接扱わない。
+1関数のみ`repositories.sqlite`から直接importする。
+
+**Task19-5**: `upload_db_command()`実行前のDB健全性検証（`_check_database_integrity()`）
+でも、新規のRepository・サービス層を追加せず、この既存`connect()`importを
+再利用する（`PRAGMA integrity_check`実行後に`close()`する接続1本のみの
+軽量な検証であり、Task19-4のADR判断（新規サービス層は見送り）を踏まえた
+最小実装）。同関数は`sqlite3.Error`を捕捉するためにのみ`sqlite3`モジュール
+自体もimportするが、Repository具象クラスは引き続き一切importしない。
 
 **Phase7統合Step4（Task17-4）**: `schedule_now_command`/`list_schedule_command`は
 `bootstrap.build_scheduler()`（Task17-4で追加）が返す`Scheduler`をProtocol型
@@ -38,8 +44,10 @@ architecture-contract.md 保証15）。
 への配線が未実装のため、Task17-1と同様に未使用のまま据え置く）。
 """
 
+import sqlite3
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
+from pathlib import Path
 
 from mod_personnel_db.cli.bootstrap import (
     CompositionSettings,
@@ -255,10 +263,36 @@ def download_db_command(settings: CompositionSettings, remote_path: str) -> None
         ftp_client.disconnect()
 
 
+def _check_database_integrity(db_path: str) -> None:
+    """`db_path`のSQLiteファイルへ`PRAGMA integrity_check`を実行する（Task19-5）。
+
+    破損したDBファイルがそのままFTPサーバへ書き戻される事故を防ぐための
+    軽量な検証であり、専用サービス層は設けない（Task19-4のADR判断を踏まえた
+    最小実装）。異常時（ファイル不在・SQLiteとして開けない・`integrity_check`が
+    `ok`以外を返す場合）は`CliCommandError`を送出し、呼び出し元はFTP通信を
+    行わない。
+    """
+    if not Path(db_path).exists():
+        raise CliCommandError(f"DBファイルが存在しません: {db_path}")
+    connection = connect(db_path)
+    try:
+        row = connection.execute("PRAGMA integrity_check").fetchone()
+    except sqlite3.Error as exc:
+        raise CliCommandError(f"DB健全性検証に失敗しました: {db_path} ({exc})") from exc
+    finally:
+        connection.close()
+    result = row[0] if row is not None else None
+    if result != "ok":
+        raise CliCommandError(f"DB健全性検証に失敗しました: {db_path} (結果: {result})")
+
+
 def upload_db_command(settings: CompositionSettings, remote_path: str) -> None:
     """`upload-db`コマンド。`FTPClient.upload()`のみを呼び出し、
     `settings.db_path`のDBファイルを`remote_path`へ書き戻す（Task18-17）。
+    アップロード前に`_check_database_integrity()`でDBの健全性を確認し、
+    異常があればFTP通信を一切行わずに中断する（Task19-5）。
     """
+    _check_database_integrity(settings.db_path)
     ftp_client = build_ftp_client(settings)
     ftp_client.connect()
     try:
