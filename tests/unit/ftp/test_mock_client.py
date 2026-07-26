@@ -105,6 +105,34 @@ def test_rename_requires_connect() -> None:
         client.rename("remote/a.pdf", "remote/b.pdf")
 
 
+def test_delete_removes_entry(tmp_path: Path) -> None:
+    client = InMemoryFTPClient()
+    client.connect()
+    local_file = tmp_path / "source.pdf"
+    local_file.write_bytes(b"content")
+    client.upload(str(local_file), "remote/source.pdf.bak")
+
+    client.delete("remote/source.pdf.bak")
+
+    with pytest.raises(FTPTransferError):
+        client.download("remote/source.pdf.bak", str(tmp_path / "missing.pdf"))
+
+
+def test_delete_missing_target_raises_transfer_error() -> None:
+    client = InMemoryFTPClient()
+    client.connect()
+
+    with pytest.raises(FTPTransferError):
+        client.delete("remote/missing.pdf")
+
+
+def test_delete_requires_connect() -> None:
+    client = InMemoryFTPClient()
+
+    with pytest.raises(FTPConnectionError):
+        client.delete("remote/a.pdf")
+
+
 def test_disconnect_then_upload_raises(tmp_path: Path) -> None:
     client = InMemoryFTPClient()
     client.connect()

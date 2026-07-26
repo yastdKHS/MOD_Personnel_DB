@@ -59,6 +59,9 @@ class StubFTPClient:
     def rename(self, from_name: str, to_name: str) -> None:
         self.calls.append("rename")
 
+    def delete(self, remote_path: str) -> None:
+        self.calls.append("delete")
+
     def disconnect(self) -> None:
         self.calls.append("disconnect")
 
