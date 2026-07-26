@@ -178,9 +178,18 @@ def _build_job_orchestrator(settings: CompositionSettings) -> JobOrchestrator:
     具象実装を本モジュールが直接生成することはない。戻り値の型は`JobOrchestrator`
     Protocolであり、呼び出し元（`fetch_stage_command`/`run_workflow_command`）は
     Protocol経由でのみこれを利用する。
+
+    **Task21-2**: `connect()`は本関数内で1回のみ呼び出し、`build_application()`
+    （Application生成）と`build_sqlite_repositories()`（JobOrchestrator用の
+    Repository生成）の両方へ同一Connectionを渡す（Task21-1で選定した案B）。
+    以前は`build_application()`が内部で独自に`connect()`していたため、同一
+    `db_path`への接続が1回のコマンド実行あたり2本生成されていた（Task20-2で
+    判明）。Repository自体は従来どおり`build_sqlite_repositories()`で
+    Application用・JobOrchestrator用にそれぞれ生成する（Repository生成構造は
+    変更しない）。
     """
-    application = build_application(settings)
     connection = connect(settings.db_path)
+    application = build_application(settings, connection)
     repositories = build_sqlite_repositories(connection)
     fetch_client = build_fetch_client()
     ftp_client = build_ftp_client(settings)

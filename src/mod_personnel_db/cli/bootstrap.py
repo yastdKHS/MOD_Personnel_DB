@@ -233,9 +233,21 @@ class Application:
         return self._knowledge_service.load_snapshot()
 
 
-def build_application(settings: CompositionSettings) -> Application:
-    """合成ルート本体。生成順序1〜7をこの順序でのみ実行し、`Application`を返す。"""
-    connection = connect(settings.db_path)
+def build_application(
+    settings: CompositionSettings, connection: sqlite3.Connection | None = None
+) -> Application:
+    """合成ルート本体。生成順序1〜7をこの順序でのみ実行し、`Application`を返す。
+
+    `connection`省略時は従来どおり`connect()`で新規に接続を生成する
+    （既存呼び出し元との後方互換性を維持する）。`connection`を指定した場合は
+    それを再利用し、新規接続は生成しない。`cli/commands.py`の
+    `_build_job_orchestrator()`が、Application生成とJobOrchestrator生成
+    （`build_sqlite_repositories()`が返す`repositories.pdfs`）とで同一
+    Connectionを共有するために使う（Task21-2、Task21-1で選定した案B、
+    Connectionのみ一本化しRepository自体は従来どおり再生成する）。
+    """
+    if connection is None:
+        connection = connect(settings.db_path)
     repositories = build_sqlite_repositories(connection)
     knowledge_service = build_knowledge_service(settings)
     learning_service = build_learning_service(repositories)
