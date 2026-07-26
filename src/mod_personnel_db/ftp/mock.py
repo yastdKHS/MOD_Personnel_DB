@@ -46,6 +46,12 @@ class InMemoryFTPClient:
         prefix = remote_dir.rstrip("/") + "/"
         return tuple(name for name in self._files if name.startswith(prefix))
 
+    def rename(self, from_name: str, to_name: str) -> None:
+        self._require_connected()
+        if from_name not in self._files:
+            raise FTPTransferError(f"リネーム元が存在しません: {from_name}")
+        self._files[to_name] = self._files.pop(from_name)
+
     def disconnect(self) -> None:
         self._connected = False
 

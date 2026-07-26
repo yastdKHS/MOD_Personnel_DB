@@ -6,7 +6,7 @@
 
 import ftplib
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, call, patch
 
 import pytest
 
@@ -67,10 +67,11 @@ def test_upload_uses_remote_path_relative_to_configured_directory(
     ftp_cls: MagicMock, tmp_path: Path
 ) -> None:
     """`remote_directory`設定後は`cwd()`のみが行われ、`upload()`に渡す
-    `remote_path`自体はそのまま`STOR`コマンドへ渡る（サーバ側でカレント
-    ディレクトリからの相対パスとして解決される）。
+    `remote_path`自体はそのまま（一時ファイル名化を除き）`STOR`コマンドへ渡る
+    （サーバ側でカレントディレクトリからの相対パスとして解決される）。
     """
     connection = ftp_cls.return_value
+    connection.nlst.return_value = []
     config = FTPConnectionConfig(host="ftp.example.jp", remote_directory="/incoming")
     client = StandardFTPClient(config)
     client.connect()
@@ -81,7 +82,8 @@ def test_upload_uses_remote_path_relative_to_configured_directory(
 
     connection.cwd.assert_called_once_with("/incoming")
     args, _ = connection.storbinary.call_args
-    assert args[0] == "STOR source.pdf"
+    assert args[0] == "STOR source.pdf.uploading"
+    connection.rename.assert_called_once_with("source.pdf.uploading", "source.pdf")
 
 
 @patch("mod_personnel_db.ftp.client.ftplib.FTP")
@@ -137,10 +139,11 @@ def test_list_remote_without_connect_raises() -> None:
 
 
 @patch("mod_personnel_db.ftp.client.ftplib.FTP")
-def test_upload_calls_storbinary_with_command_and_stream(
+def test_upload_calls_storbinary_with_temporary_name_and_stream(
     ftp_cls: MagicMock, tmp_path: Path
 ) -> None:
     connection = ftp_cls.return_value
+    connection.nlst.return_value = []
     client = StandardFTPClient(FTPConnectionConfig(host="ftp.example.jp"))
     client.connect()
     local_file = tmp_path / "source.pdf"
@@ -149,7 +152,7 @@ def test_upload_calls_storbinary_with_command_and_stream(
     client.upload(str(local_file), "remote/2026/source.pdf")
 
     args, _ = connection.storbinary.call_args
-    assert args[0] == "STOR remote/2026/source.pdf"
+    assert args[0] == "STOR remote/2026/source.pdf.uploading"
 
 
 @patch("mod_personnel_db.ftp.client.ftplib.FTP")
@@ -174,6 +177,145 @@ def test_upload_missing_local_file_raises_transfer_error(
 
     with pytest.raises(FTPTransferError):
         client.upload(str(tmp_path / "missing.pdf"), "remote/source.pdf")
+
+
+@patch("mod_personnel_db.ftp.client.ftplib.FTP")
+def test_upload_does_not_rename_when_stor_fails(ftp_cls: MagicMock, tmp_path: Path) -> None:
+    """STOR失敗時、正式`remote_path`は一切変更されない（`rename()`が呼ばれない）。"""
+    connection = ftp_cls.return_value
+    connection.storbinary.side_effect = ftplib.error_perm("553 Could not create file")
+    client = StandardFTPClient(FTPConnectionConfig(host="ftp.example.jp"))
+    client.connect()
+    local_file = tmp_path / "source.pdf"
+    local_file.write_bytes(b"content")
+
+    with pytest.raises(FTPTransferError):
+        client.upload(str(local_file), "remote/source.pdf")
+
+    connection.rename.assert_not_called()
+
+
+@patch("mod_personnel_db.ftp.client.ftplib.FTP")
+def test_upload_backs_up_existing_remote_file_before_final_rename(
+    ftp_cls: MagicMock, tmp_path: Path
+) -> None:
+    """既存`remote_path`が存在する場合、最終renameの前にbackup名へrenameする。"""
+    connection = ftp_cls.return_value
+    connection.nlst.return_value = ["remote/source.pdf"]
+    client = StandardFTPClient(FTPConnectionConfig(host="ftp.example.jp"))
+    client.connect()
+    local_file = tmp_path / "source.pdf"
+    local_file.write_bytes(b"content")
+
+    client.upload(str(local_file), "remote/source.pdf")
+
+    assert connection.rename.call_args_list == [
+        call("remote/source.pdf", "remote/source.pdf.bak"),
+        call("remote/source.pdf.uploading", "remote/source.pdf"),
+    ]
+
+
+@patch("mod_personnel_db.ftp.client.ftplib.FTP")
+def test_upload_skips_backup_when_remote_file_does_not_exist(
+    ftp_cls: MagicMock, tmp_path: Path
+) -> None:
+    """既存`remote_path`が存在しない場合（初回アップロード）、backup renameは行わない。"""
+    connection = ftp_cls.return_value
+    connection.nlst.return_value = []
+    client = StandardFTPClient(FTPConnectionConfig(host="ftp.example.jp"))
+    client.connect()
+    local_file = tmp_path / "source.pdf"
+    local_file.write_bytes(b"content")
+
+    client.upload(str(local_file), "remote/source.pdf")
+
+    connection.rename.assert_called_once_with("remote/source.pdf.uploading", "remote/source.pdf")
+
+
+@patch("mod_personnel_db.ftp.client.ftplib.FTP")
+def test_upload_treats_nlst_error_perm_as_file_not_existing(
+    ftp_cls: MagicMock, tmp_path: Path
+) -> None:
+    """`NLST`がサーバから拒否された場合（多くのサーバの「対象なし」応答）は
+    存在しないものとして扱い、backup renameをスキップして続行する。
+    """
+    connection = ftp_cls.return_value
+    connection.nlst.side_effect = ftplib.error_perm("550 No such file")
+    client = StandardFTPClient(FTPConnectionConfig(host="ftp.example.jp"))
+    client.connect()
+    local_file = tmp_path / "source.pdf"
+    local_file.write_bytes(b"content")
+
+    client.upload(str(local_file), "remote/source.pdf")
+
+    connection.rename.assert_called_once_with("remote/source.pdf.uploading", "remote/source.pdf")
+
+
+@patch("mod_personnel_db.ftp.client.ftplib.FTP")
+def test_upload_propagates_backup_rename_failure_without_final_rename(
+    ftp_cls: MagicMock, tmp_path: Path
+) -> None:
+    """backup rename失敗時、正式`remote_path`への最終renameは行われない。"""
+    connection = ftp_cls.return_value
+    connection.nlst.return_value = ["remote/source.pdf"]
+    connection.rename.side_effect = ftplib.error_perm("550 Permission denied")
+    client = StandardFTPClient(FTPConnectionConfig(host="ftp.example.jp"))
+    client.connect()
+    local_file = tmp_path / "source.pdf"
+    local_file.write_bytes(b"content")
+
+    with pytest.raises(FTPTransferError):
+        client.upload(str(local_file), "remote/source.pdf")
+
+    connection.rename.assert_called_once_with("remote/source.pdf", "remote/source.pdf.bak")
+
+
+@patch("mod_personnel_db.ftp.client.ftplib.FTP")
+def test_upload_propagates_final_rename_failure_after_backup_succeeds(
+    ftp_cls: MagicMock, tmp_path: Path
+) -> None:
+    """最終rename失敗時もエラーが伝播する（backupは既に確保されているため復旧可能）。"""
+    connection = ftp_cls.return_value
+    connection.nlst.return_value = ["remote/source.pdf"]
+    connection.rename.side_effect = [None, ftplib.error_perm("550 Permission denied")]
+    client = StandardFTPClient(FTPConnectionConfig(host="ftp.example.jp"))
+    client.connect()
+    local_file = tmp_path / "source.pdf"
+    local_file.write_bytes(b"content")
+
+    with pytest.raises(FTPTransferError):
+        client.upload(str(local_file), "remote/source.pdf")
+
+    assert connection.rename.call_count == 2
+
+
+@patch("mod_personnel_db.ftp.client.ftplib.FTP")
+def test_rename_calls_ftplib_rename(ftp_cls: MagicMock) -> None:
+    connection = ftp_cls.return_value
+    client = StandardFTPClient(FTPConnectionConfig(host="ftp.example.jp"))
+    client.connect()
+
+    client.rename("old.txt", "new.txt")
+
+    connection.rename.assert_called_once_with("old.txt", "new.txt")
+
+
+@patch("mod_personnel_db.ftp.client.ftplib.FTP")
+def test_rename_wraps_ftplib_error(ftp_cls: MagicMock) -> None:
+    connection = ftp_cls.return_value
+    connection.rename.side_effect = ftplib.error_perm("550 No such file")
+    client = StandardFTPClient(FTPConnectionConfig(host="ftp.example.jp"))
+    client.connect()
+
+    with pytest.raises(FTPTransferError):
+        client.rename("old.txt", "new.txt")
+
+
+def test_rename_without_connect_raises() -> None:
+    client = StandardFTPClient(FTPConnectionConfig(host="ftp.example.jp"))
+
+    with pytest.raises(FTPConnectionError):
+        client.rename("old.txt", "new.txt")
 
 
 @patch("mod_personnel_db.ftp.client.ftplib.FTP")

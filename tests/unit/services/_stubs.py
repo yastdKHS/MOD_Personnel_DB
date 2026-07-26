@@ -56,6 +56,9 @@ class StubFTPClient:
         self.calls.append("list_remote")
         return ()
 
+    def rename(self, from_name: str, to_name: str) -> None:
+        self.calls.append("rename")
+
     def disconnect(self) -> None:
         self.calls.append("disconnect")
 

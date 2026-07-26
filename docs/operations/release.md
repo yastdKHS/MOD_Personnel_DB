@@ -74,6 +74,23 @@ Phase8 Task18-6で、Production FTP接続に必要なGitHub Secretsを整理し�
 3. **現状の適用範囲**: `scheduler.yml`が呼び出す`schedule-now run_pending_pipeline`は、`JobOrchestrator.run_pending_pipeline()`を経由するのみで`FTPClient`を一切呼び出さないため、上記Secretsは現時点では**呼び出されない**（`services/orchestrator.py`の`export_and_publish()`のみが`FTPClient`を利用する、Task18-2確認済み）。Fetch/Export/FTP Publishを含む`run_workflow`系の自動化（[`docs/phase8-integration-design.md#4-production-workflow設計`](../phase8-integration-design.md#4-production-workflow設計)が未解決のまま残す設計課題）が実装された時点で、配線変更なしにこれらのSecretsが実際に使用され始める。それまでの間、FTP実接続を要する経路は既存CLIコマンド`run-workflow --remote-path`の手動実行に限られる（下記「接続確認方法」参照）。
 4. **`remote_directory`の実装状況**: `MOD_PERSONNEL_DB_FTP__REMOTE_DIRECTORY`（`FtpSettings.remote_directory`、既定`/`）は、当初（Task18-6時点）`FTPConnectionConfig`にフィールドが存在せず`StandardFTPClient.connect()`も`cwd()`を呼ばないため実行時に一切参照されない状態だった。Task18-8（`ftp/config.py`へのフィールド追加・`ftp/client.py`での`cwd()`実装）・Task18-9（`cli/bootstrap.py`の`build_ftp_client()`による配線）で解消済みであり、`settings.ftp`が設定されている場合（＝`MOD_PERSONNEL_DB_FTP__HOST`を設定した場合）、`run-workflow --remote-path`等でFTP接続する際にログイン直後`remote_directory`へ`cwd()`される（未設定時は`FtpSettings`側の既定値`/`が使われる）。`settings.ftp`自体が未設定（FTP環境変数が一切ない）の場合は、従来どおりプレースホルダ接続（`cwd()`なし）のままである。
 
+### Atomic upload方式（Task19-5）
+
+`upload-db`が呼び出す`FTPClient.upload()`（`StandardFTPClient`、`ftp/client.py`）は、一時ファイル方式でアップロードする。
+
+1. `local_path`のファイルを`remote_path.uploading`へ`STOR`する。
+2. `STOR`成功後、既存の`remote_path`が存在する場合のみ`remote_path.bak`へ`rename`する（下記「Backup方針」参照）。
+3. 最終的に`remote_path.uploading`を正式名称`remote_path`へ`rename`する。
+
+`STOR`失敗時・backup rename失敗時のいずれも、正式ファイル`remote_path`は変更されない（最終rename失敗時のみ`remote_path`が一時的に存在しない状態になりうるが、`remote_path.bak`から復旧可能）。実行前には`upload_db_command()`（`cli/commands.py`）が`PRAGMA integrity_check`でローカルDBの健全性を検証し、異常があればFTP通信自体を行わない。障害発生時の具体的な状態と復旧手順は下記「Atomic upload障害時の復旧手順」を参照。
+
+### Backup方針（Task19-5/19-7）
+
+- **backup名称**: `remote_path.bak`（例: `personnel.db.bak`）。
+- **保持世代**: 1世代のみ。既存の`.bak`が存在する場合、次回アップロード時に同名へのrenameが試行される。既存ファイルへの上書きをFTPサーバが許可するかはサーバ実装依存であり、ATSON FTPd v0.9.14.9での実挙動は未検証である。
+- **採用理由**: 複数世代管理には、`ftplib`標準にない削除・タイムスタンプ取得機能の追加実装が必要となる（「不足するFTPClient機能」として特定済み）ため、復旧可能性の確保と実装複雑性のバランスを取り、最小構成である1世代管理を採用した（Task19-7）。
+- **制限事項**: 世代管理・自動削除は未実装。運用上、`.bak`が古い内容のまま長期間残り続ける可能性がある。
+
 ### 障害時の確認項目
 
 FTP関連の失敗（`FTPConnectionError`/`FTPTransferError`、`ftp/exceptions.py`）が発生した場合、以下の順に確認する。
@@ -91,6 +108,34 @@ FTP関連の失敗（`FTPConnectionError`/`FTPTransferError`、`ftp/exceptions.p
 2. パスワードローテーション時は、FTPサーバ側の認証情報変更とGitHub Secrets側の値更新を同一の作業ウィンドウ内で行う（両者が一時的に不一致になる期間を最小化する）。`docs/configuration.md`の「FTP Secret」節が定める「ローテーションはGitHub Secrets側の値更新のみで完結し、コード・`Settings`の構造自体は変更を要さない」設計により、`config/ftp.py`・`cli/bootstrap.py`側の変更は不要である。
 3. 更新後は「接続確認方法」（README.md）の手順で新しい値が正しく反映されていることを確認する。
 4. Secrets更新自体は`schedule: cron`の実行タイミングと無関係に即座に反映される（次回のワークフロー起動から新しい環境変数が使われる、[ADR-0025](../adr/0025-deployment-strategy.md)のバッチ実行モデルにおける「1回のプロセス起動が最新の設定を読み込む」性質）。
+
+## Atomic upload障害時の復旧手順（Task19-7）
+
+`upload-db`実行中の失敗により、`remote_path`（正式DB）・`remote_path.uploading`（アップロード中の一時ファイル）・`remote_path.bak`（バックアップ）の組み合わせが通常と異なる状態で残ることがある。以下、状態ごとの確認・対応手順を示す（各状態のコード上の根拠は`ftp/client.py`の`upload()`/`rename()`/`_remote_file_exists()`）。
+
+### ケース1: `remote_path`なし、`remote_path.bak`あり
+
+確認:
+1. `remote_path.uploading`の存在を確認する。
+
+対応:
+- `.uploading`が存在する場合: アップロードしようとしていた新しいデータが`.uploading`に入っている可能性が高いため、`.bak`への復旧より優先して、`.uploading`から正式名称への復旧（下記ケース2の手順）を試みる。
+- `.uploading`が存在しない場合: `remote_path.bak`を正式名称`remote_path`へ戻す（`rename(remote_path.bak, remote_path)`相当の操作。現時点ではこれを行う専用CLIコマンドは存在せず、汎用FTPクライアント等での手動操作が必要）。
+
+### ケース2: `remote_path.uploading`あり
+
+確認:
+- `remote_path`の存在を確認する。
+
+対応:
+- `remote_path`が存在する場合: 正式DBは無事なので、`.uploading`は過去の失敗の残骸として扱ってよい（削除可能。次回の`upload-db`実行時に同名`.uploading`へ再度`STOR`されるため、放置しても実害は小さい）。
+- `remote_path`が存在しない場合: `.uploading`から正式名称へのrenameを再試行する（ケース1と併発している状態。`.uploading`の内容が最新かつ正しいデータである可能性が高いため、backupへ戻すより前進復旧を優先する）。
+
+### ケース3: `remote_path.bak`が複数存在
+
+対応:
+- 現在の実装は1世代管理のみを前提としており（上記「Backup方針」）、複数の`.bak`が同時に存在する状態は通常発生しない。発生した場合、どれが最新かを自動判定する手段は現時点で存在しない（タイムスタンプ取得機能が未実装のため）。
+- 自動判定は行わず、内容確認等による手動確認で対応する。
 
 ## Release Candidateからv1.0.0正式版までの残タスク
 

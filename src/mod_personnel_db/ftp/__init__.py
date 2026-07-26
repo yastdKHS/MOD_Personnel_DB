@@ -8,6 +8,10 @@ Protocolである。両者はメソッド名の一部が重複するが別の型
 命名の統合は将来のADRに委ねる（`review/`・`export/`が実装済みの狭い契約と
 `docs/api/`が描く広い契約を別の契約として扱っている既存の整理に準じる）。
 
+`rename()`はTask19-5で追加した拡張であり、`docs/api/interfaces.md#ftpservice`
+が定める`FTPService`契約には含まれない（`upload()`のatomic化・リモート
+バックアップ生成のために`StandardFTPClient.upload()`内部が利用する）。
+
 バイト列・パス文字列のみを扱うプロトコル層に徹し、ドメインモデル（`models/`）・
 `repositories/`（抽象含む）のいずれにも依存しない（依存先は`utils/`のみ）。
 接続情報（`FTPConnectionConfig`）は呼び出し側からプレーンな引数として渡され、
@@ -42,6 +46,10 @@ class FTPClient(Protocol):
 
     def list_remote(self, remote_dir: str) -> tuple[str, ...]:
         """`remote_dir`配下のエントリ名一覧を返す。"""
+        ...
+
+    def rename(self, from_name: str, to_name: str) -> None:
+        """`from_name`を`to_name`へリネームする（Task19-5）。"""
         ...
 
     def disconnect(self) -> None:

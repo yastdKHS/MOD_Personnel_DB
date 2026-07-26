@@ -13,6 +13,7 @@ import pytest
 
 from mod_personnel_db.cli import app, commands
 from mod_personnel_db.cli.bootstrap import CompositionSettings
+from mod_personnel_db.cli.exceptions import CliCommandError
 from mod_personnel_db.ftp import InMemoryFTPClient
 
 
@@ -48,6 +49,37 @@ def test_upload_db_command_calls_ftp_client_upload_only(
     commands.upload_db_command(settings, "/incoming/personnel.db")
 
     assert fake_ftp.uploaded == [(settings.db_path, "/incoming/personnel.db")]
+
+
+def test_upload_db_command_skips_ftp_when_database_file_missing(
+    settings: CompositionSettings, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`settings.db_path`が存在しない場合、FTP通信を行わず`CliCommandError`を送出する（Task19-5）。"""
+    Path(settings.db_path).unlink()
+    fake_ftp = InMemoryFTPClient()
+    monkeypatch.setattr(commands, "build_ftp_client", lambda _settings: fake_ftp)
+
+    with pytest.raises(CliCommandError):
+        commands.upload_db_command(settings, "/incoming/personnel.db")
+
+    assert fake_ftp.uploaded == []
+
+
+def test_upload_db_command_skips_ftp_when_integrity_check_fails(
+    settings: CompositionSettings, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`PRAGMA integrity_check`が`ok`以外を返す場合、FTP通信を行わず`CliCommandError`
+    を送出する（Task19-5）。破損DBを模すため、正しいSQLiteヘッダを持たない
+    バイト列で`db_path`を上書きする。
+    """
+    Path(settings.db_path).write_bytes(b"not a valid sqlite file")
+    fake_ftp = InMemoryFTPClient()
+    monkeypatch.setattr(commands, "build_ftp_client", lambda _settings: fake_ftp)
+
+    with pytest.raises(CliCommandError):
+        commands.upload_db_command(settings, "/incoming/personnel.db")
+
+    assert fake_ftp.uploaded == []
 
 
 def test_commands_tuple_includes_db_transfer_subcommands() -> None:
