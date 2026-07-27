@@ -2,7 +2,7 @@
 （`JobRunner`・`ReviewService`・`ExportService`＋読み取り専用アクセス）を
 呼び出す。
 
-コマンド関数はいずれも`bootstrap.build_application()`/`build_job_runner()`・
+コマンド関数はいずれも`bootstrap.build_application()`・
 `cli.init.initialize_database()`のみに依存し、`knowledge/`・`learning/`・
 `review/`・`export/`のいずれも直接importしない（`review_*_command`/
 `export_*_command`は`Application.review_service`/`Application.export_service`
@@ -42,6 +42,18 @@ architecture-contract.md 保証15）。
 `JobOrchestrator`を直接呼び出すことはない（`Scheduler`経由のみ）。
 `FeatureStore`（`build_feature_store()`）は引き続き呼び出さない（`JobRunner`
 への配線が未実装のため、Task17-1と同様に未使用のまま据え置く）。
+
+**Task21-4**: Connectionのclose責務をCLIコマンド層（本モジュール）に一本化する
+（Task21-3で選定した案B）。`run_pending_command`/`run_job_command`/
+`review_*_command`/`export_*_command`は、`connect()`で生成したConnectionを
+`try/finally`で必ず`close()`する（正常終了・例外終了のいずれでも）。
+`fetch_stage_command`/`run_workflow_command`/`schedule_now_command`/
+`list_schedule_command`は、`_build_job_orchestrator()`/`_build_scheduler()`が
+Task21-2で共有した単一Connectionを戻り値の一部として受け取り、同様に
+`try/finally`で1回だけ`close()`する（二重closeはしない）。Repository層・
+`bootstrap.py`・Service層にはclose責務を追加しない。`version_command`は
+Task21-4の対象コマンド一覧に含まれないため変更していない（既知の残課題、
+Task21-3参照）。
 """
 
 import sqlite3
@@ -55,7 +67,6 @@ from mod_personnel_db.cli.bootstrap import (
     build_fetch_client,
     build_ftp_client,
     build_job_orchestrator,
-    build_job_runner,
     build_scheduler,
     build_sqlite_repositories,
 )
@@ -82,32 +93,60 @@ def init_db_command(settings: CompositionSettings) -> None:
 
 
 def run_pending_command(settings: CompositionSettings) -> tuple[PipelineResult, ...]:
-    """`run-pending`コマンド。`JobRunner.run_pending()`を呼び出す。"""
-    job_runner = build_job_runner(settings)
-    return job_runner.run_pending()
+    """`run-pending`コマンド。`JobRunner.run_pending()`を呼び出す。
+
+    Task21-4: `connect()`で生成したConnectionを`try/finally`で必ず`close()`する。
+    """
+    connection = connect(settings.db_path)
+    try:
+        application = build_application(settings, connection)
+        return application.job_runner.run_pending()
+    finally:
+        connection.close()
 
 
 def run_job_command(settings: CompositionSettings, pdf_id: PdfId) -> PipelineResult:
-    """`run-job`コマンド。`pdf_id`を解決し`JobRunner.run_for_pdf()`を呼び出す。"""
-    application = build_application(settings)
-    pdf = application.read_pdf(pdf_id)
-    if pdf is None:
-        raise CliCommandError(f"pdf not found: pdf_id={int(pdf_id)}")
-    return application.job_runner.run_for_pdf(pdf)
+    """`run-job`コマンド。`pdf_id`を解決し`JobRunner.run_for_pdf()`を呼び出す。
+
+    Task21-4: `connect()`で生成したConnectionを`try/finally`で必ず`close()`する。
+    """
+    connection = connect(settings.db_path)
+    try:
+        application = build_application(settings, connection)
+        pdf = application.read_pdf(pdf_id)
+        if pdf is None:
+            raise CliCommandError(f"pdf not found: pdf_id={int(pdf_id)}")
+        return application.job_runner.run_for_pdf(pdf)
+    finally:
+        connection.close()
 
 
 def review_list_command(settings: CompositionSettings) -> tuple[LearningRecord, ...]:
-    """`review list`コマンド。`ReviewService.list_pending()`を呼び出す。"""
-    application = build_application(settings)
-    return application.review_service.list_pending()
+    """`review list`コマンド。`ReviewService.list_pending()`を呼び出す。
+
+    Task21-4: `connect()`で生成したConnectionを`try/finally`で必ず`close()`する。
+    """
+    connection = connect(settings.db_path)
+    try:
+        application = build_application(settings, connection)
+        return application.review_service.list_pending()
+    finally:
+        connection.close()
 
 
 def review_start_command(
     settings: CompositionSettings, record_id: LearningRecordId
 ) -> LearningRecord:
-    """`review start`コマンド。`ReviewService.start_review()`を呼び出す。"""
-    application = build_application(settings)
-    return application.review_service.start_review(record_id)
+    """`review start`コマンド。`ReviewService.start_review()`を呼び出す。
+
+    Task21-4: `connect()`で生成したConnectionを`try/finally`で必ず`close()`する。
+    """
+    connection = connect(settings.db_path)
+    try:
+        application = build_application(settings, connection)
+        return application.review_service.start_review(record_id)
+    finally:
+        connection.close()
 
 
 def review_approve_command(
@@ -115,35 +154,69 @@ def review_approve_command(
 ) -> LearningRecord:
     """`review approve`コマンド。`ReviewService.approve()`を呼び出す
     （GoldPromotion指定は対象外）。
+
+    Task21-4: `connect()`で生成したConnectionを`try/finally`で必ず`close()`する。
     """
-    application = build_application(settings)
-    return application.review_service.approve(record_id)
+    connection = connect(settings.db_path)
+    try:
+        application = build_application(settings, connection)
+        return application.review_service.approve(record_id)
+    finally:
+        connection.close()
 
 
 def review_reject_command(
     settings: CompositionSettings, record_id: LearningRecordId
 ) -> LearningRecord:
-    """`review reject`コマンド。`ReviewService.reject()`を呼び出す。"""
-    application = build_application(settings)
-    return application.review_service.reject(record_id)
+    """`review reject`コマンド。`ReviewService.reject()`を呼び出す。
+
+    Task21-4: `connect()`で生成したConnectionを`try/finally`で必ず`close()`する。
+    """
+    connection = connect(settings.db_path)
+    try:
+        application = build_application(settings, connection)
+        return application.review_service.reject(record_id)
+    finally:
+        connection.close()
 
 
 def export_all_command(settings: CompositionSettings) -> tuple[GoldRecord, ...]:
-    """`export all`コマンド。`ExportService.export_all()`を呼び出す。"""
-    application = build_application(settings)
-    return application.export_service.export_all()
+    """`export all`コマンド。`ExportService.export_all()`を呼び出す。
+
+    Task21-4: `connect()`で生成したConnectionを`try/finally`で必ず`close()`する。
+    """
+    connection = connect(settings.db_path)
+    try:
+        application = build_application(settings, connection)
+        return application.export_service.export_all()
+    finally:
+        connection.close()
 
 
 def export_person_command(settings: CompositionSettings, person_key: str) -> tuple[GoldRecord, ...]:
-    """`export person`コマンド。`ExportService.export_person()`を呼び出す。"""
-    application = build_application(settings)
-    return application.export_service.export_person(person_key)
+    """`export person`コマンド。`ExportService.export_person()`を呼び出す。
+
+    Task21-4: `connect()`で生成したConnectionを`try/finally`で必ず`close()`する。
+    """
+    connection = connect(settings.db_path)
+    try:
+        application = build_application(settings, connection)
+        return application.export_service.export_person(person_key)
+    finally:
+        connection.close()
 
 
 def export_since_command(settings: CompositionSettings, since: datetime) -> tuple[GoldRecord, ...]:
-    """`export since`コマンド。`ExportService.export_since()`を呼び出す。"""
-    application = build_application(settings)
-    return application.export_service.export_since(since)
+    """`export since`コマンド。`ExportService.export_since()`を呼び出す。
+
+    Task21-4: `connect()`で生成したConnectionを`try/finally`で必ず`close()`する。
+    """
+    connection = connect(settings.db_path)
+    try:
+        application = build_application(settings, connection)
+        return application.export_service.export_since(since)
+    finally:
+        connection.close()
 
 
 @dataclass(frozen=True, slots=True)
@@ -168,7 +241,9 @@ def version_command(settings: CompositionSettings) -> VersionInfo:
     )
 
 
-def _build_job_orchestrator(settings: CompositionSettings) -> JobOrchestrator:
+def _build_job_orchestrator(
+    settings: CompositionSettings,
+) -> tuple[JobOrchestrator, sqlite3.Connection]:
     """`fetch-stage`/`run-workflow`コマンド用に`JobOrchestrator`を取得する。
 
     `cli/bootstrap.py`（Composition Root、Task17-1）が提供するBuilder
@@ -178,13 +253,28 @@ def _build_job_orchestrator(settings: CompositionSettings) -> JobOrchestrator:
     具象実装を本モジュールが直接生成することはない。戻り値の型は`JobOrchestrator`
     Protocolであり、呼び出し元（`fetch_stage_command`/`run_workflow_command`）は
     Protocol経由でのみこれを利用する。
+
+    **Task21-2**: `connect()`は本関数内で1回のみ呼び出し、`build_application()`
+    （Application生成）と`build_sqlite_repositories()`（JobOrchestrator用の
+    Repository生成）の両方へ同一Connectionを渡す（Task21-1で選定した案B）。
+    以前は`build_application()`が内部で独自に`connect()`していたため、同一
+    `db_path`への接続が1回のコマンド実行あたり2本生成されていた（Task20-2で
+    判明）。Repository自体は従来どおり`build_sqlite_repositories()`で
+    Application用・JobOrchestrator用にそれぞれ生成する（Repository生成構造は
+    変更しない）。
+
+    **Task21-4**: 生成したConnectionは本関数ではcloseせず、戻り値
+    （`tuple[JobOrchestrator, sqlite3.Connection]`）に含めて呼び出し元へ返す。
+    close責務は呼び出し元のコマンド関数が`try/finally`で持つ（Task21-3で
+    選定した案B）。
     """
-    application = build_application(settings)
     connection = connect(settings.db_path)
+    application = build_application(settings, connection)
     repositories = build_sqlite_repositories(connection)
     fetch_client = build_fetch_client()
     ftp_client = build_ftp_client(settings)
-    return build_job_orchestrator(application, repositories, fetch_client, ftp_client)
+    orchestrator = build_job_orchestrator(application, repositories, fetch_client, ftp_client)
+    return orchestrator, connection
 
 
 def fetch_stage_command(
@@ -194,11 +284,16 @@ def fetch_stage_command(
 
     戻り値`None`は、取得した内容の`content_hash`が既存の`PdfRecord`と重複した
     ため保存しなかったことを意味する（`fetch_and_stage()`自身の既存契約）。
+    Task21-4: `_build_job_orchestrator()`が返すConnectionを`try/finally`で
+    必ず`close()`する。
     """
-    orchestrator = _build_job_orchestrator(settings)
-    return orchestrator.fetch_and_stage(
-        FetchRequest(url=url), destination_path=destination_path, published_date=published_date
-    )
+    orchestrator, connection = _build_job_orchestrator(settings)
+    try:
+        return orchestrator.fetch_and_stage(
+            FetchRequest(url=url), destination_path=destination_path, published_date=published_date
+        )
+    finally:
+        connection.close()
 
 
 def run_workflow_command(
@@ -214,12 +309,19 @@ def run_workflow_command(
     常に空タプルである（個別のPDF取得は`fetch-stage`コマンドで行う）。
     `remote_path`を指定した場合のみ、生成したエクスポートをFTPでアップロード
     する（`JobOrchestrator.export_and_publish()`の既存契約）。
+    Task21-4: `_build_job_orchestrator()`が返すConnectionを`try/finally`で
+    必ず`close()`する。
     """
-    orchestrator = _build_job_orchestrator(settings)
-    return orchestrator.run_workflow([], export_format, export_destination, remote_path=remote_path)
+    orchestrator, connection = _build_job_orchestrator(settings)
+    try:
+        return orchestrator.run_workflow(
+            [], export_format, export_destination, remote_path=remote_path
+        )
+    finally:
+        connection.close()
 
 
-def _build_scheduler(settings: CompositionSettings) -> Scheduler:
+def _build_scheduler(settings: CompositionSettings) -> tuple[Scheduler, sqlite3.Connection]:
     """`schedule-now`/`list-schedule`コマンド用に`Scheduler`を取得する。
 
     `_build_job_orchestrator()`が返す`JobOrchestrator`を`bootstrap.build_scheduler()`
@@ -228,25 +330,37 @@ def _build_scheduler(settings: CompositionSettings) -> Scheduler:
     空タプルとする（`list-schedule`は現時点で常に空を返す。`schedule-now`は
     登録済みの周期定義に依存せず動作するため影響を受けない）。現在時刻は
     `datetime.now(UTC)`をそのまま`clock`として注入する。
+
+    **Task21-4**: `_build_job_orchestrator()`が返すConnectionをそのまま呼び出し元へ
+    引き継ぐ（`tuple[Scheduler, sqlite3.Connection]`）。本関数自身はcloseしない。
     """
-    orchestrator = _build_job_orchestrator(settings)
-    return build_scheduler(orchestrator, (), lambda: datetime.now(UTC))
+    orchestrator, connection = _build_job_orchestrator(settings)
+    scheduler = build_scheduler(orchestrator, (), lambda: datetime.now(UTC))
+    return scheduler, connection
 
 
 def schedule_now_command(settings: CompositionSettings, job_type: str) -> JobId:
     """`schedule-now`コマンド。`Scheduler.trigger_now()`のみを呼び出す
     （`JobOrchestrator`を直接呼び出すことはない）。
+    Task21-4: `_build_scheduler()`が返すConnectionを`try/finally`で必ず`close()`する。
     """
-    scheduler = _build_scheduler(settings)
-    return scheduler.trigger_now(job_type)
+    scheduler, connection = _build_scheduler(settings)
+    try:
+        return scheduler.trigger_now(job_type)
+    finally:
+        connection.close()
 
 
 def list_schedule_command(settings: CompositionSettings) -> tuple[str, ...]:
     """`list-schedule`コマンド。`Scheduler.list_upcoming()`のみを呼び出す
     （`JobOrchestrator`を直接呼び出すことはない）。
+    Task21-4: `_build_scheduler()`が返すConnectionを`try/finally`で必ず`close()`する。
     """
-    scheduler = _build_scheduler(settings)
-    return scheduler.list_upcoming()
+    scheduler, connection = _build_scheduler(settings)
+    try:
+        return scheduler.list_upcoming()
+    finally:
+        connection.close()
 
 
 def download_db_command(settings: CompositionSettings, remote_path: str) -> None:

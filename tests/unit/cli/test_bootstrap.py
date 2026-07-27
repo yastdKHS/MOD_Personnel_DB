@@ -1,4 +1,5 @@
 import ast
+import sqlite3
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -115,6 +116,48 @@ def test_build_application_holds_review_and_export_services(
     assert isinstance(application, Application)
     assert isinstance(application.review_service, RepositoryReviewService)
     assert isinstance(application.export_service, RepositoryExportService)
+
+
+def test_build_application_reuses_provided_connection(
+    monkeypatch: pytest.MonkeyPatch, settings: CompositionSettings
+) -> None:
+    """`connection`を明示指定した場合、`build_application()`は新規に`connect()`しない
+    （Task21-2、Task21-1で選定した案Bの前提。`cli/commands.py`の
+    `_build_job_orchestrator()`が同一Connectionを共有するために必要）。
+    """
+    connect_calls: list[str] = []
+
+    def counting_connect(db_path: str) -> sqlite3.Connection:
+        connect_calls.append(db_path)
+        return connect(db_path)
+
+    connection = connect(settings.db_path)
+    monkeypatch.setattr(bootstrap, "connect", counting_connect)
+
+    application = bootstrap.build_application(settings, connection)
+
+    assert isinstance(application, Application)
+    assert connect_calls == []
+
+
+def test_build_application_without_connection_still_connects(
+    monkeypatch: pytest.MonkeyPatch, settings: CompositionSettings
+) -> None:
+    """`connection`省略時は従来どおり`connect()`で新規に接続を生成する
+    （Task21-2、既存呼び出し元との後方互換性）。
+    """
+    connect_calls: list[str] = []
+
+    def counting_connect(db_path: str) -> sqlite3.Connection:
+        connect_calls.append(db_path)
+        return connect(db_path)
+
+    monkeypatch.setattr(bootstrap, "connect", counting_connect)
+
+    application = bootstrap.build_application(settings)
+
+    assert isinstance(application, Application)
+    assert connect_calls == [settings.db_path]
 
 
 def test_build_job_runner_returns_job_runner(settings: CompositionSettings) -> None:

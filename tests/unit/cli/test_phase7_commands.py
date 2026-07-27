@@ -10,6 +10,7 @@ Task17-1で`cli/bootstrap.py`に追加された`build_fetch_client()`/`build_ftp
 チェックに使用する（テストコード自身が新規生成することはない）。
 """
 
+import sqlite3
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
 from pathlib import Path
@@ -96,7 +97,11 @@ def test_fetch_stage_command_calls_job_orchestrator_via_protocol(
     settings: CompositionSettings, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     fake_orchestrator = _RecordingJobOrchestrator()
-    monkeypatch.setattr(commands, "_build_job_orchestrator", lambda _settings: fake_orchestrator)
+    monkeypatch.setattr(
+        commands,
+        "_build_job_orchestrator",
+        lambda _settings: (fake_orchestrator, sqlite3.connect(":memory:")),
+    )
 
     result = commands.fetch_stage_command(
         settings, "https://example.mod.go.jp/x.pdf", "/tmp/x.pdf", date(2026, 1, 1)
@@ -114,7 +119,11 @@ def test_run_workflow_command_calls_job_orchestrator_via_protocol(
     settings: CompositionSettings, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     fake_orchestrator = _RecordingJobOrchestrator(workflow_result=_default_workflow_result())
-    monkeypatch.setattr(commands, "_build_job_orchestrator", lambda _settings: fake_orchestrator)
+    monkeypatch.setattr(
+        commands,
+        "_build_job_orchestrator",
+        lambda _settings: (fake_orchestrator, sqlite3.connect(":memory:")),
+    )
 
     result = commands.run_workflow_command(
         settings, "json", "/tmp/export.json", remote_path="remote/export.json"
@@ -135,7 +144,11 @@ def test_run_workflow_command_defaults_to_empty_fetch_items_and_no_remote_path(
     settings: CompositionSettings, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     fake_orchestrator = _RecordingJobOrchestrator(workflow_result=_default_workflow_result())
-    monkeypatch.setattr(commands, "_build_job_orchestrator", lambda _settings: fake_orchestrator)
+    monkeypatch.setattr(
+        commands,
+        "_build_job_orchestrator",
+        lambda _settings: (fake_orchestrator, sqlite3.connect(":memory:")),
+    )
 
     commands.run_workflow_command(settings, "csv", "/tmp/export.csv")
 
@@ -178,7 +191,8 @@ def test_build_job_orchestrator_helper_calls_each_bootstrap_builder_once(
         real = getattr(commands, attr_name)
         monkeypatch.setattr(commands, attr_name, _tracer(calls, attr_name, real))
 
-    orchestrator = commands._build_job_orchestrator(settings)
+    orchestrator, connection = commands._build_job_orchestrator(settings)
+    connection.close()
 
     assert isinstance(orchestrator, DefaultJobOrchestrator)
     assert calls == list(_ORCHESTRATOR_GENERATION_ORDER_TARGETS)
@@ -275,7 +289,11 @@ def test_main_fetch_stage_dispatches_and_formats_result(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     fake_orchestrator = _RecordingJobOrchestrator(fetch_and_stage_result=PdfId(42))
-    monkeypatch.setattr(commands, "_build_job_orchestrator", lambda _settings: fake_orchestrator)
+    monkeypatch.setattr(
+        commands,
+        "_build_job_orchestrator",
+        lambda _settings: (fake_orchestrator, sqlite3.connect(":memory:")),
+    )
 
     exit_code = app.main(
         [
@@ -303,7 +321,11 @@ def test_main_fetch_stage_reports_duplicate_as_not_staged(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     fake_orchestrator = _RecordingJobOrchestrator(fetch_and_stage_result=None)
-    monkeypatch.setattr(commands, "_build_job_orchestrator", lambda _settings: fake_orchestrator)
+    monkeypatch.setattr(
+        commands,
+        "_build_job_orchestrator",
+        lambda _settings: (fake_orchestrator, sqlite3.connect(":memory:")),
+    )
 
     exit_code = app.main(
         [
@@ -330,7 +352,11 @@ def test_main_fetch_stage_invalid_date_returns_error(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     fake_orchestrator = _RecordingJobOrchestrator()
-    monkeypatch.setattr(commands, "_build_job_orchestrator", lambda _settings: fake_orchestrator)
+    monkeypatch.setattr(
+        commands,
+        "_build_job_orchestrator",
+        lambda _settings: (fake_orchestrator, sqlite3.connect(":memory:")),
+    )
 
     exit_code = app.main(
         [
@@ -359,7 +385,11 @@ def test_main_run_workflow_dispatches_and_formats_result(
     tmp_path: Path,
 ) -> None:
     fake_orchestrator = _RecordingJobOrchestrator(workflow_result=_default_workflow_result())
-    monkeypatch.setattr(commands, "_build_job_orchestrator", lambda _settings: fake_orchestrator)
+    monkeypatch.setattr(
+        commands,
+        "_build_job_orchestrator",
+        lambda _settings: (fake_orchestrator, sqlite3.connect(":memory:")),
+    )
     destination = str(tmp_path / "export.json")
 
     exit_code = app.main(

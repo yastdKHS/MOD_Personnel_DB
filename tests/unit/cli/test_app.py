@@ -10,7 +10,7 @@ import pytest
 
 from mod_personnel_db.cli import app, commands
 from mod_personnel_db.cli.bootstrap import Application, CompositionSettings
-from mod_personnel_db.cli.bootstrap import build_job_runner as _real_build_job_runner
+from mod_personnel_db.cli.bootstrap import build_application as _real_build_application
 from mod_personnel_db.cli.commands import VersionInfo
 from mod_personnel_db.cli.exceptions import CliCommandError
 from mod_personnel_db.models import (
@@ -281,9 +281,11 @@ def test_run_job_command_processes_existing_pdf(
     pdf_id = _insert_pdf(settings)
     stub_job_runner = _StubJobRunner()
 
-    def fake_build_application(settings_arg: CompositionSettings) -> Application:
-        connection = connect(settings_arg.db_path)
-        pdf = SqlitePdfRepository(connection).get(pdf_id)
+    def fake_build_application(
+        settings_arg: CompositionSettings, connection: sqlite3.Connection | None = None
+    ) -> Application:
+        conn = connection if connection is not None else connect(settings_arg.db_path)
+        pdf = SqlitePdfRepository(conn).get(pdf_id)
         assert pdf is not None
         return _StubApplication(pdf, stub_job_runner)  # type: ignore[return-value]
 
@@ -384,12 +386,14 @@ def test_composition_root_built_once_for_run_pending(
 ) -> None:
     call_count = 0
 
-    def counting_build_job_runner(settings_arg: CompositionSettings) -> object:
+    def counting_build_application(
+        settings_arg: CompositionSettings, connection: sqlite3.Connection | None = None
+    ) -> Application:
         nonlocal call_count
         call_count += 1
-        return _real_build_job_runner(settings_arg)
+        return _real_build_application(settings_arg, connection)
 
-    monkeypatch.setattr(commands, "build_job_runner", counting_build_job_runner)
+    monkeypatch.setattr(commands, "build_application", counting_build_application)
 
     app.main([*_base_argv(settings), "run-pending"])
 
@@ -403,11 +407,13 @@ def test_composition_root_built_once_for_run_job(
     stub_job_runner = _StubJobRunner()
     call_count = 0
 
-    def counting_build_application(settings_arg: CompositionSettings) -> Application:
+    def counting_build_application(
+        settings_arg: CompositionSettings, connection: sqlite3.Connection | None = None
+    ) -> Application:
         nonlocal call_count
         call_count += 1
-        connection = connect(settings_arg.db_path)
-        pdf = SqlitePdfRepository(connection).get(pdf_id)
+        conn = connection if connection is not None else connect(settings_arg.db_path)
+        pdf = SqlitePdfRepository(conn).get(pdf_id)
         assert pdf is not None
         return _StubApplication(pdf, stub_job_runner)  # type: ignore[return-value]
 
@@ -431,11 +437,13 @@ def test_run_pending_command_invokes_job_runner(
 
     stub_job_runner.run_pending = tracked_run_pending  # type: ignore[method-assign]
 
-    def fake_build_job_runner(settings_arg: CompositionSettings) -> object:
-        del settings_arg
-        return stub_job_runner
+    def fake_build_application(
+        settings_arg: CompositionSettings, connection: sqlite3.Connection | None = None
+    ) -> object:
+        del settings_arg, connection
+        return SimpleNamespace(job_runner=stub_job_runner)
 
-    monkeypatch.setattr(commands, "build_job_runner", fake_build_job_runner)
+    monkeypatch.setattr(commands, "build_application", fake_build_application)
 
     exit_code = app.main([*_base_argv(settings), "run-pending"])
 
@@ -589,8 +597,10 @@ class _RaisingReviewService:
 def test_review_list_command_propagates_repository_error(
     settings: CompositionSettings, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    def fake_build_application(settings_arg: CompositionSettings) -> Application:
-        del settings_arg
+    def fake_build_application(
+        settings_arg: CompositionSettings, connection: sqlite3.Connection | None = None
+    ) -> Application:
+        del settings_arg, connection
         return SimpleNamespace(review_service=_RaisingReviewService())  # type: ignore[return-value]
 
     monkeypatch.setattr(commands, "build_application", fake_build_application)
@@ -609,8 +619,10 @@ class _RaisingExportService:
 def test_export_all_command_propagates_repository_error(
     settings: CompositionSettings, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    def fake_build_application(settings_arg: CompositionSettings) -> Application:
-        del settings_arg
+    def fake_build_application(
+        settings_arg: CompositionSettings, connection: sqlite3.Connection | None = None
+    ) -> Application:
+        del settings_arg, connection
         return SimpleNamespace(export_service=_RaisingExportService())  # type: ignore[return-value]
 
     monkeypatch.setattr(commands, "build_application", fake_build_application)
