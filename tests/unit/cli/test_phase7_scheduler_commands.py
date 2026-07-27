@@ -10,6 +10,7 @@ Task17-4で`cli/bootstrap.py`に追加された`build_scheduler()`経由での�
 直接呼び出さないことも、Fake`Scheduler`の呼び出し記録で確認する。
 """
 
+import sqlite3
 from dataclasses import dataclass, field
 
 import pytest
@@ -51,7 +52,11 @@ def test_schedule_now_command_calls_scheduler_via_protocol(
     settings: CompositionSettings, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     fake_scheduler = _RecordingScheduler(trigger_now_result=JobId(7))
-    monkeypatch.setattr(commands, "_build_scheduler", lambda _settings: fake_scheduler)
+    monkeypatch.setattr(
+        commands,
+        "_build_scheduler",
+        lambda _settings: (fake_scheduler, sqlite3.connect(":memory:")),
+    )
 
     result = commands.schedule_now_command(settings, RUN_PENDING_JOB_TYPE)
 
@@ -63,7 +68,11 @@ def test_schedule_now_command_propagates_no_pending_job_error(
     settings: CompositionSettings, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     fake_scheduler = _RecordingScheduler(trigger_now_error=NoPendingJobError("no pending job"))
-    monkeypatch.setattr(commands, "_build_scheduler", lambda _settings: fake_scheduler)
+    monkeypatch.setattr(
+        commands,
+        "_build_scheduler",
+        lambda _settings: (fake_scheduler, sqlite3.connect(":memory:")),
+    )
 
     with pytest.raises(NoPendingJobError):
         commands.schedule_now_command(settings, RUN_PENDING_JOB_TYPE)
@@ -73,7 +82,11 @@ def test_schedule_now_command_propagates_unknown_job_type_error(
     settings: CompositionSettings, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     fake_scheduler = _RecordingScheduler(trigger_now_error=UnknownJobTypeError("unknown"))
-    monkeypatch.setattr(commands, "_build_scheduler", lambda _settings: fake_scheduler)
+    monkeypatch.setattr(
+        commands,
+        "_build_scheduler",
+        lambda _settings: (fake_scheduler, sqlite3.connect(":memory:")),
+    )
 
     with pytest.raises(UnknownJobTypeError):
         commands.schedule_now_command(settings, "unknown-job-type")
@@ -85,7 +98,11 @@ def test_list_schedule_command_calls_scheduler_via_protocol(
     fake_scheduler = _RecordingScheduler(
         upcoming=(f"{RUN_PENDING_JOB_TYPE} at 2026-01-01T00:00:00+00:00",)
     )
-    monkeypatch.setattr(commands, "_build_scheduler", lambda _settings: fake_scheduler)
+    monkeypatch.setattr(
+        commands,
+        "_build_scheduler",
+        lambda _settings: (fake_scheduler, sqlite3.connect(":memory:")),
+    )
 
     result = commands.list_schedule_command(settings)
 
@@ -101,8 +118,11 @@ def test_build_scheduler_helper_delegates_to_bootstrap_build_scheduler(
     settings: CompositionSettings, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     sentinel_orchestrator = object()
+    sentinel_connection = sqlite3.connect(":memory:")
     monkeypatch.setattr(
-        commands, "_build_job_orchestrator", lambda _settings: sentinel_orchestrator
+        commands,
+        "_build_job_orchestrator",
+        lambda _settings: (sentinel_orchestrator, sentinel_connection),
     )
     captured: dict[str, object] = {}
     sentinel_scheduler = _RecordingScheduler()
@@ -115,9 +135,10 @@ def test_build_scheduler_helper_delegates_to_bootstrap_build_scheduler(
 
     monkeypatch.setattr(commands, "build_scheduler", fake_build_scheduler)
 
-    result = commands._build_scheduler(settings)
+    scheduler, connection = commands._build_scheduler(settings)
 
-    assert result is sentinel_scheduler
+    assert scheduler is sentinel_scheduler
+    assert connection is sentinel_connection
     assert captured["orchestrator"] is sentinel_orchestrator
     assert captured["schedules"] == ()
     assert callable(captured["clock"])
@@ -204,7 +225,11 @@ def test_main_schedule_now_dispatches_and_formats_result(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     fake_scheduler = _RecordingScheduler(trigger_now_result=JobId(42))
-    monkeypatch.setattr(commands, "_build_scheduler", lambda _settings: fake_scheduler)
+    monkeypatch.setattr(
+        commands,
+        "_build_scheduler",
+        lambda _settings: (fake_scheduler, sqlite3.connect(":memory:")),
+    )
 
     exit_code = app.main(
         [
@@ -230,7 +255,11 @@ def test_main_list_schedule_dispatches_and_formats_empty_result(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     fake_scheduler = _RecordingScheduler(upcoming=())
-    monkeypatch.setattr(commands, "_build_scheduler", lambda _settings: fake_scheduler)
+    monkeypatch.setattr(
+        commands,
+        "_build_scheduler",
+        lambda _settings: (fake_scheduler, sqlite3.connect(":memory:")),
+    )
 
     exit_code = app.main(
         [
@@ -257,7 +286,11 @@ def test_main_list_schedule_dispatches_and_formats_nonempty_result(
     fake_scheduler = _RecordingScheduler(
         upcoming=(f"{RUN_PENDING_JOB_TYPE} at 2026-01-01T00:00:00+00:00",)
     )
-    monkeypatch.setattr(commands, "_build_scheduler", lambda _settings: fake_scheduler)
+    monkeypatch.setattr(
+        commands,
+        "_build_scheduler",
+        lambda _settings: (fake_scheduler, sqlite3.connect(":memory:")),
+    )
 
     exit_code = app.main(
         [
@@ -287,7 +320,11 @@ def test_main_schedule_now_treats_no_pending_job_error_as_success(
     （`CliCommandError`（終了コード1）とは区別する）。
     """
     fake_scheduler = _RecordingScheduler(trigger_now_error=NoPendingJobError("no pending pdf"))
-    monkeypatch.setattr(commands, "_build_scheduler", lambda _settings: fake_scheduler)
+    monkeypatch.setattr(
+        commands,
+        "_build_scheduler",
+        lambda _settings: (fake_scheduler, sqlite3.connect(":memory:")),
+    )
 
     exit_code = app.main(
         [

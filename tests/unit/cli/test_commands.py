@@ -1,10 +1,10 @@
 import sqlite3
+from types import SimpleNamespace
 
 import pytest
 
 from mod_personnel_db.cli import commands
-from mod_personnel_db.cli.bootstrap import CompositionSettings
-from mod_personnel_db.pipeline.job_runner import JobRunner
+from mod_personnel_db.cli.bootstrap import Application, CompositionSettings
 from mod_personnel_db.pipeline.result import PipelineResult
 from mod_personnel_db.repositories.sqlite import connect
 
@@ -25,11 +25,13 @@ def test_run_pending_command_invokes_job_runner_run_pending(
 ) -> None:
     stub = _StubJobRunner()
 
-    def fake_build_job_runner(settings_arg: CompositionSettings) -> JobRunner:
-        del settings_arg
-        return stub  # type: ignore[return-value]
+    def fake_build_application(
+        settings_arg: CompositionSettings, connection: sqlite3.Connection | None = None
+    ) -> Application:
+        del settings_arg, connection
+        return SimpleNamespace(job_runner=stub)  # type: ignore[return-value]
 
-    monkeypatch.setattr(commands, "build_job_runner", fake_build_job_runner)
+    monkeypatch.setattr(commands, "build_application", fake_build_application)
 
     result = commands.run_pending_command(settings)
 
@@ -63,7 +65,8 @@ def test_build_job_orchestrator_calls_connect_exactly_once(
 
     monkeypatch.setattr(commands, "connect", counting_connect)
 
-    orchestrator = commands._build_job_orchestrator(settings)
+    orchestrator, connection = commands._build_job_orchestrator(settings)
+    connection.close()
 
     assert connect_calls == [settings.db_path]
     assert orchestrator is not None
