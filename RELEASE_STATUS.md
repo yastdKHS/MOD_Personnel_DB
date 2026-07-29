@@ -8,7 +8,7 @@
 
 ## Date
 
-2026-07-22（Phase6 Task15-4作成時点）。2026-07-24、Task17-5（Phase7最終監査・CLI統合完了後のドキュメント同期）・Task17-6（Phase7 Closeout）で更新。2026-07-25、Task18-1（`FtpSettings`導入）・Task18-3〜18-5（GitHub Actions Scheduler統合）・Task18-6（Production FTP運用整備）・Task18-7（Production Release Validation、[`docs/reports/phase8-release-validation.md`](docs/reports/phase8-release-validation.md)）・Task18-7追記（運用担当者による実Production FTPサーバへの手動接続確認、`remote_directory`未配線の発見。続報でフルパス指定によるアップロード成功も確認）・Task18-8/18-9（`remote_directory`の`ftp/`実装・Composition Root配線）・Task18-10（デッドコンフィグ記述をドキュメントから解消）で更新。2026-07-25〜26、Task18-17（SQLite永続化Phase1、`download-db`/`upload-db`CLIコマンド追加）・Task19-5（`upload()`のatomic化・DB `integrity_check`追加）・Task19-15（既存ファイル確認方式を`NLST`から`SIZE`へ変更、ATSON FTPd v0.9.14.9の実挙動に対応）・Task19-17（既存`.bak`を`DELE`してから`rename`する対応、同サーバの`RNTO`拒否への対応）・Task19-20（運用ドキュメントの追従）で更新。2026-07-26、Task19-21（本ファイルの最新化）で更新。2026-07-26、Task20-7（Task20-1〜20-6のSQLiteレビュー結果をKnown Limitationsへ反映、ドキュメントのみの変更）で更新。
+2026-07-22（Phase6 Task15-4作成時点）。2026-07-24、Task17-5（Phase7最終監査・CLI統合完了後のドキュメント同期）・Task17-6（Phase7 Closeout）で更新。2026-07-25、Task18-1（`FtpSettings`導入）・Task18-3〜18-5（GitHub Actions Scheduler統合）・Task18-6（Production FTP運用整備）・Task18-7（Production Release Validation、[`docs/reports/phase8-release-validation.md`](docs/reports/phase8-release-validation.md)）・Task18-7追記（運用担当者による実Production FTPサーバへの手動接続確認、`remote_directory`未配線の発見。続報でフルパス指定によるアップロード成功も確認）・Task18-8/18-9（`remote_directory`の`ftp/`実装・Composition Root配線）・Task18-10（デッドコンフィグ記述をドキュメントから解消）で更新。2026-07-25〜26、Task18-17（SQLite永続化Phase1、`download-db`/`upload-db`CLIコマンド追加）・Task19-5（`upload()`のatomic化・DB `integrity_check`追加）・Task19-15（既存ファイル確認方式を`NLST`から`SIZE`へ変更、ATSON FTPd v0.9.14.9の実挙動に対応）・Task19-17（既存`.bak`を`DELE`してから`rename`する対応、同サーバの`RNTO`拒否への対応）・Task19-20（運用ドキュメントの追従）で更新。2026-07-26、Task19-21（本ファイルの最新化）で更新。2026-07-26、Task20-7（Task20-1〜20-6のSQLiteレビュー結果をKnown Limitationsへ反映、ドキュメントのみの変更）で更新。2026-07-27、Task21-8（Task21-1〜21-7のSQLite Connection管理改善〔一本化・close責務整理・最終レビュー〕完了をKnown Limitations項目22へ反映、`version_command`のみが残課題である旨を明記、ドキュメントのみの変更）で更新。2026-07-27、Task21-9（Known Limitations項目22を現状のみの記載へ整理し、Task21-1〜21-7の経緯説明とTask21-6/21-7レビューで整理した将来改善候補を新設の「Technical Debt（Future Refactoring Candidates）」節へ分離、ドキュメントのみの変更）で更新。
 
 ## Current Status
 
@@ -107,9 +107,20 @@ Task15-0監査で確認した既知の制限事項（Task15-1のDocument Drift�
 19. **（残存）** `.uploading`（アップロード中の一時ファイル名）の自動清掃機構がない。誤削除リスクを避けるための意図的な設計判断（Task19-7）であり、失敗が続いた場合はリモートに`.uploading`が蓄積しうる。
 20. **（残存）** `remote_path.bak`は1世代のみ保持し、複数世代管理・自動削除の機構がない（Task19-7、実装複雑性とのバランスを取った意図的な設計判断）。
 21. **（残存）** `.bak`からの手動復旧（`rename(remote_path.bak, remote_path)`等）を行う専用CLIコマンド（`restore-db-backup`等）が存在しない。復旧には汎用FTPクライアントでの手動操作が必要（Task19-7/19-8で指摘済み）。
-22. **（残存、Task20-2確認）** SQLite接続の二重生成: `fetch-stage`/`run-workflow`/`schedule-now`/`list-schedule`実行時、`cli/bootstrap.py::build_application()`と`cli/commands.py::_build_job_orchestrator()`が、同一`db_path`へ独立した2本目のSQLite接続をそれぞれ生成する。また両接続とも明示的な`close()`を行わない。CLI呼び出しは短命プロセスでありプロセス終了時にOSがハンドルを回収するため実害は小さいが、設計上のconnection lifecycle管理は徹底されていない。
+22. **（残存）** `version_command`のConnection管理が他コマンドと異なる: `cli/commands.py::version_command()`は`build_application(settings)`を`connection`引数なしで呼び出すため、内部で生成されたConnectionが`try/finally`でcloseされない（他8コマンドはclose済み）。あわせて、`version`表示に不要なRepository（`jobs`以外の6種・Candidate Repository）・JobRunnerが毎回生成される。将来の改善候補は下記「Technical Debt（Future Refactoring Candidates）」節を参照。
 23. **（残存、Task20-4確認）** 未インデックスFK列: `gold_records.superseded_by`・`learning_dataset.source_review_change_id`・`learning_dataset.reflected_in_knowledge_item_id`・`learning_dataset.reflected_in_layout_id`・`jobs.parser_version_id`の5列は外部キーだがインデックスが存在しない（詳細は[`docs/database/schema.md`](docs/database/schema.md#運用上の注意事項)）。
 24. **（Task20-6で強化）** SQLite Repository境界テスト: `SqliteJobRepository.add()`が外部キー制約違反（存在しない`pdf_id`）を`sqlite3.IntegrityError`として拒否することを保証するテストを追加した。あわせて`SqliteGoldRepository.get_history()`・`SqliteKnowledgeRepository.list_items()`・`SqliteReviewRepository.list_open_sessions()`について、既存テストが未証明だった境界・フィルタ条件（空結果、複数カテゴリ、複数セッション混在時の除外）を明示的に検証するテストを追加した（いずれのメソッドも既存テストで部分的に呼び出し済みだった点はTask20-6完了報告で訂正済み）。
+
+## Technical Debt（Future Refactoring Candidates）
+
+現時点の不具合ではなく、将来のリファクタリング候補として記録する項目。SQLite Connection管理（`cli/bootstrap.py`・`cli/commands.py`）に関するレビューで整理した。
+
+1. **`version_command`専用の軽量Builder導入（最有力候補）**: `bootstrap.py`に`version_command`専用のBuilder（`FileKnowledgeService`と`SqliteJobRepository`のみを組み立てる関数）を追加し、`build_application()`が持つ不要なRepository生成・JobRunner構築・`parser_versions`書き込み副作用を回避する。Composition Root一本化原則（Architecture Contract Guarantee 15）を維持できる案。
+2. **`_build_job_orchestrator()`のRepository二重生成解消**: `build_application()`が生成する`SqlitePdfRepository`（Connection共有済み）を`_build_job_orchestrator()`側でも再利用し、`build_sqlite_repositories()`の2回目呼び出し（jobs/gold/knowledge/review/export/learning 6 Repository分の無駄な生成）を排除する。
+3. **Connectionを`commands.py`へ露出しない設計への整理**: 現行の`tuple[JobOrchestrator, sqlite3.Connection]`方式は、Connectionという実装詳細をコマンド層まで運んでいる。Repositoryという上位の抽象のみを受け渡す設計へ整理する。
+4. **`tuple[JobOrchestrator, sqlite3.Connection]`の廃止**: 上記3の帰結として、`_build_job_orchestrator()`/`_build_scheduler()`の戻り値からConnectionを取り除き、`JobOrchestrator`/`Scheduler`単体を返す形へ整理する。
+5. **Connection生成・所有・close責務をComposition Rootへ完全集約**: 現状は生成者（`commands.py`内の`_build_job_orchestrator()`）とclose責務者（呼び出し元コマンド関数）が分離している。これを`bootstrap.py`側のみで完結させる。
+6. **（参考、不採用）`commands.py`でRepository具象を直接生成する案**: 項目1の代替として検討したが、Composition Root原則（Architecture Contract Guarantee 15）を崩すため採用候補とはしない。参考案としてのみ記録する。
 
 ## Phase8開始前の残課題一覧（Task17-6で整理、Task18-0で実装設計を確定）
 
