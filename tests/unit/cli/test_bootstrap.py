@@ -118,6 +118,20 @@ def test_build_application_holds_review_and_export_services(
     assert isinstance(application.export_service, RepositoryExportService)
 
 
+def test_build_application_with_repositories_reuses_same_pdf_instance(
+    settings: CompositionSettings,
+) -> None:
+    """`build_application_with_repositories()`が返す`repositories.pdfs`は、
+    `Application`が内部で保持する`_pdfs`と同一インスタンスである（Task22-6）。
+    `_build_job_orchestrator()`が本関数の戻り値の`repositories`をそのまま
+    JobOrchestrator生成へ渡せるのは、この同一性が保証されているため。
+    """
+    application, repositories = bootstrap.build_application_with_repositories(settings)
+
+    assert isinstance(repositories, SqliteRepositories)
+    assert repositories.pdfs is application._pdfs
+
+
 def test_build_application_reuses_provided_connection(
     monkeypatch: pytest.MonkeyPatch, settings: CompositionSettings
 ) -> None:

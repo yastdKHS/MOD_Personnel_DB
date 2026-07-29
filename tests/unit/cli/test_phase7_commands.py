@@ -175,8 +175,7 @@ def _tracer(order: list[str], label: str, real: object) -> object:
 
 
 _ORCHESTRATOR_GENERATION_ORDER_TARGETS = (
-    "build_application",
-    "build_sqlite_repositories",
+    "build_application_with_repositories",
     "build_fetch_client",
     "build_ftp_client",
     "build_job_orchestrator",

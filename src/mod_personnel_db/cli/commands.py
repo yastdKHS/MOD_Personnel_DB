@@ -23,11 +23,11 @@ architecture-contract.md 保証15）。
 
 `_build_job_orchestrator()`は、`build_job_orchestrator()`が要求する
 `SqliteRepositories`（Task17-1の既存シグネチャ、本Taskでは変更不可）を
-`bootstrap.build_sqlite_repositories()`経由で組み立てるために、
-`repositories.sqlite.connect()`のみを直接importする（他の具象Repository
-クラスは一切importしない）。`connect()`は`bootstrap.py`の`__all__`に
-含まれず`mypy --strict`のno-implicit-reexport制約で参照できないため、この
-1関数のみ`repositories.sqlite`から直接importする。
+`bootstrap.build_application_with_repositories()`（Task22-6）経由で取得する
+ために、`repositories.sqlite.connect()`のみを直接importする（他の具象
+Repositoryクラスは一切importしない）。`connect()`は`bootstrap.py`の
+`__all__`に含まれず`mypy --strict`のno-implicit-reexport制約で参照できない
+ため、この1関数のみ`repositories.sqlite`から直接importする。
 
 **Task19-5**: `upload_db_command()`実行前のDB健全性検証（`_check_database_integrity()`）
 でも、新規のRepository・サービス層を追加せず、この既存`connect()`importを
@@ -71,11 +71,11 @@ from pathlib import Path
 from mod_personnel_db.cli.bootstrap import (
     CompositionSettings,
     build_application,
+    build_application_with_repositories,
     build_fetch_client,
     build_ftp_client,
     build_job_orchestrator,
     build_scheduler,
-    build_sqlite_repositories,
     build_version_dependencies,
 )
 from mod_personnel_db.cli.exceptions import CliCommandError
@@ -266,21 +266,28 @@ def _build_job_orchestrator(
     """`fetch-stage`/`run-workflow`コマンド用に`JobOrchestrator`を取得する。
 
     `cli/bootstrap.py`（Composition Root、Task17-1）が提供するBuilder
-    （`build_application`/`build_sqlite_repositories`/`build_fetch_client`/
+    （`build_application_with_repositories`/`build_fetch_client`/
     `build_ftp_client`/`build_job_orchestrator`）のみを呼び出して依存を組み立て、
     `HTTPFetchClient`・`StandardFTPClient`・`DefaultJobOrchestrator`等の
     具象実装を本モジュールが直接生成することはない。戻り値の型は`JobOrchestrator`
     Protocolであり、呼び出し元（`fetch_stage_command`/`run_workflow_command`）は
     Protocol経由でのみこれを利用する。
 
-    **Task21-2**: `connect()`は本関数内で1回のみ呼び出し、`build_application()`
-    （Application生成）と`build_sqlite_repositories()`（JobOrchestrator用の
-    Repository生成）の両方へ同一Connectionを渡す（Task21-1で選定した案B）。
-    以前は`build_application()`が内部で独自に`connect()`していたため、同一
-    `db_path`への接続が1回のコマンド実行あたり2本生成されていた（Task20-2で
-    判明）。Repository自体は従来どおり`build_sqlite_repositories()`で
-    Application用・JobOrchestrator用にそれぞれ生成する（Repository生成構造は
-    変更しない）。
+    **Task21-2**: `connect()`は本関数内で1回のみ呼び出し、Application生成と
+    JobOrchestrator用のRepository生成の両方へ同一Connectionを渡す（Task21-1で
+    選定した案B）。以前は`build_application()`が内部で独自に`connect()`していた
+    ため、同一`db_path`への接続が1回のコマンド実行あたり2本生成されていた
+    （Task20-2で判明）。
+
+    **Task22-6**: `build_application_with_repositories()`（Task21-1/21-7で
+    整理した改善候補、Task22-5で設計）を使うことで、`build_sqlite_repositories()`
+    の呼び出しを1回に削減した。以前は`build_application()`が内部で1回、本関数が
+    2回目として`build_sqlite_repositories()`を呼んでおり、2回目の呼び出しで
+    生成した7 Repositoryのうち実際に使うのは`.pdfs`のみで、残り6種
+    （jobs/gold/knowledge/review/export/learning）は無駄に生成されていた
+    （Task21-1で判明）。`build_application_with_repositories()`は`Application`
+    生成時に使った`SqliteRepositories`をそのまま返すため、この無駄な二重生成を
+    解消する。
 
     **Task21-4**: 生成したConnectionは本関数ではcloseせず、戻り値
     （`tuple[JobOrchestrator, sqlite3.Connection]`）に含めて呼び出し元へ返す。
@@ -288,8 +295,7 @@ def _build_job_orchestrator(
     選定した案B）。
     """
     connection = connect(settings.db_path)
-    application = build_application(settings, connection)
-    repositories = build_sqlite_repositories(connection)
+    application, repositories = build_application_with_repositories(settings, connection)
     fetch_client = build_fetch_client()
     ftp_client = build_ftp_client(settings)
     orchestrator = build_job_orchestrator(application, repositories, fetch_client, ftp_client)
