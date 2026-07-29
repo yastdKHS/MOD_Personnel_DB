@@ -4,21 +4,24 @@
 `cli/commands.py`の`fetch-stage`/`run-workflow`コマンドが`cli/bootstrap.py`
 （Composition Root）経由で`JobOrchestrator`まで実際に到達することを確認する。
 
-`commands.build_fetch_client`/`commands.build_ftp_client`（いずれも`cli/bootstrap.py`
-からimportされたモジュール属性）を`monkeypatch`でMock実装
+`bootstrap.build_fetch_client`/`bootstrap.build_ftp_client`を`monkeypatch`でMock実装
 （`MockFetchClient`/`InMemoryFTPClient`、いずれも`tests/`ではなく`fetch/`・`ftp/`
 パッケージ自身が提供するテスト用実装）に差し替えることで、**実HTTP通信・実FTP通信を
 一切行わずに** `CLI → bootstrap → JobOrchestrator → FetchClient/FTPClient` の配線が
-機能することを検証する。`build_application`/`build_sqlite_repositories`は実SQLite
-データベース（`initialized_settings`フィクスチャ、`app.main([..., "init-db"])`経由で
-スキーマ適用済み）に対して実際に動作させる。
+機能することを検証する。Task22-8で`fetch_stage_command`/`run_workflow_command`が
+`bootstrap.job_orchestrator_session()`経由でのみ`JobOrchestrator`を取得するように
+なったため、これらのBuilderは`commands`モジュールではなく`bootstrap`モジュール自身
+（`job_orchestrator_session()`が参照する名前空間）で差し替える。`build_application`/
+`build_sqlite_repositories`は実SQLiteデータベース（`initialized_settings`フィクスチャ、
+`app.main([..., "init-db"])`経由でスキーマ適用済み）に対して実際に動作させる。
 """
 
 from pathlib import Path
 
 import pytest
 
-from mod_personnel_db.cli import app, commands
+from mod_personnel_db.cli import app
+from mod_personnel_db.cli import bootstrap as bootstrap_module
 from mod_personnel_db.cli.bootstrap import CompositionSettings
 from mod_personnel_db.fetch import FetchClient, HTTPFetchClient, MockFetchClient
 from mod_personnel_db.ftp import FTPClient, InMemoryFTPClient, StandardFTPClient
@@ -45,7 +48,7 @@ def test_fetch_stage_reaches_mock_fetch_client_via_bootstrap(
 ) -> None:
     """実HTTP通信を行わず、`MockFetchClient`まで到達して保存が完了することを確認する。"""
     mock_fetch_client = MockFetchClient()
-    monkeypatch.setattr(commands, "build_fetch_client", lambda: mock_fetch_client)
+    monkeypatch.setattr(bootstrap_module, "build_fetch_client", lambda: mock_fetch_client)
     destination = str(tmp_path / "staged.pdf")
 
     exit_code = app.main(
@@ -75,7 +78,7 @@ def test_fetch_stage_duplicate_content_hash_is_not_staged_twice(
     """`content_hash`重複時に`JobOrchestrator.fetch_and_stage()`が`None`を返す
     既存契約（Task17-1で実装済み）が、CLI経由でも実SQLiteに対して機能することを確認する。
     """
-    monkeypatch.setattr(commands, "build_fetch_client", lambda: MockFetchClient())
+    monkeypatch.setattr(bootstrap_module, "build_fetch_client", lambda: MockFetchClient())
 
     first_destination = str(tmp_path / "first.pdf")
     first_exit_code = app.main(
@@ -115,7 +118,9 @@ def test_run_workflow_reaches_in_memory_ftp_client_via_bootstrap(
     確認する（未処理PDF・未レビュー項目が存在しない初期状態に対する呼び出し）。
     """
     in_memory_ftp_client = InMemoryFTPClient()
-    monkeypatch.setattr(commands, "build_ftp_client", lambda _settings: in_memory_ftp_client)
+    monkeypatch.setattr(
+        bootstrap_module, "build_ftp_client", lambda _settings: in_memory_ftp_client
+    )
     destination = str(tmp_path / "export.json")
 
     exit_code = app.main(
@@ -142,7 +147,9 @@ def test_run_workflow_without_remote_path_does_not_touch_ftp_client(
     tmp_path: Path,
 ) -> None:
     in_memory_ftp_client = InMemoryFTPClient()
-    monkeypatch.setattr(commands, "build_ftp_client", lambda _settings: in_memory_ftp_client)
+    monkeypatch.setattr(
+        bootstrap_module, "build_ftp_client", lambda _settings: in_memory_ftp_client
+    )
     destination = str(tmp_path / "export.csv")
 
     exit_code = app.main([*_base_argv(initialized_settings), "run-workflow", "csv", destination])
@@ -158,11 +165,13 @@ def test_production_builders_still_construct_real_http_and_standard_ftp_clients(
     引き続き実装済みの`HTTPFetchClient`/`StandardFTPClient`を返すことを確認する
     （本テストファイルの他のテストがMock差し替えに依存していることの対照確認）。
     生成のみで`connect()`/`fetch()`は呼び出さないため、実HTTP・実FTP通信は発生しない。
+    `job_orchestrator_session()`（Task22-8）はこれらを`bootstrap`モジュール自身から
+    呼び出すため、本テストも`bootstrap_module`の属性を検証する。
     """
     fetch_client_attr = "build_fetch_client"
-    fetch_client: FetchClient = getattr(commands, fetch_client_attr)()
+    fetch_client: FetchClient = getattr(bootstrap_module, fetch_client_attr)()
     assert isinstance(fetch_client, HTTPFetchClient)
 
     ftp_client_attr = "build_ftp_client"
-    ftp_client: FTPClient = getattr(commands, ftp_client_attr)(initialized_settings)
+    ftp_client: FTPClient = getattr(bootstrap_module, ftp_client_attr)(initialized_settings)
     assert isinstance(ftp_client, StandardFTPClient)

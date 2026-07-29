@@ -8,7 +8,8 @@ from typing import Any
 
 import pytest
 
-from mod_personnel_db.cli import app, commands
+from mod_personnel_db.cli import app
+from mod_personnel_db.cli import bootstrap as bootstrap_module
 from mod_personnel_db.cli.bootstrap import Application, CompositionSettings
 from mod_personnel_db.cli.bootstrap import build_application as _real_build_application
 from mod_personnel_db.cli.commands import VersionInfo
@@ -289,7 +290,7 @@ def test_run_job_command_processes_existing_pdf(
         assert pdf is not None
         return _StubApplication(pdf, stub_job_runner)  # type: ignore[return-value]
 
-    monkeypatch.setattr(commands, "build_application", fake_build_application)
+    monkeypatch.setattr(bootstrap_module, "build_application", fake_build_application)
 
     exit_code = app.main([*_base_argv(settings), "run-job", str(int(pdf_id))])
 
@@ -408,7 +409,7 @@ def test_composition_root_built_once_for_run_pending(
         call_count += 1
         return _real_build_application(settings_arg, connection)
 
-    monkeypatch.setattr(commands, "build_application", counting_build_application)
+    monkeypatch.setattr(bootstrap_module, "build_application", counting_build_application)
 
     app.main([*_base_argv(settings), "run-pending"])
 
@@ -432,7 +433,7 @@ def test_composition_root_built_once_for_run_job(
         assert pdf is not None
         return _StubApplication(pdf, stub_job_runner)  # type: ignore[return-value]
 
-    monkeypatch.setattr(commands, "build_application", counting_build_application)
+    monkeypatch.setattr(bootstrap_module, "build_application", counting_build_application)
 
     app.main([*_base_argv(settings), "run-job", str(int(pdf_id))])
 
@@ -458,7 +459,7 @@ def test_run_pending_command_invokes_job_runner(
         del settings_arg, connection
         return SimpleNamespace(job_runner=stub_job_runner)
 
-    monkeypatch.setattr(commands, "build_application", fake_build_application)
+    monkeypatch.setattr(bootstrap_module, "build_application", fake_build_application)
 
     exit_code = app.main([*_base_argv(settings), "run-pending"])
 
@@ -618,7 +619,7 @@ def test_review_list_command_propagates_repository_error(
         del settings_arg, connection
         return SimpleNamespace(review_service=_RaisingReviewService())  # type: ignore[return-value]
 
-    monkeypatch.setattr(commands, "build_application", fake_build_application)
+    monkeypatch.setattr(bootstrap_module, "build_application", fake_build_application)
 
     with pytest.raises(RepositoryError):
         app.main([*_base_argv(settings), "review", "list"])
@@ -640,7 +641,7 @@ def test_export_all_command_propagates_repository_error(
         del settings_arg, connection
         return SimpleNamespace(export_service=_RaisingExportService())  # type: ignore[return-value]
 
-    monkeypatch.setattr(commands, "build_application", fake_build_application)
+    monkeypatch.setattr(bootstrap_module, "build_application", fake_build_application)
 
     with pytest.raises(RepositoryError):
         app.main([*_base_argv(settings), "export", "all"])

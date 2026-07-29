@@ -1,8 +1,11 @@
 import sqlite3
+from collections.abc import Iterator
+from contextlib import contextmanager
 from types import SimpleNamespace
 
 import pytest
 
+from mod_personnel_db.cli import bootstrap as bootstrap_module
 from mod_personnel_db.cli import commands
 from mod_personnel_db.cli.bootstrap import Application, CompositionSettings
 from mod_personnel_db.pipeline.result import PipelineResult
@@ -25,13 +28,12 @@ def test_run_pending_command_invokes_job_runner_run_pending(
 ) -> None:
     stub = _StubJobRunner()
 
-    def fake_build_application(
-        settings_arg: CompositionSettings, connection: sqlite3.Connection | None = None
-    ) -> Application:
-        del settings_arg, connection
-        return SimpleNamespace(job_runner=stub)  # type: ignore[return-value]
+    @contextmanager
+    def fake_application_session(settings_arg: CompositionSettings) -> Iterator[Application]:
+        del settings_arg
+        yield SimpleNamespace(job_runner=stub)  # type: ignore[misc]
 
-    monkeypatch.setattr(commands, "build_application", fake_build_application)
+    monkeypatch.setattr(commands, "application_session", fake_application_session)
 
     result = commands.run_pending_command(settings)
 
@@ -47,15 +49,15 @@ def test_run_pending_command_end_to_end_with_no_pending_pdfs(
     assert result == ()
 
 
-def test_build_job_orchestrator_calls_connect_exactly_once(
+def test_job_orchestrator_session_calls_connect_exactly_once(
     monkeypatch: pytest.MonkeyPatch, settings: CompositionSettings
 ) -> None:
-    """`_build_job_orchestrator()`は`connect()`を1回のみ呼び出し、Application生成
-    （`build_application()`）とJobOrchestrator生成（`build_sqlite_repositories()`
-    が返す`repositories.pdfs`）とで同一Connectionを共有する（Task21-2、Task21-1
-    で選定した案B）。以前は`build_application()`内部でも独自に`connect()`が
-    呼ばれ、同一`db_path`への接続が1回のコマンド実行あたり2本生成されていた
-    （Task20-2で判明）。
+    """`bootstrap.job_orchestrator_session()`は`connect()`を1回のみ呼び出し、
+    Application生成（`build_application_with_repositories()`）とJobOrchestrator
+    生成（`build_sqlite_repositories()`が返す`repositories.pdfs`）とで同一
+    Connectionを共有する（Task21-2、Task22-8でSession Builder化）。以前は
+    `build_application()`内部でも独自に`connect()`が呼ばれ、同一`db_path`への
+    接続が1回のコマンド実行あたり2本生成されていた（Task20-2で判明）。
     """
     connect_calls: list[str] = []
 
@@ -63,27 +65,24 @@ def test_build_job_orchestrator_calls_connect_exactly_once(
         connect_calls.append(db_path)
         return connect(db_path)
 
-    monkeypatch.setattr(commands, "connect", counting_connect)
+    monkeypatch.setattr(bootstrap_module, "connect", counting_connect)
 
-    orchestrator, connection = commands._build_job_orchestrator(settings)
-    connection.close()
+    with bootstrap_module.job_orchestrator_session(settings) as orchestrator:
+        assert orchestrator is not None
 
     assert connect_calls == [settings.db_path]
-    assert orchestrator is not None
 
 
-def test_build_job_orchestrator_calls_build_sqlite_repositories_exactly_once(
+def test_job_orchestrator_session_calls_build_sqlite_repositories_exactly_once(
     monkeypatch: pytest.MonkeyPatch, settings: CompositionSettings
 ) -> None:
-    """`_build_job_orchestrator()`は`build_application_with_repositories()`を
-    経由して`build_sqlite_repositories()`を1回のみ呼び出す（Task22-6）。
-    以前は`build_application()`用とJobOrchestrator用とでそれぞれ1回ずつ、
-    計2回`build_sqlite_repositories()`が呼ばれ、`jobs`/`gold`/`knowledge`/
-    `review`/`export`/`learning`の各Repositoryが未使用のまま二重生成されていた
-    （Task20-2で判明、Task21-6/21-7で改善候補化）。
+    """`bootstrap.job_orchestrator_session()`は`build_application_with_repositories()`を
+    経由して`build_sqlite_repositories()`を1回のみ呼び出す（Task22-6、Task22-8で
+    Session Builder化）。以前は`build_application()`用とJobOrchestrator用とで
+    それぞれ1回ずつ、計2回`build_sqlite_repositories()`が呼ばれ、`jobs`/`gold`/
+    `knowledge`/`review`/`export`/`learning`の各Repositoryが未使用のまま二重生成
+    されていた（Task20-2で判明、Task21-6/21-7で改善候補化）。
     """
-    from mod_personnel_db.cli import bootstrap as bootstrap_module
-
     build_sqlite_repositories_calls: list[sqlite3.Connection] = []
     original_build_sqlite_repositories = bootstrap_module.build_sqlite_repositories
 
@@ -97,18 +96,18 @@ def test_build_job_orchestrator_calls_build_sqlite_repositories_exactly_once(
         bootstrap_module, "build_sqlite_repositories", counting_build_sqlite_repositories
     )
 
-    orchestrator, connection = commands._build_job_orchestrator(settings)
-    connection.close()
+    with bootstrap_module.job_orchestrator_session(settings) as orchestrator:
+        assert orchestrator is not None
 
     assert len(build_sqlite_repositories_calls) == 1
-    assert orchestrator is not None
 
 
 def test_version_command_closes_connection(
     monkeypatch: pytest.MonkeyPatch, settings: CompositionSettings
 ) -> None:
-    """`version_command()`は他コマンドと同様、`connect()`で生成したConnectionを
-    `try/finally`で必ず`close()`する（Task22-1、Task21-4の他8コマンドとの統一）。
+    """`version_command()`は他コマンドと同様、`bootstrap.version_dependencies_session()`
+    が生成したConnectionを必ず`close()`する（Task22-1、Task22-8でSession
+    Builder化した後もclose責務自体は維持されていることを確認する）。
     """
     close_calls: list[bool] = []
 
@@ -123,7 +122,7 @@ def test_version_command_closes_connection(
         connection.execute("PRAGMA foreign_keys = ON")
         return connection
 
-    monkeypatch.setattr(commands, "connect", fake_connect)
+    monkeypatch.setattr(bootstrap_module, "connect", fake_connect)
 
     info = commands.version_command(settings)
 
