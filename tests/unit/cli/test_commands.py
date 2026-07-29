@@ -72,6 +72,38 @@ def test_build_job_orchestrator_calls_connect_exactly_once(
     assert orchestrator is not None
 
 
+def test_build_job_orchestrator_calls_build_sqlite_repositories_exactly_once(
+    monkeypatch: pytest.MonkeyPatch, settings: CompositionSettings
+) -> None:
+    """`_build_job_orchestrator()`は`build_application_with_repositories()`を
+    経由して`build_sqlite_repositories()`を1回のみ呼び出す（Task22-6）。
+    以前は`build_application()`用とJobOrchestrator用とでそれぞれ1回ずつ、
+    計2回`build_sqlite_repositories()`が呼ばれ、`jobs`/`gold`/`knowledge`/
+    `review`/`export`/`learning`の各Repositoryが未使用のまま二重生成されていた
+    （Task20-2で判明、Task21-6/21-7で改善候補化）。
+    """
+    from mod_personnel_db.cli import bootstrap as bootstrap_module
+
+    build_sqlite_repositories_calls: list[sqlite3.Connection] = []
+    original_build_sqlite_repositories = bootstrap_module.build_sqlite_repositories
+
+    def counting_build_sqlite_repositories(
+        connection: sqlite3.Connection,
+    ) -> bootstrap_module.SqliteRepositories:
+        build_sqlite_repositories_calls.append(connection)
+        return original_build_sqlite_repositories(connection)
+
+    monkeypatch.setattr(
+        bootstrap_module, "build_sqlite_repositories", counting_build_sqlite_repositories
+    )
+
+    orchestrator, connection = commands._build_job_orchestrator(settings)
+    connection.close()
+
+    assert len(build_sqlite_repositories_calls) == 1
+    assert orchestrator is not None
+
+
 def test_version_command_closes_connection(
     monkeypatch: pytest.MonkeyPatch, settings: CompositionSettings
 ) -> None:

@@ -233,18 +233,25 @@ class Application:
         return self._knowledge_service.load_snapshot()
 
 
-def build_application(
+def build_application_with_repositories(
     settings: CompositionSettings, connection: sqlite3.Connection | None = None
-) -> Application:
-    """合成ルート本体。生成順序1〜7をこの順序でのみ実行し、`Application`を返す。
+) -> tuple[Application, SqliteRepositories]:
+    """合成ルート本体。生成順序1〜7をこの順序でのみ実行し、`Application`と、
+    その生成過程で構築した`SqliteRepositories`（`repositories.pdfs`等）を
+    両方返す（Task22-6）。
 
     `connection`省略時は従来どおり`connect()`で新規に接続を生成する
     （既存呼び出し元との後方互換性を維持する）。`connection`を指定した場合は
-    それを再利用し、新規接続は生成しない。`cli/commands.py`の
-    `_build_job_orchestrator()`が、Application生成とJobOrchestrator生成
-    （`build_sqlite_repositories()`が返す`repositories.pdfs`）とで同一
-    Connectionを共有するために使う（Task21-2、Task21-1で選定した案B、
-    Connectionのみ一本化しRepository自体は従来どおり再生成する）。
+    それを再利用し、新規接続は生成しない（Task21-2、Task21-1で選定した案B）。
+
+    `cli/commands.py`の`_build_job_orchestrator()`は本関数を呼び、戻り値の
+    `SqliteRepositories`（`.pdfs`）をそのまま`JobOrchestrator`生成へ渡す。
+    これにより`build_sqlite_repositories()`の2回目呼び出し（Task21-2までは
+    Application用・JobOrchestrator用でそれぞれ1回ずつ、計2回発生していた）が
+    不要になり、`jobs`/`gold`/`knowledge`/`review`/`export`/`learning`の
+    未使用な二重生成が解消される（Task21-1/21-7で整理した改善候補）。
+    `build_application()`は本関数の`Application`部分のみを返す薄いラッパーとして
+    引き続き公開する（既存呼び出し元との後方互換性を維持、戻り値型は変更しない）。
     """
     if connection is None:
         connection = connect(settings.db_path)
@@ -270,7 +277,7 @@ def build_application(
         parser_version_id=parser_version_id,
         layout_definitions=layout_definitions,
     )
-    return Application(
+    application = Application(
         job_runner=job_runner,
         review_service=review_service,
         export_service=export_service,
@@ -278,6 +285,19 @@ def build_application(
         _jobs=repositories.jobs,
         _knowledge_service=knowledge_service,
     )
+    return application, repositories
+
+
+def build_application(
+    settings: CompositionSettings, connection: sqlite3.Connection | None = None
+) -> Application:
+    """合成ルート本体（`Application`のみを返す既存公開契約、Task11-6）。
+
+    `build_application_with_repositories()`の`Application`部分のみを返す
+    薄いラッパー（Task22-6）。戻り値型・シグネチャとも変更しない。
+    """
+    application, _ = build_application_with_repositories(settings, connection)
+    return application
 
 
 def build_job_runner(settings: CompositionSettings) -> JobRunner:
@@ -426,6 +446,7 @@ __all__ = [
     "SqliteRepositories",
     "VersionDependencies",
     "build_application",
+    "build_application_with_repositories",
     "build_export_service",
     "build_feature_store",
     "build_fetch_client",
