@@ -310,9 +310,16 @@ def test_version_command_outputs_knowledge_snapshot(
     assert "parser_version" in output
 
 
-def test_version_command_reuses_existing_parser_version(
+def test_version_command_does_not_create_parser_version(
     settings: CompositionSettings, capsys: pytest.CaptureFixture[str]
 ) -> None:
+    """Task22-3で`version_command`は`build_version_dependencies()`のみを使うよう
+    変更され、`build_application()`が持つ`parser_versions`への自動登録副作用
+    （`_resolve_parser_version_id()`）は発生しなくなった（Task22-4で確認）。
+    連続実行しても出力は同一のままであり、`parser_versions`テーブルの行数も
+    増加しない（run-pending等のJobRunner利用系コマンドの登録処理は対象外で
+    変更されていない）。
+    """
     app.main([*_base_argv(settings), "version"])
     first_output = capsys.readouterr().out
 
@@ -320,6 +327,14 @@ def test_version_command_reuses_existing_parser_version(
     second_output = capsys.readouterr().out
 
     assert first_output == second_output
+    assert "parser_version: (none recorded)" in first_output
+
+    connection = connect(settings.db_path)
+    try:
+        row = connection.execute("SELECT COUNT(*) FROM parser_versions").fetchone()
+    finally:
+        connection.close()
+    assert row[0] == 0
 
 
 def test_format_version_with_no_parser_version_recorded() -> None:

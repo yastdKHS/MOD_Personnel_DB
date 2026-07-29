@@ -2,7 +2,8 @@
 （`JobRunner`・`ReviewService`・`ExportService`＋読み取り専用アクセス）を
 呼び出す。
 
-コマンド関数はいずれも`bootstrap.build_application()`・
+コマンド関数はいずれも`bootstrap.build_application()`（`version_command`のみ
+`bootstrap.build_version_dependencies()`、Task22-3）・
 `cli.init.initialize_database()`のみに依存し、`knowledge/`・`learning/`・
 `review/`・`export/`のいずれも直接importしない（`review_*_command`/
 `export_*_command`は`Application.review_service`/`Application.export_service`
@@ -52,8 +53,14 @@ architecture-contract.md 保証15）。
 Task21-2で共有した単一Connectionを戻り値の一部として受け取り、同様に
 `try/finally`で1回だけ`close()`する（二重closeはしない）。Repository層・
 `bootstrap.py`・Service層にはclose責務を追加しない。`version_command`は
-Task21-4の対象コマンド一覧に含まれないため変更していない（既知の残課題、
-Task21-3参照）。
+Task21-4の対象コマンド一覧に含まれていなかったが、Task22-1で他コマンドと
+同一パターンへ統一し、close漏れを解消した。
+
+**Task22-3**: `version_command`は`build_application()`ではなく、`version`
+専用の軽量Builder`bootstrap.build_version_dependencies()`を使う（Task22-2で
+設計）。`ReviewService`/`ExportService`/`JobRunner`/`CandidateRepository`の
+生成、および`parser_versions`への書き込み副作用（`_resolve_parser_version_id()`）
+のいずれも発生しない。
 """
 
 import sqlite3
@@ -69,6 +76,7 @@ from mod_personnel_db.cli.bootstrap import (
     build_job_orchestrator,
     build_scheduler,
     build_sqlite_repositories,
+    build_version_dependencies,
 )
 from mod_personnel_db.cli.exceptions import CliCommandError
 from mod_personnel_db.cli.init import initialize_database
@@ -230,15 +238,26 @@ class VersionInfo:
 
 
 def version_command(settings: CompositionSettings) -> VersionInfo:
-    """`version`コマンド。最新`ParserVersion`と`KnowledgeSnapshot`の要約を返す。"""
-    application = build_application(settings)
-    snapshot = application.read_knowledge_snapshot()
-    return VersionInfo(
-        parser_version=application.read_latest_parser_version(),
-        knowledge_snapshot_checksum=snapshot.snapshot_checksum,
-        knowledge_item_count=len(snapshot.items),
-        knowledge_as_of=snapshot.as_of,
-    )
+    """`version`コマンド。最新`ParserVersion`と`KnowledgeSnapshot`の要約を返す。
+
+    Task22-1: `connect()`で生成したConnectionを`try/finally`で必ず`close()`する。
+    Task22-3: `build_application()`は使わず、`version`専用の軽量Builder
+    （`build_version_dependencies()`）のみを使う。`ReviewService`/`ExportService`/
+    `JobRunner`/`CandidateRepository`の生成、および`parser_versions`への
+    書き込み副作用（`_resolve_parser_version_id()`）のいずれも発生しない。
+    """
+    connection = connect(settings.db_path)
+    try:
+        dependencies = build_version_dependencies(settings, connection)
+        snapshot = dependencies.read_knowledge_snapshot()
+        return VersionInfo(
+            parser_version=dependencies.read_latest_parser_version(),
+            knowledge_snapshot_checksum=snapshot.snapshot_checksum,
+            knowledge_item_count=len(snapshot.items),
+            knowledge_as_of=snapshot.as_of,
+        )
+    finally:
+        connection.close()
 
 
 def _build_job_orchestrator(

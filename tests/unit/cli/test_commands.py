@@ -70,3 +70,30 @@ def test_build_job_orchestrator_calls_connect_exactly_once(
 
     assert connect_calls == [settings.db_path]
     assert orchestrator is not None
+
+
+def test_version_command_closes_connection(
+    monkeypatch: pytest.MonkeyPatch, settings: CompositionSettings
+) -> None:
+    """`version_command()`は他コマンドと同様、`connect()`で生成したConnectionを
+    `try/finally`で必ず`close()`する（Task22-1、Task21-4の他8コマンドとの統一）。
+    """
+    close_calls: list[bool] = []
+
+    class _TrackingConnection(sqlite3.Connection):
+        def close(self) -> None:
+            close_calls.append(True)
+            super().close()
+
+    def fake_connect(db_path: str) -> sqlite3.Connection:
+        connection = sqlite3.connect(db_path, factory=_TrackingConnection)
+        connection.row_factory = sqlite3.Row
+        connection.execute("PRAGMA foreign_keys = ON")
+        return connection
+
+    monkeypatch.setattr(commands, "connect", fake_connect)
+
+    info = commands.version_command(settings)
+
+    assert close_calls == [True]
+    assert info.knowledge_item_count == 0
