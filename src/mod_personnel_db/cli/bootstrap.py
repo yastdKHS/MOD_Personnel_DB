@@ -285,6 +285,46 @@ def build_job_runner(settings: CompositionSettings) -> JobRunner:
     return build_application(settings).job_runner
 
 
+@dataclass(frozen=True, slots=True)
+class VersionDependencies:
+    """`version`コマンドが必要とする最小限の依存の束（Task22-3、Task22-2で設計）。
+
+    `Application`と同様、Repositoryオブジェクトそのものは公開せず、読み取り専用
+    メソッド経由でのみアクセスさせる。`build_application()`と異なり、
+    `ReviewService`/`ExportService`/`JobRunner`/`CandidateRepository`の生成、
+    および`_resolve_parser_version_id()`による`parser_versions`書き込み副作用の
+    いずれも発生させない。
+    """
+
+    _jobs: SqliteJobRepository
+    _knowledge_service: FileKnowledgeService
+
+    def read_latest_parser_version(self) -> ParserVersion | None:
+        """`version`コマンドが表示する最新`ParserVersion`。"""
+        return self._jobs.get_latest_parser_version()
+
+    def read_knowledge_snapshot(self) -> KnowledgeSnapshot:
+        """`version`コマンドが表示する`KnowledgeSnapshot`。"""
+        return self._knowledge_service.load_snapshot()
+
+
+def build_version_dependencies(
+    settings: CompositionSettings, connection: sqlite3.Connection | None = None
+) -> VersionDependencies:
+    """`version`コマンド専用の軽量Builder（Task22-3）。
+
+    `build_application()`の生成順序1〜7を経由せず、`SqliteJobRepository`と
+    `FileKnowledgeService`のみを生成する。`connection`省略時は従来の
+    `build_application()`と同じ規約で新規に`connect()`する。
+    """
+    if connection is None:
+        connection = connect(settings.db_path)
+    return VersionDependencies(
+        _jobs=SqliteJobRepository(connection),
+        _knowledge_service=build_knowledge_service(settings),
+    )
+
+
 def build_fetch_client() -> HTTPFetchClient:
     """生成順序8（Phase7 Task17-0/17-1）: `FetchClient`を生成する。
 
@@ -384,6 +424,7 @@ __all__ = [
     "Application",
     "CompositionSettings",
     "SqliteRepositories",
+    "VersionDependencies",
     "build_application",
     "build_export_service",
     "build_feature_store",
@@ -397,4 +438,5 @@ __all__ = [
     "build_scheduler",
     "build_settings",
     "build_sqlite_repositories",
+    "build_version_dependencies",
 ]
