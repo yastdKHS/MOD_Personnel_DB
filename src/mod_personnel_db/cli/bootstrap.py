@@ -64,7 +64,8 @@ Phase6 Task14-5以降`config.AppSettings`（Pydantic Settings、ADR-0028）の
 """
 
 import sqlite3
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -103,6 +104,7 @@ from mod_personnel_db.services import (
     JobOrchestrator,
     JobSchedule,
     OrchestratorDependencies,
+    Scheduler,
 )
 
 #: 合成ルートが依存生成に必要とする設定値の型。Phase6 Task14-5以降
@@ -440,11 +442,78 @@ def build_scheduler(
     return DefaultScheduler(orchestrator, schedules, clock)
 
 
+@contextmanager
+def application_session(settings: CompositionSettings) -> Iterator[Application]:
+    """`Application`用のSession Builder（Task22-8、Task22-7で選定した案A）。
+
+    `connect()`→`build_application()`→`yield`→`finally: close()`の
+    Connectionライフサイクル全体をComposition Root内に閉じ込める。
+    呼び出し元（`cli/commands.py`）は`with application_session(settings) as
+    application:`の形で利用し、`sqlite3.Connection`を一切扱わない。
+    """
+    connection = connect(settings.db_path)
+    try:
+        yield build_application(settings, connection)
+    finally:
+        connection.close()
+
+
+@contextmanager
+def job_orchestrator_session(settings: CompositionSettings) -> Iterator[JobOrchestrator]:
+    """`JobOrchestrator`用のSession Builder（Task22-8）。
+
+    生成順序1〜10（`build_application_with_repositories()`・
+    `build_fetch_client()`・`build_ftp_client()`・`build_job_orchestrator()`）を
+    単一のConnection上で実行し、`Connection`のclose責務を本関数に閉じ込める。
+    旧`_build_job_orchestrator()`が返していた`tuple[JobOrchestrator,
+    sqlite3.Connection]`は廃止し、`JobOrchestrator`単体のみをyieldする。
+    """
+    connection = connect(settings.db_path)
+    try:
+        application, repositories = build_application_with_repositories(settings, connection)
+        fetch_client = build_fetch_client()
+        ftp_client = build_ftp_client(settings)
+        yield build_job_orchestrator(application, repositories, fetch_client, ftp_client)
+    finally:
+        connection.close()
+
+
+@contextmanager
+def scheduler_session(settings: CompositionSettings) -> Iterator[Scheduler]:
+    """`Scheduler`用のSession Builder（Task22-8）。
+
+    `job_orchestrator_session()`が管理する単一Connectionをそのまま再利用し
+    （旧`_build_scheduler()`が`_build_job_orchestrator()`を呼んでいた構造を
+    踏襲）、`build_scheduler()`のみを追加で呼び出す。旧`_build_scheduler()`が
+    返していた`tuple[Scheduler, sqlite3.Connection]`は廃止し、`Scheduler`
+    単体のみをyieldする。周期実行対象（`JobSchedule`）はCLIからまだ設定
+    できないため空タプルとし、現在時刻は`datetime.now(UTC)`を`clock`として
+    注入する（旧`_build_scheduler()`と同じ既定値）。
+    """
+    with job_orchestrator_session(settings) as orchestrator:
+        yield build_scheduler(orchestrator, (), lambda: datetime.now(UTC))
+
+
+@contextmanager
+def version_dependencies_session(settings: CompositionSettings) -> Iterator[VersionDependencies]:
+    """`VersionDependencies`用のSession Builder（Task22-8）。
+
+    `connect()`→`build_version_dependencies()`→`yield`→`finally: close()`の
+    Connectionライフサイクル全体をComposition Root内に閉じ込める。
+    """
+    connection = connect(settings.db_path)
+    try:
+        yield build_version_dependencies(settings, connection)
+    finally:
+        connection.close()
+
+
 __all__ = [
     "Application",
     "CompositionSettings",
     "SqliteRepositories",
     "VersionDependencies",
+    "application_session",
     "build_application",
     "build_application_with_repositories",
     "build_export_service",
@@ -460,4 +529,7 @@ __all__ = [
     "build_settings",
     "build_sqlite_repositories",
     "build_version_dependencies",
+    "job_orchestrator_session",
+    "scheduler_session",
+    "version_dependencies_session",
 ]

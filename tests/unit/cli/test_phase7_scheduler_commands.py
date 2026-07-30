@@ -5,20 +5,28 @@ Task17-4で`cli/bootstrap.py`に追加された`build_scheduler()`経由での�
 `cli/commands.py`が`Scheduler`Protocol経由でのみ呼び出すこと、
 `cli/app.py`が新規サブコマンド（`schedule-now`/`list-schedule`）を正しく登録・
 ディスパッチすることを検証する。`DefaultScheduler`は本テストファイルでも一切
-直接インスタンス化しない（`commands._build_scheduler`をFakeで差し替えることで
-代替する）。`JobOrchestrator`を`schedule_now_command`/`list_schedule_command`が
-直接呼び出さないことも、Fake`Scheduler`の呼び出し記録で確認する。
+直接インスタンス化しない（`commands.scheduler_session`をFakeで差し替えることで
+代替する、Task22-8で`commands._build_scheduler`から移行）。`JobOrchestrator`を
+`schedule_now_command`/`list_schedule_command`が直接呼び出さないことも、
+Fake`Scheduler`の呼び出し記録で確認する。
 """
 
-import sqlite3
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 
 import pytest
 
 from mod_personnel_db.cli import app, commands
+from mod_personnel_db.cli import bootstrap as bootstrap_module
 from mod_personnel_db.cli.bootstrap import CompositionSettings
 from mod_personnel_db.models import JobId
-from mod_personnel_db.services import RUN_PENDING_JOB_TYPE, NoPendingJobError, UnknownJobTypeError
+from mod_personnel_db.services import (
+    RUN_PENDING_JOB_TYPE,
+    NoPendingJobError,
+    Scheduler,
+    UnknownJobTypeError,
+)
 
 
 @dataclass
@@ -45,6 +53,19 @@ class _RecordingScheduler:
         return self.upcoming
 
 
+def _fake_scheduler_session(scheduler: Scheduler) -> object:
+    """`commands.scheduler_session`を差し替えるためのFake Session Builder
+    （Task22-8）。旧`_build_scheduler()`が返していた`tuple[Scheduler,
+    sqlite3.Connection]`と異なり、`Scheduler`単体のみを`with`文でyieldする。
+    """
+
+    @contextmanager
+    def fake_session(_settings: CompositionSettings) -> Iterator[Scheduler]:
+        yield scheduler
+
+    return fake_session
+
+
 # --- 「Scheduler呼び出し」: Protocol経由のみで正しい引数が渡ることを確認 ---
 
 
@@ -54,8 +75,8 @@ def test_schedule_now_command_calls_scheduler_via_protocol(
     fake_scheduler = _RecordingScheduler(trigger_now_result=JobId(7))
     monkeypatch.setattr(
         commands,
-        "_build_scheduler",
-        lambda _settings: (fake_scheduler, sqlite3.connect(":memory:")),
+        "scheduler_session",
+        _fake_scheduler_session(fake_scheduler),
     )
 
     result = commands.schedule_now_command(settings, RUN_PENDING_JOB_TYPE)
@@ -70,8 +91,8 @@ def test_schedule_now_command_propagates_no_pending_job_error(
     fake_scheduler = _RecordingScheduler(trigger_now_error=NoPendingJobError("no pending job"))
     monkeypatch.setattr(
         commands,
-        "_build_scheduler",
-        lambda _settings: (fake_scheduler, sqlite3.connect(":memory:")),
+        "scheduler_session",
+        _fake_scheduler_session(fake_scheduler),
     )
 
     with pytest.raises(NoPendingJobError):
@@ -84,8 +105,8 @@ def test_schedule_now_command_propagates_unknown_job_type_error(
     fake_scheduler = _RecordingScheduler(trigger_now_error=UnknownJobTypeError("unknown"))
     monkeypatch.setattr(
         commands,
-        "_build_scheduler",
-        lambda _settings: (fake_scheduler, sqlite3.connect(":memory:")),
+        "scheduler_session",
+        _fake_scheduler_session(fake_scheduler),
     )
 
     with pytest.raises(UnknownJobTypeError):
@@ -100,8 +121,8 @@ def test_list_schedule_command_calls_scheduler_via_protocol(
     )
     monkeypatch.setattr(
         commands,
-        "_build_scheduler",
-        lambda _settings: (fake_scheduler, sqlite3.connect(":memory:")),
+        "scheduler_session",
+        _fake_scheduler_session(fake_scheduler),
     )
 
     result = commands.list_schedule_command(settings)
@@ -110,20 +131,21 @@ def test_list_schedule_command_calls_scheduler_via_protocol(
     assert fake_scheduler.list_upcoming_calls == 1
 
 
-# --- 「CLI→bootstrap呼び出し」: _build_scheduler()がbootstrap.pyのBuilderのみを
-# 期待した引数で呼び出すことを確認 ---
+# --- 「CLI→bootstrap呼び出し」: scheduler_session()がbootstrap.pyのBuilderのみを
+# 期待した引数で呼び出すことを確認（Task22-8で`commands._build_scheduler`から
+# `bootstrap.scheduler_session`へ移行） ---
 
 
-def test_build_scheduler_helper_delegates_to_bootstrap_build_scheduler(
+def test_scheduler_session_delegates_to_bootstrap_build_scheduler(
     settings: CompositionSettings, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     sentinel_orchestrator = object()
-    sentinel_connection = sqlite3.connect(":memory:")
-    monkeypatch.setattr(
-        commands,
-        "_build_job_orchestrator",
-        lambda _settings: (sentinel_orchestrator, sentinel_connection),
-    )
+
+    @contextmanager
+    def fake_job_orchestrator_session(_settings: CompositionSettings) -> Iterator[object]:
+        yield sentinel_orchestrator
+
+    monkeypatch.setattr(bootstrap_module, "job_orchestrator_session", fake_job_orchestrator_session)
     captured: dict[str, object] = {}
     sentinel_scheduler = _RecordingScheduler()
 
@@ -133,12 +155,11 @@ def test_build_scheduler_helper_delegates_to_bootstrap_build_scheduler(
         captured["clock"] = clock
         return sentinel_scheduler
 
-    monkeypatch.setattr(commands, "build_scheduler", fake_build_scheduler)
+    monkeypatch.setattr(bootstrap_module, "build_scheduler", fake_build_scheduler)
 
-    scheduler, connection = commands._build_scheduler(settings)
+    with bootstrap_module.scheduler_session(settings) as scheduler:
+        assert scheduler is sentinel_scheduler
 
-    assert scheduler is sentinel_scheduler
-    assert connection is sentinel_connection
     assert captured["orchestrator"] is sentinel_orchestrator
     assert captured["schedules"] == ()
     assert callable(captured["clock"])
@@ -227,8 +248,8 @@ def test_main_schedule_now_dispatches_and_formats_result(
     fake_scheduler = _RecordingScheduler(trigger_now_result=JobId(42))
     monkeypatch.setattr(
         commands,
-        "_build_scheduler",
-        lambda _settings: (fake_scheduler, sqlite3.connect(":memory:")),
+        "scheduler_session",
+        _fake_scheduler_session(fake_scheduler),
     )
 
     exit_code = app.main(
@@ -257,8 +278,8 @@ def test_main_list_schedule_dispatches_and_formats_empty_result(
     fake_scheduler = _RecordingScheduler(upcoming=())
     monkeypatch.setattr(
         commands,
-        "_build_scheduler",
-        lambda _settings: (fake_scheduler, sqlite3.connect(":memory:")),
+        "scheduler_session",
+        _fake_scheduler_session(fake_scheduler),
     )
 
     exit_code = app.main(
@@ -288,8 +309,8 @@ def test_main_list_schedule_dispatches_and_formats_nonempty_result(
     )
     monkeypatch.setattr(
         commands,
-        "_build_scheduler",
-        lambda _settings: (fake_scheduler, sqlite3.connect(":memory:")),
+        "scheduler_session",
+        _fake_scheduler_session(fake_scheduler),
     )
 
     exit_code = app.main(
@@ -322,8 +343,8 @@ def test_main_schedule_now_treats_no_pending_job_error_as_success(
     fake_scheduler = _RecordingScheduler(trigger_now_error=NoPendingJobError("no pending pdf"))
     monkeypatch.setattr(
         commands,
-        "_build_scheduler",
-        lambda _settings: (fake_scheduler, sqlite3.connect(":memory:")),
+        "scheduler_session",
+        _fake_scheduler_session(fake_scheduler),
     )
 
     exit_code = app.main(

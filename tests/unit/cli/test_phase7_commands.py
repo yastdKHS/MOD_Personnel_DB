@@ -4,13 +4,15 @@ Task17-1で`cli/bootstrap.py`に追加された`build_fetch_client()`/`build_ftp
 `build_job_orchestrator()`を、`cli/commands.py`が`JobOrchestrator`Protocol経由での
 み呼び出すこと、`cli/app.py`が新規サブコマンド（`fetch-stage`/`run-workflow`）を
 正しく登録・ディスパッチすることを検証する。`HTTPFetchClient`・`StandardFTPClient`は
-本テストファイルでも一切直接インスタンス化しない（`commands._build_job_orchestrator`
-をFakeで差し替えることで代替する）。`DefaultJobOrchestrator`は
-`bootstrap.build_job_orchestrator()`経由の生成結果を型検証する目的でのみ`isinstance`
-チェックに使用する（テストコード自身が新規生成することはない）。
+本テストファイルでも一切直接インスタンス化しない（`commands.job_orchestrator_session`
+をFakeで差し替えることで代替する、Task22-8で`commands._build_job_orchestrator`から
+移行）。`DefaultJobOrchestrator`は`bootstrap.build_job_orchestrator()`経由の生成結果を
+型検証する目的でのみ`isinstance`チェックに使用する（テストコード自身が新規生成する
+ことはない）。
 """
 
-import sqlite3
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
 from pathlib import Path
@@ -18,11 +20,12 @@ from pathlib import Path
 import pytest
 
 from mod_personnel_db.cli import app, commands
+from mod_personnel_db.cli import bootstrap as bootstrap_module
 from mod_personnel_db.cli.bootstrap import CompositionSettings
 from mod_personnel_db.fetch import FetchRequest
 from mod_personnel_db.models import ExportArtifact, ExportFormat, LearningRecord, PdfId, PdfRecord
 from mod_personnel_db.pipeline import PipelineResult
-from mod_personnel_db.services import WorkflowResult
+from mod_personnel_db.services import FetchWorkItem, JobOrchestrator, WorkflowResult
 from mod_personnel_db.services.orchestrator import DefaultJobOrchestrator
 
 
@@ -33,7 +36,7 @@ class _RecordingJobOrchestrator:
     """
 
     fetch_and_stage_calls: list[tuple[FetchRequest, str, date]] = field(default_factory=list)
-    run_workflow_calls: list[tuple[list[object], ExportFormat, object, str | None]] = field(
+    run_workflow_calls: list[tuple[list[FetchWorkItem], ExportFormat, object, str | None]] = field(
         default_factory=list
     )
     fetch_and_stage_result: PdfId | None = PdfId(1)
@@ -61,7 +64,7 @@ class _RecordingJobOrchestrator:
 
     def run_workflow(
         self,
-        fetch_items: list[object],
+        fetch_items: list[FetchWorkItem],
         export_format: ExportFormat,
         export_destination: object,
         *,
@@ -72,6 +75,22 @@ class _RecordingJobOrchestrator:
         )
         assert self.workflow_result is not None
         return self.workflow_result
+
+
+def _fake_job_orchestrator_session(
+    orchestrator: JobOrchestrator,
+) -> object:
+    """`commands.job_orchestrator_session`を差し替えるためのFake Session Builder
+    （Task22-8）。旧`_build_job_orchestrator()`が返していた
+    `tuple[JobOrchestrator, sqlite3.Connection]`と異なり、`JobOrchestrator`
+    単体のみを`with`文でyieldする。
+    """
+
+    @contextmanager
+    def fake_session(_settings: CompositionSettings) -> Iterator[JobOrchestrator]:
+        yield orchestrator
+
+    return fake_session
 
 
 def _default_workflow_result() -> WorkflowResult:
@@ -99,8 +118,8 @@ def test_fetch_stage_command_calls_job_orchestrator_via_protocol(
     fake_orchestrator = _RecordingJobOrchestrator()
     monkeypatch.setattr(
         commands,
-        "_build_job_orchestrator",
-        lambda _settings: (fake_orchestrator, sqlite3.connect(":memory:")),
+        "job_orchestrator_session",
+        _fake_job_orchestrator_session(fake_orchestrator),
     )
 
     result = commands.fetch_stage_command(
@@ -121,8 +140,8 @@ def test_run_workflow_command_calls_job_orchestrator_via_protocol(
     fake_orchestrator = _RecordingJobOrchestrator(workflow_result=_default_workflow_result())
     monkeypatch.setattr(
         commands,
-        "_build_job_orchestrator",
-        lambda _settings: (fake_orchestrator, sqlite3.connect(":memory:")),
+        "job_orchestrator_session",
+        _fake_job_orchestrator_session(fake_orchestrator),
     )
 
     result = commands.run_workflow_command(
@@ -146,8 +165,8 @@ def test_run_workflow_command_defaults_to_empty_fetch_items_and_no_remote_path(
     fake_orchestrator = _RecordingJobOrchestrator(workflow_result=_default_workflow_result())
     monkeypatch.setattr(
         commands,
-        "_build_job_orchestrator",
-        lambda _settings: (fake_orchestrator, sqlite3.connect(":memory:")),
+        "job_orchestrator_session",
+        _fake_job_orchestrator_session(fake_orchestrator),
     )
 
     commands.run_workflow_command(settings, "csv", "/tmp/export.csv")
@@ -156,15 +175,14 @@ def test_run_workflow_command_defaults_to_empty_fetch_items_and_no_remote_path(
     assert remote_path is None
 
 
-# --- 「CLI→bootstrap呼び出し」: _build_job_orchestrator()がbootstrap.pyのBuilderのみ
-# を、期待した引数で1回ずつ呼び出すことを確認 ---
+# --- 「CLI→bootstrap呼び出し」: job_orchestrator_session()がbootstrap.pyのBuilderのみ
+# を、期待した引数で1回ずつ呼び出すことを確認（Task22-8で`commands._build_job_orchestrator`
+# から`bootstrap.job_orchestrator_session`へ移行） ---
 
 
 def _tracer(order: list[str], label: str, real: object) -> object:
     """`tests/unit/cli/test_bootstrap.py`の`_tracer`と同じ流儀: 呼び出しを`order`へ
-    記録してから`real`（元の関数）へ委譲するラッパーを返す。`getattr`経由で元の関数を
-    取得することで、`commands`モジュールの`__all__`に含まれない名前への静的な属性
-    アクセス（mypy --strictのno-implicit-reexport制約）を回避する。
+    記録してから`real`（元の関数）へ委譲するラッパーを返す。
     """
 
     def wrapper(*args: object, **kwargs: object) -> object:
@@ -182,18 +200,19 @@ _ORCHESTRATOR_GENERATION_ORDER_TARGETS = (
 )
 
 
-def test_build_job_orchestrator_helper_calls_each_bootstrap_builder_once(
+def test_job_orchestrator_session_calls_each_bootstrap_builder_once(
     settings: CompositionSettings, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     calls: list[str] = []
     for attr_name in _ORCHESTRATOR_GENERATION_ORDER_TARGETS:
-        real = getattr(commands, attr_name)
-        monkeypatch.setattr(commands, attr_name, _tracer(calls, attr_name, real))
+        real = getattr(bootstrap_module, attr_name)
+        monkeypatch.setattr(bootstrap_module, attr_name, _tracer(calls, attr_name, real))
 
-    orchestrator, connection = commands._build_job_orchestrator(settings)
-    connection.close()
+    # `commands.py`がimportしているのと同じオブジェクトを`bootstrap_module`側から
+    # 直接参照する（`bootstrap.py`の`__all__`に含まれるため静的アクセス可能）。
+    with bootstrap_module.job_orchestrator_session(settings) as orchestrator:
+        assert isinstance(orchestrator, DefaultJobOrchestrator)
 
-    assert isinstance(orchestrator, DefaultJobOrchestrator)
     assert calls == list(_ORCHESTRATOR_GENERATION_ORDER_TARGETS)
 
 
@@ -290,8 +309,8 @@ def test_main_fetch_stage_dispatches_and_formats_result(
     fake_orchestrator = _RecordingJobOrchestrator(fetch_and_stage_result=PdfId(42))
     monkeypatch.setattr(
         commands,
-        "_build_job_orchestrator",
-        lambda _settings: (fake_orchestrator, sqlite3.connect(":memory:")),
+        "job_orchestrator_session",
+        _fake_job_orchestrator_session(fake_orchestrator),
     )
 
     exit_code = app.main(
@@ -322,8 +341,8 @@ def test_main_fetch_stage_reports_duplicate_as_not_staged(
     fake_orchestrator = _RecordingJobOrchestrator(fetch_and_stage_result=None)
     monkeypatch.setattr(
         commands,
-        "_build_job_orchestrator",
-        lambda _settings: (fake_orchestrator, sqlite3.connect(":memory:")),
+        "job_orchestrator_session",
+        _fake_job_orchestrator_session(fake_orchestrator),
     )
 
     exit_code = app.main(
@@ -353,8 +372,8 @@ def test_main_fetch_stage_invalid_date_returns_error(
     fake_orchestrator = _RecordingJobOrchestrator()
     monkeypatch.setattr(
         commands,
-        "_build_job_orchestrator",
-        lambda _settings: (fake_orchestrator, sqlite3.connect(":memory:")),
+        "job_orchestrator_session",
+        _fake_job_orchestrator_session(fake_orchestrator),
     )
 
     exit_code = app.main(
@@ -386,8 +405,8 @@ def test_main_run_workflow_dispatches_and_formats_result(
     fake_orchestrator = _RecordingJobOrchestrator(workflow_result=_default_workflow_result())
     monkeypatch.setattr(
         commands,
-        "_build_job_orchestrator",
-        lambda _settings: (fake_orchestrator, sqlite3.connect(":memory:")),
+        "job_orchestrator_session",
+        _fake_job_orchestrator_session(fake_orchestrator),
     )
     destination = str(tmp_path / "export.json")
 

@@ -3,8 +3,9 @@
 `app.main()`（CLIの公開エントリポイント）のみを駆動し、Composition Root
 （`bootstrap.build_application()`/`build_job_runner()`）の生成からコマンド
 終了までを、実際のSQLiteファイル（`tmp_path`）を用いてend-to-endで確認する。
-`commands.build_application`/`build_job_runner`のmonkeypatchは一切行わない
-（Task12-3までの単体テストとは異なり、Composition Root自体を実際に動かす）。
+`bootstrap.build_application`/`build_job_runner`（Task22-8以降は`commands.py`が
+使う`application_session()`経由）のmonkeypatchは一切行わない（Task12-3までの
+単体テストとは異なり、Composition Root自体を実際に動かす）。
 """
 
 import sqlite3

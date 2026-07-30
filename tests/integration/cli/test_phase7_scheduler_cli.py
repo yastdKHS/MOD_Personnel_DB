@@ -9,8 +9,8 @@
 ため、本テストは`trigger_now()`がCLI経由で`JobId`を取得できること、
 未処理PDFが存在しない場合に`main()`が`NoPendingJobError`を正常系として扱い
 終了コード0を返すこと（Task18-4）、`list-schedule`が現時点では常に「0件」を
-表示すること（CLIから周期定義をまだ設定できないため、`_build_scheduler()`が
-空タプルを渡す既存契約）のみを確認する。
+表示すること（CLIから周期定義をまだ設定できないため、`scheduler_session()`
+（Task22-8、旧`_build_scheduler()`）が空タプルを渡す既存契約）のみを確認する。
 """
 
 from datetime import UTC, date, datetime
@@ -87,8 +87,9 @@ def test_list_schedule_reports_zero_upcoming_via_bootstrap(
     initialized_settings: CompositionSettings,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    """CLIからは周期定義をまだ設定できないため（`_build_scheduler()`が空タプルを
-    渡す既存契約）、`list-schedule`は常に0件を表示する。
+    """CLIからは周期定義をまだ設定できないため（`scheduler_session()`（Task22-8、
+    旧`_build_scheduler()`）が空タプルを渡す既存契約）、`list-schedule`は常に
+    0件を表示する。
     """
     exit_code = app.main([*_base_argv(initialized_settings), "list-schedule"])
 
