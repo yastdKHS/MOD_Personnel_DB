@@ -60,6 +60,21 @@ Task11-0は複数の代替案（CLI直接生成・Composition Root分離・Servi
 
 `repositories/sqlite/`の各クラス、`KnowledgeService`の具象実装、`LearningService`の具象実装は、`cli/`配下のComposition Root以外のいかなる箇所からも生成（インスタンス化）してはならない。これは既存の依存関係グラフ上の制約（`repositories/sqlite/`は`cli/`以外からimportされない）の自然な拡張であり、`KnowledgeService`/`LearningService`の具象実装についても同じ制約が及ぶことを本ADRで明文化する。
 
+### 6. Connectionライフサイクル管理もComposition Rootの責務に含む（Task22-8で実装、本節で追記）
+
+決定1〜5が定めるComposition Rootの責務は、依存オブジェクトの**生成**（インスタンス化）だけでなく、SQLite Connection（`sqlite3.Connection`）の**ライフサイクル管理**（`connect()`によるopenから`close()`によるcloseまで）も含む。この点はTask11-0時点（決定1〜5の確定時）では明文化されていなかったが、Task21〜Task22（`cli/bootstrap.py`・`cli/commands.py`のSQLite Connection管理改善）で実装が確定したため、本節で追記する。
+
+`bootstrap.py`は、Connectionのopen・依存オブジェクトの生成（決定2の責務チェーン）・呼び出し元へのyield・Connectionのcloseを1つのContext Managerとして束ねる**Session Builder**を提供する。
+
+- `application_session(settings) -> Iterator[Application]`
+- `job_orchestrator_session(settings) -> Iterator[JobOrchestrator]`
+- `scheduler_session(settings) -> Iterator[Scheduler]`
+- `version_dependencies_session(settings) -> Iterator[VersionDependencies]`
+
+いずれも内部で`connect()`→（決定2の生成順序に従った`build_xxx()`呼び出し）→`yield`→`finally: connection.close()`を実行する。呼び出し元（`cli/commands.py`）は`with bootstrap.xxx_session(settings) as yyy:`の形でのみ依存を取得し、`sqlite3.Connection`型・`repositories.sqlite.connect()`を一切扱わない（保持もcloseも行わない）。これにより、決定1が定める「生成はComposition Rootのみが行う」という原則が、Connectionという生成された資源の**解放**についても同様に一箇所（Composition Root）へ集約される。
+
+本節は決定1〜5が定める生成順序（決定2）・注入契約（決定3）・エントリポイント分割（決定4）のいずれも変更しない。Session Builderは、決定2の生成順序で構築済みの依存オブジェクトを、Connectionのopen/closeという既存のリソース管理と組み合わせて提供する実装パターンを明文化したものにすぎない。
+
 ## Architecture Contract
 
 以下を[`docs/architecture/architecture-contract.md`](../architecture/architecture-contract.md)の保証15として追加する（詳細は同ファイルを正とする）。
