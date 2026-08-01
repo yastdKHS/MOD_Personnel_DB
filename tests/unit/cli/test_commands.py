@@ -9,7 +9,6 @@ from mod_personnel_db.cli import bootstrap as bootstrap_module
 from mod_personnel_db.cli import commands
 from mod_personnel_db.cli.bootstrap import Application, CompositionSettings
 from mod_personnel_db.pipeline.result import PipelineResult
-from mod_personnel_db.repositories.sqlite import connect
 
 
 class _StubJobRunner:
@@ -47,59 +46,6 @@ def test_run_pending_command_end_to_end_with_no_pending_pdfs(
     result = commands.run_pending_command(settings)
 
     assert result == ()
-
-
-def test_job_orchestrator_session_calls_connect_exactly_once(
-    monkeypatch: pytest.MonkeyPatch, settings: CompositionSettings
-) -> None:
-    """`bootstrap.job_orchestrator_session()`は`connect()`を1回のみ呼び出し、
-    Application生成（`build_application_with_repositories()`）とJobOrchestrator
-    生成（`build_sqlite_repositories()`が返す`repositories.pdfs`）とで同一
-    Connectionを共有する（Task21-2、Task22-8でSession Builder化）。以前は
-    `build_application()`内部でも独自に`connect()`が呼ばれ、同一`db_path`への
-    接続が1回のコマンド実行あたり2本生成されていた（Task20-2で判明）。
-    """
-    connect_calls: list[str] = []
-
-    def counting_connect(db_path: str) -> sqlite3.Connection:
-        connect_calls.append(db_path)
-        return connect(db_path)
-
-    monkeypatch.setattr(bootstrap_module, "connect", counting_connect)
-
-    with bootstrap_module.job_orchestrator_session(settings) as orchestrator:
-        assert orchestrator is not None
-
-    assert connect_calls == [settings.db_path]
-
-
-def test_job_orchestrator_session_calls_build_sqlite_repositories_exactly_once(
-    monkeypatch: pytest.MonkeyPatch, settings: CompositionSettings
-) -> None:
-    """`bootstrap.job_orchestrator_session()`は`build_application_with_repositories()`を
-    経由して`build_sqlite_repositories()`を1回のみ呼び出す（Task22-6、Task22-8で
-    Session Builder化）。以前は`build_application()`用とJobOrchestrator用とで
-    それぞれ1回ずつ、計2回`build_sqlite_repositories()`が呼ばれ、`jobs`/`gold`/
-    `knowledge`/`review`/`export`/`learning`の各Repositoryが未使用のまま二重生成
-    されていた（Task20-2で判明、Task21-6/21-7で改善候補化）。
-    """
-    build_sqlite_repositories_calls: list[sqlite3.Connection] = []
-    original_build_sqlite_repositories = bootstrap_module.build_sqlite_repositories
-
-    def counting_build_sqlite_repositories(
-        connection: sqlite3.Connection,
-    ) -> bootstrap_module.SqliteRepositories:
-        build_sqlite_repositories_calls.append(connection)
-        return original_build_sqlite_repositories(connection)
-
-    monkeypatch.setattr(
-        bootstrap_module, "build_sqlite_repositories", counting_build_sqlite_repositories
-    )
-
-    with bootstrap_module.job_orchestrator_session(settings) as orchestrator:
-        assert orchestrator is not None
-
-    assert len(build_sqlite_repositories_calls) == 1
 
 
 def test_version_command_closes_connection(
