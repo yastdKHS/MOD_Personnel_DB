@@ -171,6 +171,8 @@
 
 **実現方法**: `cli/`配下のComposition Rootは、Repository具象生成→`KnowledgeService`生成→`LearningService`生成→`JobRunner`生成→CLI Command生成、の順序でのみ具象実装を構築する（[ADR-0046](../adr/0046-composition-root-dependency-injection-contract.md)）。`JobRunner`（`pipeline/job_runner.py`）は`JobRunnerRepositories`・`KnowledgeService`・`LearningService`・`ParserVersionId`・`layout_definitions`を個別にコンストラクタ注入で受け取るのみで、これらを自ら生成しない。`UnitOfWork`は`JobRunner`へは注入されない。
 
+**補足（Task22-8）**: Composition Rootの責務は、上記の具象実装の生成だけでなく、SQLite Connection（`sqlite3.Connection`）のライフサイクル管理（`connect()`によるopenから`close()`によるcloseまで）にも及ぶ（[ADR-0046](../adr/0046-composition-root-dependency-injection-contract.md)決定6）。`cli/bootstrap.py`はSession Builder（`application_session()`/`job_orchestrator_session()`/`scheduler_session()`/`version_dependencies_session()`、Context Manager方式）を提供し、`connect()`→依存生成→`yield`→`finally: connection.close()`をComposition Root内で完結させる。`cli/commands.py`はこれらのSession Builder経由でのみ依存を取得し、`sqlite3.Connection`型・`repositories.sqlite.connect()`を保持・closeしない。
+
 ---
 
 ## この契約の検証方法
