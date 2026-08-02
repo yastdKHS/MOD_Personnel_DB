@@ -196,6 +196,12 @@ class JobRunner:
         self._jobs.update_status(
             job_id, result.job.status, result.job.processed_count, result.job.failed_count
         )
+        if result.job.status == "succeeded" and pdf.id is not None:
+            # docs/database/schema.md「fetched→analyzed→parsed→validated」の終端状態。
+            # 正常終了PDFを`run_pending()`の対象（status='fetched'）から外し、
+            # 再実行時に`personnel_sections`のUNIQUE制約へ抵触するのを防ぐ
+            # （失敗時は既存どおり更新しない。再試行設計は本変更のスコープ外）。
+            self._pdfs.update_status(pdf.id, "validated")
         return result
 
     def run_pending(self) -> tuple[PipelineResult, ...]:
@@ -270,7 +276,16 @@ class JobRunner:
             self._record_learning_failure(norm_result.error)
             return _Outcome(norm_result.events, 0, 1, norm_result.error)
 
-        normalized_record = cast("NormalizationResult", norm_output).records[0]
+        normalization_result = cast("NormalizationResult", norm_output)
+        if not normalization_result.records:
+            # 正規化信頼度が閾値未満の場合、Normalizerは空のrecordsを返す
+            # （PipelineExceptionではない正常な結果。tests/integration/golden/
+            # test_golden.py::_serialize_recordの`if not norm_result.records`と
+            # 同じ判定）。candidate_recordsは`add_raw`済みでvalidation_status=
+            # 'pending'のまま残り、レビュー対象として扱われる。
+            return _Outcome(norm_result.events, 1, 0, None)
+
+        normalized_record = normalization_result.records[0]
         self._candidates.attach_normalized(candidate_id, normalized_record)
 
         val_result, val_output = _run_stages(

@@ -41,6 +41,7 @@ class _FailureConfig:
 
     sections: frozenset[int] = frozenset()
     normalizer_records: frozenset[int] = frozenset()
+    normalizer_empty_records: frozenset[int] = frozenset()
     validator_records: frozenset[int] = frozenset()
 
 
@@ -72,7 +73,9 @@ def _patch_stages(
     monkeypatch.setattr(
         job_runner_module,
         "Normalizer",
-        make_normalizer_stub_class(calls, failures.normalizer_records),
+        make_normalizer_stub_class(
+            calls, failures.normalizer_records, failures.normalizer_empty_records
+        ),
     )
     monkeypatch.setattr(
         job_runner_module, "Validator", make_validator_stub_class(calls, failures.validator_records)
@@ -405,6 +408,78 @@ def test_run_pending_processes_all_pending_pdfs(monkeypatch: pytest.MonkeyPatch)
 
     assert len(results) == 3
     assert len(jobs.jobs) == 3
+
+
+def test_run_for_pdf_updates_pdf_status_to_validated_on_success(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Task25-8: 正常終了時、docs/database/schema.mdが定める終端状態
+    `validated`へ`PDFRepository.update_status()`を通じて更新される。
+    `run_pending()`の再実行時に同一PDFが再選定されUNIQUE制約に抵触する
+    問題（Task25-6/25-7）を解消するための変更。"""
+    calls: list[str] = []
+    _patch_stages(monkeypatch, calls, section_count=1, records_per_section={0: 1})
+    pdfs = StubPDFRepository()
+    runner, *_ = _make_job_runner(pdfs=pdfs)
+    pdf = _make_pdf()
+
+    result = runner.run_for_pdf(pdf)
+
+    assert result.succeeded is True
+    assert pdfs.status_updates == [(pdf.id, "validated")]
+
+
+def test_run_for_pdf_does_not_update_pdf_status_on_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """失敗時の既存挙動（`pdfs.status`を更新しない）は変更しない（Task25-8のスコープ外）。"""
+    calls: list[str] = []
+    _patch_stages(
+        monkeypatch,
+        calls,
+        section_count=1,
+        records_per_section={0: 1},
+        failures=_FailureConfig(normalizer_records=frozenset({0})),
+    )
+    pdfs = StubPDFRepository()
+    runner, *_ = _make_job_runner(pdfs=pdfs)
+
+    result = runner.run_for_pdf(_make_pdf())
+
+    assert result.succeeded is False
+    assert pdfs.status_updates == []
+
+
+def test_normalizer_empty_records_does_not_raise_and_pdf_status_still_updates(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Task25-5で追加したガード（Normalizerが正規化信頼度不足で空`records`を
+    返した場合にクラッシュしない）の単体テスト。Task25-7で不足が確認されていた
+    観点。空`records`はPipelineExceptionではないため、run_for_pdf()は成功として
+    扱い、`attach_normalized`/`update_validation`はスキップされ、`pdfs.status`は
+    通常どおり`validated`へ更新される。"""
+    calls: list[str] = []
+    _patch_stages(
+        monkeypatch,
+        calls,
+        section_count=1,
+        records_per_section={0: 1},
+        failures=_FailureConfig(normalizer_empty_records=frozenset({0})),
+    )
+    candidates = StubCandidateRepository()
+    pdfs = StubPDFRepository()
+    runner, *_ = _make_job_runner(candidates=candidates, pdfs=pdfs)
+    pdf = _make_pdf()
+
+    result = runner.run_for_pdf(pdf)
+
+    assert result.error is None
+    assert result.succeeded is True
+    assert result.job.processed_count == 1
+    assert result.job.failed_count == 0
+    assert candidates.attach_normalized_calls == []
+    assert candidates.update_validation_calls == []
+    assert pdfs.status_updates == [(pdf.id, "validated")]
 
 
 def test_get_job_delegates_to_job_repository() -> None:

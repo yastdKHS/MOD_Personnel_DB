@@ -105,9 +105,15 @@ def make_field_extractor_stub_class(
 
 
 def make_normalizer_stub_class(
-    calls: list[str], failing_record_indexes: frozenset[int] = frozenset()
+    calls: list[str],
+    failing_record_indexes: frozenset[int] = frozenset(),
+    empty_record_indexes: frozenset[int] = frozenset(),
 ) -> type:
-    """入力`RawRecord.record_index`に応じて失敗する、または`NormalizationResult`を返すStub。"""
+    """入力`RawRecord.record_index`に応じて失敗する、正規化信頼度不足で空の
+    `NormalizationResult`を返す（`empty_record_indexes`）、または通常の
+    `NormalizationResult`を返すStub。空`records`は`PipelineException`を伴わない
+    正常な低信頼度結果であり、失敗（例外送出）とは区別する。
+    """
 
     class _StubNormalizer:
         def __init__(self, *args: object, **kwargs: object) -> None:
@@ -122,6 +128,8 @@ def make_normalizer_stub_class(
                     context=context,  # type: ignore[arg-type]
                     message=f"normalizer failed for record {raw.record_index}",
                 )
+            if raw.record_index in empty_record_indexes:
+                return NormalizationResult(records=(), candidates=(), confidence=_CONFIDENCE)
             normalized = make_normalized_record(raw)
             return NormalizationResult(records=(normalized,), candidates=(), confidence=_CONFIDENCE)
 
@@ -259,6 +267,7 @@ class StubPDFRepository:
     def __init__(self, pending: tuple[PdfRecord, ...] = ()) -> None:
         self._pending = pending
         self._next_id = 1
+        self.status_updates: list[tuple[PdfId, str]] = []
 
     def add(self, pdf: PdfRecord) -> PdfId:
         pdf_id = PdfId(self._next_id)
@@ -274,7 +283,7 @@ class StubPDFRepository:
         return None
 
     def update_status(self, pdf_id: PdfId, status: str) -> None:
-        del pdf_id, status
+        self.status_updates.append((pdf_id, status))
 
     def list_by_status(self, status: str) -> tuple[PdfRecord, ...]:
         return tuple(p for p in self._pending if p.status == status)
