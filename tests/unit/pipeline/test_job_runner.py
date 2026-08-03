@@ -429,10 +429,13 @@ def test_run_for_pdf_updates_pdf_status_to_validated_on_success(
     assert pdfs.status_updates == [(pdf.id, "validated")]
 
 
-def test_run_for_pdf_does_not_update_pdf_status_on_failure(
+def test_run_for_pdf_updates_pdf_status_to_failed_on_failure(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """失敗時の既存挙動（`pdfs.status`を更新しない）は変更しない（Task25-8のスコープ外）。"""
+    """Task27: 失敗終了時、docs/database/schema.mdが定める終端状態`failed`へ
+    `PDFRepository.update_status()`を通じて更新される（成功時`validated`
+    分岐と対称構造）。`run_pending()`が同一の失敗PDFを無限に再選定し
+    続ける問題（Task25-8レビューMinor指摘）を解消するための変更。"""
     calls: list[str] = []
     _patch_stages(
         monkeypatch,
@@ -443,11 +446,12 @@ def test_run_for_pdf_does_not_update_pdf_status_on_failure(
     )
     pdfs = StubPDFRepository()
     runner, *_ = _make_job_runner(pdfs=pdfs)
+    pdf = _make_pdf()
 
-    result = runner.run_for_pdf(_make_pdf())
+    result = runner.run_for_pdf(pdf)
 
     assert result.succeeded is False
-    assert pdfs.status_updates == []
+    assert pdfs.status_updates == [(pdf.id, "failed")]
 
 
 def test_normalizer_empty_records_does_not_raise_and_pdf_status_still_updates(

@@ -199,9 +199,15 @@ class JobRunner:
         if result.job.status == "succeeded" and pdf.id is not None:
             # docs/database/schema.md「fetched→analyzed→parsed→validated」の終端状態。
             # 正常終了PDFを`run_pending()`の対象（status='fetched'）から外し、
-            # 再実行時に`personnel_sections`のUNIQUE制約へ抵触するのを防ぐ
-            # （失敗時は既存どおり更新しない。再試行設計は本変更のスコープ外）。
+            # 再実行時に`personnel_sections`のUNIQUE制約へ抵触するのを防ぐ。
             self._pdfs.update_status(pdf.id, "validated")
+        elif result.job.status == "failed" and pdf.id is not None:
+            # docs/database/schema.md「失敗時はfailed」の終端状態（Task27、Task25-8
+            # レビューMinor指摘への対応）。失敗PDFも`run_pending()`の対象（status=
+            # 'fetched'）から外し、同一PDFが無限に再選定され続けるのを防ぐ
+            # （既にcommit済みのpersonnel_sections/candidate_recordsを安全に
+            # 再処理する仕組み自体は本変更のスコープ外）。
+            self._pdfs.update_status(pdf.id, "failed")
         return result
 
     def run_pending(self) -> tuple[PipelineResult, ...]:
