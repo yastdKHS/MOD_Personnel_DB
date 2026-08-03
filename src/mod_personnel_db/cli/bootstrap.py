@@ -96,6 +96,7 @@ from mod_personnel_db.repositories.sqlite import (
     SqlitePdfRepository,
     SqliteReviewRepository,
     connect,
+    sync_layout_definitions,
 )
 from mod_personnel_db.review.service import RepositoryReviewService
 from mod_personnel_db.services import (
@@ -267,6 +268,10 @@ def build_application_with_repositories(
     )
     candidates = SqliteCandidateRepository(connection, parser_version_id)
     layout_definitions = load_layout_definitions(settings.layouts_root)
+    # Task26: layouts/配下のmanifest.yamlをlayoutsテーブルへ自動登録する
+    # （Task25-7で確認した、これまで登録経路が存在しなかったギャップの恒久対応）。
+    # SqliteCandidateRepository._resolve_layout_id()より前に実行する必要がある。
+    sync_layout_definitions(connection, settings.layouts_root, layout_definitions)
     job_runner_repositories = JobRunnerRepositories(
         pdfs=repositories.pdfs,
         jobs=repositories.jobs,
