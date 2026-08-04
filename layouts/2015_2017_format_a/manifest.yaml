@@ -1,0 +1,68 @@
+# layouts/2015_2017_format_a/manifest.yaml
+#
+# Task25-3で追加したLayout Definition。Task25-2の実データ観測（各年3件、
+# runtime/staged_pdfs/配下、257件の実データPDFから抽出したサンプル）に基づく。
+# 2015〜2017年系の一部PDFで観測された「Header 1行目が『防衛省発令』の定型句、
+# Footer最終行が『以上』を含む定型句」という様式を対象とする（観測範囲では
+# 2015_0101a.pdf・2016_0131b.pdf・2016_0401a.pdf・2016_0401b.pdf・
+# 2017_0701a.pdfの5件がこのパターンに一致した。同じ2015〜2017年でも、
+# このパターンに一致しないPDF（個別の人事文言がHeaderに現れる等）も
+# 観測されており、本Layoutは「2015〜2017年の全PDF」ではなく「上記の
+# 定型句パターンに一致するPDFのみ」を対象とする）。
+#
+# Header判定の設計上の制約: LayoutDetectorのheader_pattern/footer_pattern
+# ルールは単純な部分文字列一致（`_pattern_match`、src/mod_personnel_db/
+# layout/detector.py）であり、正規化・空白除去は行わない。Task25-2の観測で、
+# 実データの「防衛省発令」表記には複数の空白パターン（半角スペース複数、
+# 全角スペース　等、文字間隔が不規則）が存在することが判明したため、
+# 「防衛省発令」を1つの連続した文字列として照合するルールでは表記ゆれを
+# 吸収できない。そのため本Layoutでは、5文字（防・衛・省・発・令）を
+# それぞれ独立したheader_patternルールとして定義する。個々の文字は
+# 空白の有無に関わらず単独では変化しないため、この方式であれば
+# `_pattern_match`のロジック自体を変更せずに表記ゆれへ対応できる。
+# ただし単一文字の一致は特異性が低いため、5ルール全てが揃って初めて
+# header関連の重み（0.35）を満点で得られるよう、1ルールあたりの重みを
+# 0.07（5ルール合計0.35）に抑えている。
+#
+# Font判定について: Task25-2の観測で、PDFのBaseFont名取得において
+# 文字化け（例: "俵俽柧挬"）や埋め込みフォントのサブセットタグ問題が
+# 確認されたため、Font条件を過度に限定しない方針とする。対象5件は
+# いずれも"Century"を含むフォントを持つことが観測されているが、
+# 重みは0.15に留め、Font情報が取得できない・異なる場合でも他のルール
+# （Header・Footer・min-pages）で一定のスコアを確保できるようにしている。
+
+era_id: 2015_2017_format_a
+version: 1
+rules:
+  - rule_id: header-boilerplate-char-bou
+    kind: header_pattern
+    value: 防
+    weight: 0.07
+  - rule_id: header-boilerplate-char-ei
+    kind: header_pattern
+    value: 衛
+    weight: 0.07
+  - rule_id: header-boilerplate-char-shou
+    kind: header_pattern
+    value: 省
+    weight: 0.07
+  - rule_id: header-boilerplate-char-hatsu
+    kind: header_pattern
+    value: 発
+    weight: 0.07
+  - rule_id: header-boilerplate-char-rei
+    kind: header_pattern
+    value: 令
+    weight: 0.07
+  - rule_id: footer-ijou
+    kind: footer_pattern
+    value: 以上
+    weight: 0.35
+  - rule_id: min-pages
+    kind: min_page_count
+    value: "1"
+    weight: 0.15
+  - rule_id: font-century
+    kind: font_name_contains
+    value: Century
+    weight: 0.15

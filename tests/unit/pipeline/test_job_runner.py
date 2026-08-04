@@ -3,8 +3,11 @@ from datetime import UTC, date, datetime
 
 import pytest
 
+from mod_personnel_db.document import DocumentAnalyzerError
 from mod_personnel_db.models import Job, ParserVersionId, PdfId, PdfRecord, PipelineStageName
+from mod_personnel_db.normalizers import NormalizerError
 from mod_personnel_db.pipeline import job_runner as job_runner_module
+from mod_personnel_db.pipeline.exceptions import PipelineException
 from mod_personnel_db.pipeline.job_runner import JobRunner, JobRunnerRepositories
 from mod_personnel_db.pipeline.runner import PipelineRunner
 
@@ -16,6 +19,7 @@ from ._job_runner_stubs import (
     StubPDFRepository,
     make_field_extractor_stub_class,
     make_normalizer_stub_class,
+    make_raising_stage_stub_class,
     make_section_parser_stub_class,
     make_stub_stage_class,
     make_validator_stub_class,
@@ -41,6 +45,7 @@ class _FailureConfig:
 
     sections: frozenset[int] = frozenset()
     normalizer_records: frozenset[int] = frozenset()
+    normalizer_empty_records: frozenset[int] = frozenset()
     validator_records: frozenset[int] = frozenset()
 
 
@@ -72,7 +77,9 @@ def _patch_stages(
     monkeypatch.setattr(
         job_runner_module,
         "Normalizer",
-        make_normalizer_stub_class(calls, failures.normalizer_records),
+        make_normalizer_stub_class(
+            calls, failures.normalizer_records, failures.normalizer_empty_records
+        ),
     )
     monkeypatch.setattr(
         job_runner_module, "Validator", make_validator_stub_class(calls, failures.validator_records)
@@ -405,6 +412,178 @@ def test_run_pending_processes_all_pending_pdfs(monkeypatch: pytest.MonkeyPatch)
 
     assert len(results) == 3
     assert len(jobs.jobs) == 3
+
+
+def test_run_for_pdf_updates_pdf_status_to_validated_on_success(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Task25-8: 正常終了時、docs/database/schema.mdが定める終端状態
+    `validated`へ`PDFRepository.update_status()`を通じて更新される。
+    `run_pending()`の再実行時に同一PDFが再選定されUNIQUE制約に抵触する
+    問題（Task25-6/25-7）を解消するための変更。"""
+    calls: list[str] = []
+    _patch_stages(monkeypatch, calls, section_count=1, records_per_section={0: 1})
+    pdfs = StubPDFRepository()
+    runner, *_ = _make_job_runner(pdfs=pdfs)
+    pdf = _make_pdf()
+
+    result = runner.run_for_pdf(pdf)
+
+    assert result.succeeded is True
+    assert pdfs.status_updates == [(pdf.id, "validated")]
+
+
+def test_run_for_pdf_updates_pdf_status_to_failed_on_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Task27: 失敗終了時、docs/database/schema.mdが定める終端状態`failed`へ
+    `PDFRepository.update_status()`を通じて更新される（成功時`validated`
+    分岐と対称構造）。`run_pending()`が同一の失敗PDFを無限に再選定し
+    続ける問題（Task25-8レビューMinor指摘）を解消するための変更。"""
+    calls: list[str] = []
+    _patch_stages(
+        monkeypatch,
+        calls,
+        section_count=1,
+        records_per_section={0: 1},
+        failures=_FailureConfig(normalizer_records=frozenset({0})),
+    )
+    pdfs = StubPDFRepository()
+    runner, *_ = _make_job_runner(pdfs=pdfs)
+    pdf = _make_pdf()
+
+    result = runner.run_for_pdf(pdf)
+
+    assert result.succeeded is False
+    assert pdfs.status_updates == [(pdf.id, "failed")]
+
+
+def test_normalizer_empty_records_does_not_raise_and_pdf_status_still_updates(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Task25-5で追加したガード（Normalizerが正規化信頼度不足で空`records`を
+    返した場合にクラッシュしない）の単体テスト。Task25-7で不足が確認されていた
+    観点。空`records`はPipelineExceptionではないため、run_for_pdf()は成功として
+    扱い、`attach_normalized`/`update_validation`はスキップされ、`pdfs.status`は
+    通常どおり`validated`へ更新される。"""
+    calls: list[str] = []
+    _patch_stages(
+        monkeypatch,
+        calls,
+        section_count=1,
+        records_per_section={0: 1},
+        failures=_FailureConfig(normalizer_empty_records=frozenset({0})),
+    )
+    candidates = StubCandidateRepository()
+    pdfs = StubPDFRepository()
+    runner, *_ = _make_job_runner(candidates=candidates, pdfs=pdfs)
+    pdf = _make_pdf()
+
+    result = runner.run_for_pdf(pdf)
+
+    assert result.error is None
+    assert result.succeeded is True
+    assert result.job.processed_count == 1
+    assert result.job.failed_count == 0
+    assert candidates.attach_normalized_calls == []
+    assert candidates.update_validation_calls == []
+    assert pdfs.status_updates == [(pdf.id, "validated")]
+
+
+def test_document_analyzer_error_is_absorbed_and_marks_job_and_pdf_failed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Task29: `PipelineException`を継承しないStage固有例外（`DocumentAnalyzerError`）が
+    `_run_stages()`境界で吸収され、`PipelineException`捕捉時と同じ`Job.status='failed'`/
+    `Pdf.status='failed'`へ到達することを検証する（Task28調査で判明した未捕捉クラッシュの解消）。
+    """
+    calls: list[str] = []
+    _patch_stages(monkeypatch, calls, section_count=1, records_per_section={0: 1})
+    monkeypatch.setattr(
+        job_runner_module,
+        "DocumentAnalyzer",
+        make_raising_stage_stub_class(
+            "document_analyzer", calls, DocumentAnalyzerError("PDF file not found")
+        ),
+    )
+    pdfs = StubPDFRepository()
+    runner, jobs, *_ = _make_job_runner(pdfs=pdfs)
+    pdf = _make_pdf()
+
+    result = runner.run_for_pdf(pdf)
+
+    assert result.succeeded is False
+    assert isinstance(result.error, PipelineException)
+    assert result.error.stage_name == "document_analyzer"
+    assert result.job.status == "failed"
+    assert jobs.updates[0][1] == "failed"
+    assert pdfs.status_updates == [(pdf.id, "failed")]
+
+
+def test_normalizer_error_is_absorbed_with_correct_stage_name(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Task29: 単一Stage呼び出し（`_run_stages()`の1件版）でもStage固有例外
+    （`NormalizerError`）が正しい`stage_name`で吸収されることを検証する。"""
+    calls: list[str] = []
+    _patch_stages(monkeypatch, calls, section_count=1, records_per_section={0: 1})
+    monkeypatch.setattr(
+        job_runner_module,
+        "Normalizer",
+        make_raising_stage_stub_class("normalizer", calls, NormalizerError("boom")),
+    )
+    pdfs = StubPDFRepository()
+    runner, jobs, *_ = _make_job_runner(pdfs=pdfs)
+    pdf = _make_pdf()
+
+    result = runner.run_for_pdf(pdf)
+
+    assert result.succeeded is False
+    assert isinstance(result.error, PipelineException)
+    assert result.error.stage_name == "normalizer"
+    assert jobs.updates[0][1] == "failed"
+    assert pdfs.status_updates == [(pdf.id, "failed")]
+
+
+def test_repository_error_from_add_section_is_absorbed(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Task29: `CandidateRepository.add_section()`が送出する`RepositoryError`
+    （`_run_stages()`の外側、Task28調査で判明した未捕捉経路）が吸収され、
+    `Job.status='failed'`/`Pdf.status='failed'`へ到達することを検証する。"""
+    calls: list[str] = []
+    _patch_stages(monkeypatch, calls, section_count=1, records_per_section={0: 1})
+    candidates = StubCandidateRepository(add_section_should_fail=True)
+    pdfs = StubPDFRepository()
+    runner, jobs, *_ = _make_job_runner(candidates=candidates, pdfs=pdfs)
+    pdf = _make_pdf()
+
+    result = runner.run_for_pdf(pdf)
+
+    assert result.succeeded is False
+    assert isinstance(result.error, PipelineException)
+    assert result.error.stage_name == "section_parser"
+    assert jobs.updates[0][1] == "failed"
+    assert pdfs.status_updates == [(pdf.id, "failed")]
+    assert candidates.add_raw_calls == []
+
+
+def test_repository_error_from_add_raw_is_absorbed(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Task29: `CandidateRepository.add_raw()`が送出する`RepositoryError`が
+    吸収され、`field_extractor`として記録されることを検証する。"""
+    calls: list[str] = []
+    _patch_stages(monkeypatch, calls, section_count=1, records_per_section={0: 1})
+    candidates = StubCandidateRepository(add_raw_should_fail=True)
+    pdfs = StubPDFRepository()
+    runner, jobs, *_ = _make_job_runner(candidates=candidates, pdfs=pdfs)
+    pdf = _make_pdf()
+
+    result = runner.run_for_pdf(pdf)
+
+    assert result.succeeded is False
+    assert isinstance(result.error, PipelineException)
+    assert result.error.stage_name == "field_extractor"
+    assert jobs.updates[0][1] == "failed"
+    assert pdfs.status_updates == [(pdf.id, "failed")]
+    assert candidates.add_section_calls != []
 
 
 def test_get_job_delegates_to_job_repository() -> None:

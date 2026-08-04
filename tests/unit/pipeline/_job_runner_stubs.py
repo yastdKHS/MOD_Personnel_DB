@@ -33,6 +33,7 @@ from mod_personnel_db.models import (
     ValidationRuleSet,
 )
 from mod_personnel_db.pipeline.exceptions import PipelineException
+from mod_personnel_db.utils.exceptions import RepositoryError
 
 _DEFAULT_AS_OF = date(2026, 1, 1)
 _CONFIDENCE = Confidence(score=1.0, band=ConfidenceBand.VERIFIED)
@@ -57,6 +58,25 @@ def make_stub_stage_class(name: str, calls: list[str], output: object = None) ->
             return output if output is not None else input
 
     _StubStage.__name__ = f"Stub{name}"
+    return _StubStage
+
+
+def make_raising_stage_stub_class(name: str, calls: list[str], exc: Exception) -> type:
+    """`run()`呼び出し時に`exc`を送出するStub。Task29: `PipelineException`を
+    継承しない`MODPersonnelDBError`系統（Stage固有例外）がJobRunner境界で
+    吸収されることを検証するために使う。
+    """
+
+    class _StubStage:
+        def __init__(self, *args: object, **kwargs: object) -> None:
+            del args, kwargs
+
+        def run(self, context: object, input: object) -> object:
+            del context, input
+            calls.append(name)
+            raise exc
+
+    _StubStage.__name__ = f"Raising{name}"
     return _StubStage
 
 
@@ -105,9 +125,15 @@ def make_field_extractor_stub_class(
 
 
 def make_normalizer_stub_class(
-    calls: list[str], failing_record_indexes: frozenset[int] = frozenset()
+    calls: list[str],
+    failing_record_indexes: frozenset[int] = frozenset(),
+    empty_record_indexes: frozenset[int] = frozenset(),
 ) -> type:
-    """入力`RawRecord.record_index`に応じて失敗する、または`NormalizationResult`を返すStub。"""
+    """入力`RawRecord.record_index`に応じて失敗する、正規化信頼度不足で空の
+    `NormalizationResult`を返す（`empty_record_indexes`）、または通常の
+    `NormalizationResult`を返すStub。空`records`は`PipelineException`を伴わない
+    正常な低信頼度結果であり、失敗（例外送出）とは区別する。
+    """
 
     class _StubNormalizer:
         def __init__(self, *args: object, **kwargs: object) -> None:
@@ -122,6 +148,8 @@ def make_normalizer_stub_class(
                     context=context,  # type: ignore[arg-type]
                     message=f"normalizer failed for record {raw.record_index}",
                 )
+            if raw.record_index in empty_record_indexes:
+                return NormalizationResult(records=(), candidates=(), confidence=_CONFIDENCE)
             normalized = make_normalized_record(raw)
             return NormalizationResult(records=(normalized,), candidates=(), confidence=_CONFIDENCE)
 
@@ -259,6 +287,7 @@ class StubPDFRepository:
     def __init__(self, pending: tuple[PdfRecord, ...] = ()) -> None:
         self._pending = pending
         self._next_id = 1
+        self.status_updates: list[tuple[PdfId, str]] = []
 
     def add(self, pdf: PdfRecord) -> PdfId:
         pdf_id = PdfId(self._next_id)
@@ -274,7 +303,7 @@ class StubPDFRepository:
         return None
 
     def update_status(self, pdf_id: PdfId, status: str) -> None:
-        del pdf_id, status
+        self.status_updates.append((pdf_id, status))
 
     def list_by_status(self, status: str) -> tuple[PdfRecord, ...]:
         return tuple(p for p in self._pending if p.status == status)
@@ -343,10 +372,14 @@ class StubCandidateRepository:
     update_validation_calls: list[tuple[CandidateId, ValidationResult]] = field(
         default_factory=list
     )
+    add_section_should_fail: bool = False
+    add_raw_should_fail: bool = False
     _next_section_id: int = 1
     _next_candidate_id: int = 1
 
     def add_section(self, section: PersonnelSection) -> PersonnelSectionId:
+        if self.add_section_should_fail:
+            raise RepositoryError("add_section failed")
         self.add_section_calls.append(section)
         if self.order_log is not None:
             self.order_log.append("add_section")
@@ -359,6 +392,8 @@ class StubCandidateRepository:
         return None
 
     def add_raw(self, section_id: PersonnelSectionId, record: RawRecord) -> CandidateId:
+        if self.add_raw_should_fail:
+            raise RepositoryError("add_raw failed")
         self.add_raw_calls.append((section_id, record))
         if self.order_log is not None:
             self.order_log.append("add_raw")

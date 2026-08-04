@@ -11,6 +11,7 @@ from mod_personnel_db.repositories.sqlite.export import SqliteExportRepository
 from mod_personnel_db.repositories.sqlite.gold import SqliteGoldRepository
 from mod_personnel_db.repositories.sqlite.job import SqliteJobRepository
 from mod_personnel_db.repositories.sqlite.knowledge import SqliteKnowledgeRepository
+from mod_personnel_db.repositories.sqlite.layout_sync import sync_layout_definitions
 from mod_personnel_db.repositories.sqlite.learning import SqliteLearningRepository
 from mod_personnel_db.repositories.sqlite.pdf import SqlitePdfRepository
 from mod_personnel_db.repositories.sqlite.review import SqliteReviewRepository
@@ -26,4 +27,5 @@ __all__ = [
     "SqliteReviewRepository",
     "apply_schema",
     "connect",
+    "sync_layout_definitions",
 ]

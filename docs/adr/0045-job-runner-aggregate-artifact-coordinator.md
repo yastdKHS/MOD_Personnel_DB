@@ -58,6 +58,12 @@ Phase3 Task10-3.0（Architecture Design Review）で、この欠陥を解消す�
 
 `JobRunner`のコンストラクタが受け取る依存の型（`KnowledgeService`, `LearningService`, `JobRunnerRepositories`等のProtocol型）は本ADRによって変更しない。`cli/`（合成ルート）・`services/`から見た`JobRunner`の外部契約（`docs/api/interfaces.md#jobrunner`のProtocol、`run_for_pdf`/`run_pending`/`get_job`）にも変更はなく、本ADRは`JobRunner`内部の`PipelineRunner`呼び出し方法にのみ関わる。
 
+### 7. 例外吸収責務（Task29追記）
+
+Task27〜28の調査で、各Stage固有例外（`DocumentAnalyzerError`等）が`PipelineException`を継承しない`MODPersonnelDBError`の兄弟クラスであるため、`PipelineRunner`（`except PipelineException`のみ捕捉、ADR-0044）を素通りして未捕捉のまま伝播することが判明した。同様に`CandidateRepository`の永続化呼び出し（`add_section`等、`_run_stages()`の外側）が送出する`RepositoryError`も未捕捉のまま伝播していた。
+
+本ADRの実行モデル（`JobRunner`が`PipelineRunner`を必要な回数呼び出すCoordinator）を変更せず、`JobRunner`の呼び出し境界（`_run_stages()`ヘルパー、および`CandidateRepository`呼び出し箇所）にこれらの例外を吸収する責務を追加する。`PipelineRunner`自身（`except PipelineException`のみ）・各Stage実装・各Stage例外クラスの定義はいずれも変更しない。吸収した例外は`PipelineException`捕捉時と同じ`PipelineResult`形状（`stage_name`付き）へ変換し、`Job.status='failed'`・`Pdf.status='failed'`（Task27）へ到達させる。
+
 ## 検討した代替案
 
 - **A案: `PipelineRunner`自身が集約Artifactを検知して内部展開する**: `PipelineRunner`が特定の出力型（`SectionParseResult`等）を認識し、内部でループ処理する案。却下した。`PipelineRunner`が特定のドメイン型を知る必要が生じ、ADR-0044が確立した「`PipelineRunner`は`PipelineStage[object, object]`として型消去された、ドメイン知識を持たない実行機である」という設計原則と正面から矛盾するため。
