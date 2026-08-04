@@ -3,8 +3,11 @@ from datetime import UTC, date, datetime
 
 import pytest
 
+from mod_personnel_db.document import DocumentAnalyzerError
 from mod_personnel_db.models import Job, ParserVersionId, PdfId, PdfRecord, PipelineStageName
+from mod_personnel_db.normalizers import NormalizerError
 from mod_personnel_db.pipeline import job_runner as job_runner_module
+from mod_personnel_db.pipeline.exceptions import PipelineException
 from mod_personnel_db.pipeline.job_runner import JobRunner, JobRunnerRepositories
 from mod_personnel_db.pipeline.runner import PipelineRunner
 
@@ -16,6 +19,7 @@ from ._job_runner_stubs import (
     StubPDFRepository,
     make_field_extractor_stub_class,
     make_normalizer_stub_class,
+    make_raising_stage_stub_class,
     make_section_parser_stub_class,
     make_stub_stage_class,
     make_validator_stub_class,
@@ -484,6 +488,102 @@ def test_normalizer_empty_records_does_not_raise_and_pdf_status_still_updates(
     assert candidates.attach_normalized_calls == []
     assert candidates.update_validation_calls == []
     assert pdfs.status_updates == [(pdf.id, "validated")]
+
+
+def test_document_analyzer_error_is_absorbed_and_marks_job_and_pdf_failed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Task29: `PipelineException`を継承しないStage固有例外（`DocumentAnalyzerError`）が
+    `_run_stages()`境界で吸収され、`PipelineException`捕捉時と同じ`Job.status='failed'`/
+    `Pdf.status='failed'`へ到達することを検証する（Task28調査で判明した未捕捉クラッシュの解消）。
+    """
+    calls: list[str] = []
+    _patch_stages(monkeypatch, calls, section_count=1, records_per_section={0: 1})
+    monkeypatch.setattr(
+        job_runner_module,
+        "DocumentAnalyzer",
+        make_raising_stage_stub_class(
+            "document_analyzer", calls, DocumentAnalyzerError("PDF file not found")
+        ),
+    )
+    pdfs = StubPDFRepository()
+    runner, jobs, *_ = _make_job_runner(pdfs=pdfs)
+    pdf = _make_pdf()
+
+    result = runner.run_for_pdf(pdf)
+
+    assert result.succeeded is False
+    assert isinstance(result.error, PipelineException)
+    assert result.error.stage_name == "document_analyzer"
+    assert result.job.status == "failed"
+    assert jobs.updates[0][1] == "failed"
+    assert pdfs.status_updates == [(pdf.id, "failed")]
+
+
+def test_normalizer_error_is_absorbed_with_correct_stage_name(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Task29: 単一Stage呼び出し（`_run_stages()`の1件版）でもStage固有例外
+    （`NormalizerError`）が正しい`stage_name`で吸収されることを検証する。"""
+    calls: list[str] = []
+    _patch_stages(monkeypatch, calls, section_count=1, records_per_section={0: 1})
+    monkeypatch.setattr(
+        job_runner_module,
+        "Normalizer",
+        make_raising_stage_stub_class("normalizer", calls, NormalizerError("boom")),
+    )
+    pdfs = StubPDFRepository()
+    runner, jobs, *_ = _make_job_runner(pdfs=pdfs)
+    pdf = _make_pdf()
+
+    result = runner.run_for_pdf(pdf)
+
+    assert result.succeeded is False
+    assert isinstance(result.error, PipelineException)
+    assert result.error.stage_name == "normalizer"
+    assert jobs.updates[0][1] == "failed"
+    assert pdfs.status_updates == [(pdf.id, "failed")]
+
+
+def test_repository_error_from_add_section_is_absorbed(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Task29: `CandidateRepository.add_section()`が送出する`RepositoryError`
+    （`_run_stages()`の外側、Task28調査で判明した未捕捉経路）が吸収され、
+    `Job.status='failed'`/`Pdf.status='failed'`へ到達することを検証する。"""
+    calls: list[str] = []
+    _patch_stages(monkeypatch, calls, section_count=1, records_per_section={0: 1})
+    candidates = StubCandidateRepository(add_section_should_fail=True)
+    pdfs = StubPDFRepository()
+    runner, jobs, *_ = _make_job_runner(candidates=candidates, pdfs=pdfs)
+    pdf = _make_pdf()
+
+    result = runner.run_for_pdf(pdf)
+
+    assert result.succeeded is False
+    assert isinstance(result.error, PipelineException)
+    assert result.error.stage_name == "section_parser"
+    assert jobs.updates[0][1] == "failed"
+    assert pdfs.status_updates == [(pdf.id, "failed")]
+    assert candidates.add_raw_calls == []
+
+
+def test_repository_error_from_add_raw_is_absorbed(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Task29: `CandidateRepository.add_raw()`が送出する`RepositoryError`が
+    吸収され、`field_extractor`として記録されることを検証する。"""
+    calls: list[str] = []
+    _patch_stages(monkeypatch, calls, section_count=1, records_per_section={0: 1})
+    candidates = StubCandidateRepository(add_raw_should_fail=True)
+    pdfs = StubPDFRepository()
+    runner, jobs, *_ = _make_job_runner(candidates=candidates, pdfs=pdfs)
+    pdf = _make_pdf()
+
+    result = runner.run_for_pdf(pdf)
+
+    assert result.succeeded is False
+    assert isinstance(result.error, PipelineException)
+    assert result.error.stage_name == "field_extractor"
+    assert jobs.updates[0][1] == "failed"
+    assert pdfs.status_updates == [(pdf.id, "failed")]
+    assert candidates.add_section_calls != []
 
 
 def test_get_job_delegates_to_job_repository() -> None:

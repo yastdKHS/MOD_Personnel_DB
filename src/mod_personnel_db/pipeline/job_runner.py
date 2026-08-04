@@ -20,10 +20,10 @@ from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from typing import cast
 
-from mod_personnel_db.document import DocumentAnalyzer
-from mod_personnel_db.extractors import FieldExtractor
+from mod_personnel_db.document import DocumentAnalyzer, DocumentAnalyzerError
+from mod_personnel_db.extractors import FieldExtractor, FieldExtractorError
 from mod_personnel_db.knowledge import KnowledgeService
-from mod_personnel_db.layout import LayoutDetector
+from mod_personnel_db.layout import LayoutDetector, LayoutDetectorError
 from mod_personnel_db.learning import LearningService
 from mod_personnel_db.models import (
     CandidateId,
@@ -39,6 +39,7 @@ from mod_personnel_db.models import (
     ParserVersionId,
     PdfRecord,
     PersonnelSection,
+    PersonnelSectionId,
     PipelineStageName,
     RawRecord,
     RegressionStatus,
@@ -46,7 +47,7 @@ from mod_personnel_db.models import (
     ValidationResult,
     ValidationRuleSet,
 )
-from mod_personnel_db.normalizers import Normalizer
+from mod_personnel_db.normalizers import Normalizer, NormalizerError
 from mod_personnel_db.pipeline.context import PipelineContext
 from mod_personnel_db.pipeline.events import PipelineEvent
 from mod_personnel_db.pipeline.exceptions import PipelineException
@@ -56,8 +57,9 @@ from mod_personnel_db.pipeline.result import PipelineResult
 from mod_personnel_db.pipeline.runner import NamedStage
 from mod_personnel_db.pipeline.stage import PipelineStage
 from mod_personnel_db.repositories import CandidateRepository, JobRepository, PDFRepository
-from mod_personnel_db.sections import SectionParser
-from mod_personnel_db.validators import Validator
+from mod_personnel_db.sections import SectionParser, SectionParserError
+from mod_personnel_db.utils.exceptions import MODPersonnelDBError, RepositoryError
+from mod_personnel_db.validators import Validator, ValidatorError
 
 _PENDING_PDF_STATUS = "fetched"
 
@@ -67,6 +69,18 @@ _STAGE_NAME_TO_PIPELINE_STAGE_NAME: dict[str, PipelineStageName] = {
     "field_extractor": PipelineStageName.FIELD_EXTRACTOR,
     "normalizer": PipelineStageName.NORMALIZER,
     "validator": PipelineStageName.VALIDATOR,
+}
+
+#: 各Stage固有例外（PipelineExceptionを継承しない、Task28調査で判明）から
+#: stage_nameへの対応。PipelineRunner自体は変更せず（ADR-0044）、JobRunner側の
+#: _run_stages()境界でこれらを吸収するために使う（Task29）。
+_STAGE_EXCEPTION_TO_STAGE_NAME: dict[type[Exception], str] = {
+    DocumentAnalyzerError: "document_analyzer",
+    LayoutDetectorError: "layout_detector",
+    SectionParserError: "section_parser",
+    FieldExtractorError: "field_extractor",
+    NormalizerError: "normalizer",
+    ValidatorError: "validator",
 }
 
 
@@ -108,6 +122,12 @@ def _run_stages(
     戻り値は`(PipelineResult, 最後のStageの出力)`。`PipelineRunner`へは常に
     単一Artifact（`initial_input`）のみを渡し、`PipelineRunner`自体は最後の
     Stageの出力を集約Artifactとして解釈も展開もしない（ADR-0045）。
+
+    `PipelineRunner.run()`は`PipelineException`のみを捕捉するため（ADR-0044、
+    無変更）、各Stage固有例外（`DocumentAnalyzerError`等、`PipelineException`を
+    継承しない、Task28調査で判明）はここまで未捕捉のまま伝播する。JobRunner側の
+    本関数境界でそれらを吸収し、`PipelineException`捕捉時と同じ`PipelineResult`
+    形状へ変換する（Task29）。
     """
     last_name, last_stage = named_stages[-1]
     capture = _CapturingStage(last_stage)
@@ -118,9 +138,35 @@ def _run_stages(
         builder.add_stage(stage_name, stage)
     runner = builder.build()
 
-    result = runner.run(context, job, initial_input)
+    try:
+        result = runner.run(context, job, initial_input)
+    except MODPersonnelDBError as exc:
+        result = _wrap_stage_exception(context, job, exc, last_name)
     output = capture.output if result.error is None else None
     return result, output
+
+
+def _wrap_stage_exception(
+    context: PipelineContext, job: Job, exc: MODPersonnelDBError, fallback_stage_name: str
+) -> PipelineResult:
+    """`PipelineRunner`が捕捉しない`MODPersonnelDBError`系統（Stage固有例外）を、
+    `PipelineException`捕捉時と同じ`PipelineResult`形状へ変換する（Task29）。
+    """
+    stage_name = _STAGE_EXCEPTION_TO_STAGE_NAME.get(type(exc), fallback_stage_name)
+    wrapped = PipelineException(stage_name=stage_name, context=context, message=str(exc))
+    finished_at = datetime.now(UTC)
+    metrics = PipelineMetrics(
+        elapsed_ms=(finished_at - context.started_at).total_seconds() * 1000,
+        started_at=context.started_at,
+        finished_at=finished_at,
+        succeeded=False,
+        warning_count=0,
+        error_count=1,
+    )
+    failed_job = replace(job, status="failed", finished_at=finished_at, error_summary=str(wrapped))
+    return PipelineResult(
+        context=context, job=failed_job, events=(), metrics=metrics, error=wrapped
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -245,7 +291,11 @@ class JobRunner:
         section: PersonnelSection,
         knowledge: _KnowledgeInputs,
     ) -> _Outcome:
-        section_id = self._candidates.add_section(section)
+        try:
+            section_id = self._candidates.add_section(section)
+        except RepositoryError as exc:
+            return self._repository_failure_outcome(context, "section_parser", exc)
+
         fe_result, output = _run_stages(
             context, job, section, (("field_extractor", _as_stage(FieldExtractor())),)
         )
@@ -259,13 +309,28 @@ class JobRunner:
         failed_count = 0
         first_error: PipelineException | None = None
         for record in field_extraction_result.records:
-            candidate_id = self._candidates.add_raw(section_id, record)
-            record_outcome = self._process_record(context, job, record, candidate_id, knowledge)
+            record_outcome = self._add_raw_and_process_record(
+                context, job, section_id, record, knowledge
+            )
             events.extend(record_outcome.events)
             processed_count += record_outcome.processed_count
             failed_count += record_outcome.failed_count
             first_error = first_error or record_outcome.first_error
         return _Outcome(tuple(events), processed_count, failed_count, first_error)
+
+    def _add_raw_and_process_record(
+        self,
+        context: PipelineContext,
+        job: Job,
+        section_id: PersonnelSectionId,
+        record: RawRecord,
+        knowledge: _KnowledgeInputs,
+    ) -> _Outcome:
+        try:
+            candidate_id = self._candidates.add_raw(section_id, record)
+        except RepositoryError as exc:
+            return self._repository_failure_outcome(context, "field_extractor", exc)
+        return self._process_record(context, job, record, candidate_id, knowledge)
 
     def _process_record(
         self,
@@ -292,7 +357,10 @@ class JobRunner:
             return _Outcome(norm_result.events, 1, 0, None)
 
         normalized_record = normalization_result.records[0]
-        self._candidates.attach_normalized(candidate_id, normalized_record)
+        try:
+            self._candidates.attach_normalized(candidate_id, normalized_record)
+        except RepositoryError as exc:
+            return self._repository_failure_outcome(context, "normalizer", exc)
 
         val_result, val_output = _run_stages(
             context,
@@ -305,8 +373,22 @@ class JobRunner:
             self._record_learning_failure(val_result.error)
             return _Outcome(events, 0, 1, val_result.error)
 
-        self._candidates.update_validation(candidate_id, cast("ValidationResult", val_output))
+        try:
+            self._candidates.update_validation(candidate_id, cast("ValidationResult", val_output))
+        except RepositoryError as exc:
+            return self._repository_failure_outcome(context, "validator", exc)
         return _Outcome(events, 1, 0, None)
+
+    def _repository_failure_outcome(
+        self, context: PipelineContext, stage_name: str, exc: RepositoryError
+    ) -> _Outcome:
+        """`CandidateRepository`の永続化呼び出し（`_run_stages()`の外側）が送出する
+        `RepositoryError`（`sqlite3.IntegrityError`等をラップ済み、Task29で
+        `repositories/sqlite/candidate.py`側に追加）を、Stage例外と同じ
+        `_Outcome`形状へ変換する。"""
+        wrapped = PipelineException(stage_name=stage_name, context=context, message=str(exc))
+        self._record_learning_failure(wrapped)
+        return _Outcome((), 0, 1, wrapped)
 
     def _finalize(
         self, context: PipelineContext, job: Job, started_at: datetime, outcome: _Outcome

@@ -109,23 +109,28 @@ class SqliteCandidateRepository(SqliteRepositoryBase):
 
     def add_section(self, section: PersonnelSection) -> PersonnelSectionId:
         layout_id = _resolve_layout_id(self.conn, section.layout_id)
-        cursor = self.conn.execute(
-            """
-            INSERT INTO personnel_sections
-                (pdf_id, layout_id, parser_version_id, section_index, section_label,
-                 page_range, section_text)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                section.document_ref,
-                layout_id,
-                self._parser_version_id,
-                section.section_index,
-                section.section_label,
-                json.dumps(list(section.page_range)),
-                section.section_text,
-            ),
-        )
+        try:
+            cursor = self.conn.execute(
+                """
+                INSERT INTO personnel_sections
+                    (pdf_id, layout_id, parser_version_id, section_index, section_label,
+                     page_range, section_text)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    section.document_ref,
+                    layout_id,
+                    self._parser_version_id,
+                    section.section_index,
+                    section.section_label,
+                    json.dumps(list(section.page_range)),
+                    section.section_text,
+                ),
+            )
+        except sqlite3.IntegrityError as exc:
+            # JobRunnerが吸収できるよう、sqlite3固有の例外を保証7（RepositoryはSQLiteを
+            # 隠蔽する）に沿ってRepositoryErrorへ変換する（Task28/Task29）。
+            raise RepositoryError(f"failed to add personnel_section: {exc}") from exc
         self.conn.commit()
         return PersonnelSectionId(last_id(cursor))
 
@@ -142,39 +147,48 @@ class SqliteCandidateRepository(SqliteRepositoryBase):
         return None if row is None else _row_to_section(row)
 
     def add_raw(self, section_id: PersonnelSectionId, record: RawRecord) -> CandidateId:
-        cursor = self.conn.execute(
-            """
-            INSERT INTO candidate_records
-                (personnel_section_id, parser_version_id, record_index, raw_fields)
-            VALUES (?, ?, ?, ?)
-            """,
-            (
-                section_id,
-                self._parser_version_id,
-                record.record_index,
-                raw_fields_to_json(record.raw_fields),
-            ),
-        )
+        try:
+            cursor = self.conn.execute(
+                """
+                INSERT INTO candidate_records
+                    (personnel_section_id, parser_version_id, record_index, raw_fields)
+                VALUES (?, ?, ?, ?)
+                """,
+                (
+                    section_id,
+                    self._parser_version_id,
+                    record.record_index,
+                    raw_fields_to_json(record.raw_fields),
+                ),
+            )
+        except sqlite3.IntegrityError as exc:
+            raise RepositoryError(f"failed to add candidate_record: {exc}") from exc
         self.conn.commit()
         return CandidateId(last_id(cursor))
 
     def attach_normalized(self, candidate_id: CandidateId, normalized: NormalizedRecord) -> None:
-        self.conn.execute(
-            "UPDATE candidate_records SET normalized_fields = ?, normalization_applied = ? "
-            "WHERE id = ?",
-            (
-                normalized_fields_to_json(normalized.normalized_fields),
-                json.dumps([int(i) for i in normalized.normalization_applied]),
-                candidate_id,
-            ),
-        )
+        try:
+            self.conn.execute(
+                "UPDATE candidate_records SET normalized_fields = ?, normalization_applied = ? "
+                "WHERE id = ?",
+                (
+                    normalized_fields_to_json(normalized.normalized_fields),
+                    json.dumps([int(i) for i in normalized.normalization_applied]),
+                    candidate_id,
+                ),
+            )
+        except sqlite3.IntegrityError as exc:
+            raise RepositoryError(f"failed to attach normalized fields: {exc}") from exc
         self.conn.commit()
 
     def update_validation(self, candidate_id: CandidateId, result: ValidationResult) -> None:
-        self.conn.execute(
-            "UPDATE candidate_records SET validation_status = ? WHERE id = ?",
-            (result.status, candidate_id),
-        )
+        try:
+            self.conn.execute(
+                "UPDATE candidate_records SET validation_status = ? WHERE id = ?",
+                (result.status, candidate_id),
+            )
+        except sqlite3.IntegrityError as exc:
+            raise RepositoryError(f"failed to update validation status: {exc}") from exc
         self.conn.commit()
 
     def get(self, candidate_id: CandidateId) -> CandidateRecord | None:

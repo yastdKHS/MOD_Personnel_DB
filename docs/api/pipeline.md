@@ -115,6 +115,7 @@ class PipelineException(Exception):
 ```
 
 - **設計方針**: 特定Stageの失敗は、そのPDF・そのレコードの処理のみを失敗させ、他のPDF・他のレコードの処理には波及させない（[ADR-0019](../adr/0019-workflow-orchestration.md)）。`JobRunner`は`PipelineException`を捕捉し、`Job.failed_count`を増分した上で処理を継続する。
+- **各Stage固有例外との関係**: 各Stage（`DocumentAnalyzer`等）が実際に送出する例外（`DocumentAnalyzerError`等）は`PipelineException`ではなく`MODPersonnelDBError`を直接継承する別クラスである。`PipelineRunner`（`pipeline/runner.py`）はこれらを捕捉しないため、`JobRunner`が呼び出し境界で吸収し、`PipelineException`捕捉時と同じ`PipelineResult`形状（`stage_name`付き）へ変換する（[ADR-0045](../adr/0045-job-runner-aggregate-artifact-coordinator.md)）。
 
 ## `PipelineMetrics`
 

@@ -33,6 +33,7 @@ from mod_personnel_db.models import (
     ValidationRuleSet,
 )
 from mod_personnel_db.pipeline.exceptions import PipelineException
+from mod_personnel_db.utils.exceptions import RepositoryError
 
 _DEFAULT_AS_OF = date(2026, 1, 1)
 _CONFIDENCE = Confidence(score=1.0, band=ConfidenceBand.VERIFIED)
@@ -57,6 +58,25 @@ def make_stub_stage_class(name: str, calls: list[str], output: object = None) ->
             return output if output is not None else input
 
     _StubStage.__name__ = f"Stub{name}"
+    return _StubStage
+
+
+def make_raising_stage_stub_class(name: str, calls: list[str], exc: Exception) -> type:
+    """`run()`呼び出し時に`exc`を送出するStub。Task29: `PipelineException`を
+    継承しない`MODPersonnelDBError`系統（Stage固有例外）がJobRunner境界で
+    吸収されることを検証するために使う。
+    """
+
+    class _StubStage:
+        def __init__(self, *args: object, **kwargs: object) -> None:
+            del args, kwargs
+
+        def run(self, context: object, input: object) -> object:
+            del context, input
+            calls.append(name)
+            raise exc
+
+    _StubStage.__name__ = f"Raising{name}"
     return _StubStage
 
 
@@ -352,10 +372,14 @@ class StubCandidateRepository:
     update_validation_calls: list[tuple[CandidateId, ValidationResult]] = field(
         default_factory=list
     )
+    add_section_should_fail: bool = False
+    add_raw_should_fail: bool = False
     _next_section_id: int = 1
     _next_candidate_id: int = 1
 
     def add_section(self, section: PersonnelSection) -> PersonnelSectionId:
+        if self.add_section_should_fail:
+            raise RepositoryError("add_section failed")
         self.add_section_calls.append(section)
         if self.order_log is not None:
             self.order_log.append("add_section")
@@ -368,6 +392,8 @@ class StubCandidateRepository:
         return None
 
     def add_raw(self, section_id: PersonnelSectionId, record: RawRecord) -> CandidateId:
+        if self.add_raw_should_fail:
+            raise RepositoryError("add_raw failed")
         self.add_raw_calls.append((section_id, record))
         if self.order_log is not None:
             self.order_log.append("add_raw")

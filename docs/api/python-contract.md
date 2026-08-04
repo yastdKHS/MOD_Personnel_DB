@@ -73,6 +73,7 @@ class ValidationBlockedError(MODPersonnelDBError):
   - 標準の`Exception`を直接`raise`しない。必ず`MODPersonnelDBError`の派生クラスを使う。
   - 例外を握りつぶさない。再送出する場合は`raise NewError(...) from original_error`で原因を保持する（[ADR-0006](../adr/0006-pipeline-provenance.md)の来歴思想を例外の因果関係にも適用する）。
   - `pipeline/`（`JobRunner`）は`PipelineException`を捕捉して1件のPDF・1件のレコードの失敗として処理を継続し、他の処理に波及させない（[ADR-0019](../adr/0019-workflow-orchestration.md)）。それ以外の未分類の例外（`MODPersonnelDBError`の派生でないもの）は、想定外のバグとして再送出しジョブ全体を失敗させる。
+  - `PipelineRunner`（`pipeline/runner.py`）自身が捕捉するのは`PipelineException`のみである（ADR-0044、無変更）。各Stage固有例外（`DocumentAnalyzerError`等、`PipelineException`を継承しない`MODPersonnelDBError`の兄弟クラス）および`RepositoryError`は、`PipelineRunner`ではなく`JobRunner`が呼び出し境界（`_run_stages()`・`CandidateRepository`呼び出し）で吸収し、`PipelineException`捕捉時と同じ`Job.status='failed'`/`Pdf.status='failed'`へ変換する（[ADR-0045](../adr/0045-job-runner-aggregate-artifact-coordinator.md)）。
 
 ## Logging設計
 
