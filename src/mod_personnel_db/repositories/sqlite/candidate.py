@@ -146,6 +146,30 @@ class SqliteCandidateRepository(SqliteRepositoryBase):
         ).fetchone()
         return None if row is None else _row_to_section(row)
 
+    def find_section(self, pdf_id: PdfId, section_index: int) -> PersonnelSectionId | None:
+        row = self.conn.execute(
+            "SELECT id FROM personnel_sections "
+            "WHERE pdf_id = ? AND section_index = ? AND parser_version_id = ?",
+            (pdf_id, section_index, self._parser_version_id),
+        ).fetchone()
+        return None if row is None else PersonnelSectionId(row["id"])
+
+    def find_active_section(self, pdf_id: PdfId, section_index: int) -> PersonnelSectionId | None:
+        row = self.conn.execute(
+            "SELECT id FROM personnel_sections "
+            "WHERE pdf_id = ? AND section_index = ? AND status = 'parsed'",
+            (pdf_id, section_index),
+        ).fetchone()
+        return None if row is None else PersonnelSectionId(row["id"])
+
+    def supersede_section(self, section_id: PersonnelSectionId) -> None:
+        self.conn.execute(
+            "UPDATE personnel_sections SET status = 'superseded' "
+            "WHERE id = ? AND status = 'parsed'",
+            (section_id,),
+        )
+        self.conn.commit()
+
     def add_raw(self, section_id: PersonnelSectionId, record: RawRecord) -> CandidateId:
         try:
             cursor = self.conn.execute(
@@ -165,6 +189,16 @@ class SqliteCandidateRepository(SqliteRepositoryBase):
             raise RepositoryError(f"failed to add candidate_record: {exc}") from exc
         self.conn.commit()
         return CandidateId(last_id(cursor))
+
+    def find_candidate(
+        self, section_id: PersonnelSectionId, record_index: int
+    ) -> CandidateId | None:
+        row = self.conn.execute(
+            "SELECT id FROM candidate_records "
+            "WHERE personnel_section_id = ? AND record_index = ? AND parser_version_id = ?",
+            (section_id, record_index, self._parser_version_id),
+        ).fetchone()
+        return None if row is None else CandidateId(row["id"])
 
     def attach_normalized(self, candidate_id: CandidateId, normalized: NormalizedRecord) -> None:
         try:
