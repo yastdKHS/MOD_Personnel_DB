@@ -4,7 +4,15 @@ from datetime import UTC, date, datetime
 import pytest
 
 from mod_personnel_db.document import DocumentAnalyzerError
-from mod_personnel_db.models import Job, ParserVersionId, PdfId, PdfRecord, PipelineStageName
+from mod_personnel_db.models import (
+    CandidateId,
+    Job,
+    ParserVersionId,
+    PdfId,
+    PdfRecord,
+    PersonnelSectionId,
+    PipelineStageName,
+)
 from mod_personnel_db.normalizers import NormalizerError
 from mod_personnel_db.pipeline import job_runner as job_runner_module
 from mod_personnel_db.pipeline.exceptions import PipelineException
@@ -17,6 +25,7 @@ from ._job_runner_stubs import (
     StubKnowledgeService,
     StubLearningService,
     StubPDFRepository,
+    make_candidate_record,
     make_field_extractor_stub_class,
     make_normalizer_stub_class,
     make_raising_stage_stub_class,
@@ -666,6 +675,201 @@ def test_learning_service_not_called_for_unmapped_stage_name(
     assert result.succeeded is False
     assert learning.recorded == []
     assert jobs.updates[0][1] == "failed"
+
+
+def test_section_resume_with_zero_candidates_reuses_section(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Task31 Case A（Step7手順4）: 既存Sectionが見つかりCandidateが0件の場合、
+    `add_section()`は呼ばずSectionを再利用し、FieldExtractor以降を実行する。"""
+    calls: list[str] = []
+    _patch_stages(monkeypatch, calls, section_count=1, records_per_section={0: 1})
+    candidates = StubCandidateRepository()
+    candidates.find_section_results[(1, 0)] = PersonnelSectionId(99)
+    runner, *_ = _make_job_runner(candidates=candidates)
+
+    result = runner.run_for_pdf(_make_pdf(pdf_id=1))
+
+    assert candidates.add_section_calls == []
+    assert "field_extractor" in calls
+    assert len(candidates.add_raw_calls) == 1
+    assert candidates.add_raw_calls[0][0] == PersonnelSectionId(99)
+    assert result.job.processed_count == 1
+    assert result.job.failed_count == 0
+
+
+def test_section_resume_with_all_candidates_finalized_skips_entire_section(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Task31 Case A（Step7手順6）: 既存Sectionの全Candidateが`passed`/`failed`
+    なら、Section全体をskipする（FieldExtractorも呼ばない、processed/failed
+    いずれも未計上）。"""
+    calls: list[str] = []
+    _patch_stages(monkeypatch, calls, section_count=1, records_per_section={0: 1})
+    candidates = StubCandidateRepository()
+    candidates.find_section_results[(1, 0)] = PersonnelSectionId(99)
+    candidates.section_candidates[99] = (
+        make_candidate_record(
+            candidate_id=1, section_id=99, record_index=0, validation_status="passed"
+        ),
+        make_candidate_record(
+            candidate_id=2, section_id=99, record_index=1, validation_status="failed"
+        ),
+    )
+    runner, *_ = _make_job_runner(candidates=candidates)
+
+    result = runner.run_for_pdf(_make_pdf(pdf_id=1))
+
+    assert "field_extractor" not in calls
+    assert candidates.add_section_calls == []
+    assert candidates.add_raw_calls == []
+    assert result.job.processed_count == 0
+    assert result.job.failed_count == 0
+    assert result.succeeded is True
+
+
+def test_section_resume_with_pending_candidate_moves_to_record_resume(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Task31 Case A（Step7手順7）: `pending`が1件でもあればCase B（Record単位
+    のResume）へ移行する。"""
+    calls: list[str] = []
+    _patch_stages(monkeypatch, calls, section_count=1, records_per_section={0: 1})
+    candidates = StubCandidateRepository()
+    candidates.find_section_results[(1, 0)] = PersonnelSectionId(99)
+    candidates.section_candidates[99] = (
+        make_candidate_record(
+            candidate_id=1, section_id=99, record_index=0, validation_status="passed"
+        ),
+        make_candidate_record(
+            candidate_id=2, section_id=99, record_index=1, validation_status="pending"
+        ),
+    )
+    candidates.find_candidate_results[(99, 1)] = CandidateId(2)
+    candidates.candidates_by_id[2] = make_candidate_record(
+        candidate_id=2, section_id=99, record_index=1, validation_status="pending"
+    )
+    runner, *_ = _make_job_runner(candidates=candidates)
+
+    result = runner.run_for_pdf(_make_pdf(pdf_id=1))
+
+    assert "field_extractor" not in calls
+    assert calls.count("normalizer") == 1
+    assert result.job.processed_count == 1
+    assert result.job.failed_count == 0
+
+
+def test_record_resume_processes_only_pending_candidate(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Task31 Case B: `find_candidate()`で既存Candidateが見つかり`pending`の
+    場合、`add_raw()`は呼ばずRepositoryから取得した`CandidateRecord.raw`を
+    使ってNormalizerから再開する。"""
+    calls: list[str] = []
+    _patch_stages(monkeypatch, calls, section_count=1, records_per_section={0: 1})
+    candidates = StubCandidateRepository()
+    candidates.find_section_results[(1, 0)] = PersonnelSectionId(99)
+    candidates.section_candidates[99] = (
+        make_candidate_record(
+            candidate_id=2, section_id=99, record_index=1, validation_status="pending"
+        ),
+    )
+    candidates.find_candidate_results[(99, 1)] = CandidateId(2)
+    candidates.candidates_by_id[2] = make_candidate_record(
+        candidate_id=2, section_id=99, record_index=1, validation_status="pending"
+    )
+    runner, *_ = _make_job_runner(candidates=candidates)
+
+    result = runner.run_for_pdf(_make_pdf(pdf_id=1))
+
+    assert candidates.add_raw_calls == []
+    assert calls.count("normalizer") == 1
+    assert calls.count("validator") == 1
+    assert result.job.processed_count == 1
+    assert result.job.failed_count == 0
+
+
+def test_record_resume_skips_passed_candidate(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Task31 Case B: 既存Candidateが`passed`なら完全skip（Normalizer/Validator
+    いずれも呼ばず、未計上）。"""
+    calls: list[str] = []
+    _patch_stages(monkeypatch, calls, section_count=1, records_per_section={0: 1})
+    candidates = StubCandidateRepository()
+    candidates.find_section_results[(1, 0)] = PersonnelSectionId(99)
+    candidates.section_candidates[99] = (
+        make_candidate_record(
+            candidate_id=1, section_id=99, record_index=0, validation_status="passed"
+        ),
+        make_candidate_record(
+            candidate_id=2, section_id=99, record_index=1, validation_status="pending"
+        ),
+    )
+    candidates.find_candidate_results[(99, 1)] = CandidateId(2)
+    candidates.candidates_by_id[2] = make_candidate_record(
+        candidate_id=2, section_id=99, record_index=1, validation_status="pending"
+    )
+    runner, *_ = _make_job_runner(candidates=candidates)
+
+    result = runner.run_for_pdf(_make_pdf(pdf_id=1))
+
+    # record_index=0（passed）はskipされ、record_index=1（pending）のみ処理される。
+    assert calls.count("normalizer") == 1
+    assert result.job.processed_count == 1
+    assert result.job.failed_count == 0
+
+
+def test_record_resume_skips_failed_candidate(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Task31 Case B: 既存Candidateが`failed`なら完全skip（Normalizer/Validator
+    いずれも呼ばず、未計上）。"""
+    calls: list[str] = []
+    _patch_stages(monkeypatch, calls, section_count=1, records_per_section={0: 1})
+    candidates = StubCandidateRepository()
+    candidates.find_section_results[(1, 0)] = PersonnelSectionId(99)
+    candidates.section_candidates[99] = (
+        make_candidate_record(
+            candidate_id=1, section_id=99, record_index=0, validation_status="failed"
+        ),
+        make_candidate_record(
+            candidate_id=2, section_id=99, record_index=1, validation_status="pending"
+        ),
+    )
+    candidates.find_candidate_results[(99, 1)] = CandidateId(2)
+    candidates.candidates_by_id[2] = make_candidate_record(
+        candidate_id=2, section_id=99, record_index=1, validation_status="pending"
+    )
+    runner, *_ = _make_job_runner(candidates=candidates)
+
+    result = runner.run_for_pdf(_make_pdf(pdf_id=1))
+
+    # record_index=0（failed）はskipされ、record_index=1（pending）のみ処理される。
+    assert calls.count("normalizer") == 1
+    assert result.job.processed_count == 1
+    assert result.job.failed_count == 0
+
+
+def test_record_resume_does_not_reinvoke_field_extractor(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Task31 Case B: `pending`のRecord単位Resume時、FieldExtractorは
+    一切呼び出されない（Step7要件）。"""
+    calls: list[str] = []
+    _patch_stages(monkeypatch, calls, section_count=1, records_per_section={0: 1})
+    candidates = StubCandidateRepository()
+    candidates.find_section_results[(1, 0)] = PersonnelSectionId(99)
+    candidates.section_candidates[99] = (
+        make_candidate_record(
+            candidate_id=2, section_id=99, record_index=1, validation_status="pending"
+        ),
+    )
+    candidates.find_candidate_results[(99, 1)] = CandidateId(2)
+    candidates.candidates_by_id[2] = make_candidate_record(
+        candidate_id=2, section_id=99, record_index=1, validation_status="pending"
+    )
+    runner, *_ = _make_job_runner(candidates=candidates)
+
+    runner.run_for_pdf(_make_pdf(pdf_id=1))
+
+    assert calls.count("field_extractor") == 0
 
 
 def test_job_runner_public_api_matches_protocol() -> None:

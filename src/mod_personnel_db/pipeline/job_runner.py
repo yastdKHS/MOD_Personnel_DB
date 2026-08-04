@@ -27,6 +27,7 @@ from mod_personnel_db.layout import LayoutDetector, LayoutDetectorError
 from mod_personnel_db.learning import LearningService
 from mod_personnel_db.models import (
     CandidateId,
+    CandidateRecord,
     ErrorCategory,
     FieldExtractionResult,
     Job,
@@ -291,11 +292,48 @@ class JobRunner:
         section: PersonnelSection,
         knowledge: _KnowledgeInputs,
     ) -> _Outcome:
-        try:
-            section_id = self._candidates.add_section(section)
-        except RepositoryError as exc:
-            return self._repository_failure_outcome(context, "section_parser", exc)
+        """Section単位のResume判定（Task31 Case A、Step5/Step7の7段階手順）。
 
+        1. `find_section()`で既存Sectionの有無を確認する。
+        2. 存在しなければ従来処理（`add_section()`から開始）。
+        3-4. 存在し`candidate_records`が0件なら、Section再利用のみ行い
+             FieldExtractorへ進む。
+        5-6. 存在し全Candidateが`passed`/`failed`ならSection全体をskipする
+             （`_Outcome`は未計上、processed/failed共に0）。
+        7. `pending`が1件でもあれば、既存Candidate一覧からRecord単位で
+           再開する（Case B、FieldExtractorは再実行しない）。
+        """
+        existing_section_id = self._candidates.find_section(
+            section.document_ref, section.section_index
+        )
+        if existing_section_id is None:
+            try:
+                section_id = self._candidates.add_section(section)
+            except RepositoryError as exc:
+                return self._repository_failure_outcome(context, "section_parser", exc)
+            return self._extract_and_process_records(context, job, section, section_id, knowledge)
+
+        candidates = self._candidates.list_by_section(existing_section_id)
+        if not candidates:
+            return self._extract_and_process_records(
+                context, job, section, existing_section_id, knowledge
+            )
+
+        if all(c.validation_status in ("passed", "failed") for c in candidates):
+            return _Outcome((), 0, 0, None)
+
+        return self._resume_pending_candidates(
+            context, job, existing_section_id, candidates, knowledge
+        )
+
+    def _extract_and_process_records(
+        self,
+        context: PipelineContext,
+        job: Job,
+        section: PersonnelSection,
+        section_id: PersonnelSectionId,
+        knowledge: _KnowledgeInputs,
+    ) -> _Outcome:
         fe_result, output = _run_stages(
             context, job, section, (("field_extractor", _as_stage(FieldExtractor())),)
         )
@@ -309,8 +347,32 @@ class JobRunner:
         failed_count = 0
         first_error: PipelineException | None = None
         for record in field_extraction_result.records:
-            record_outcome = self._add_raw_and_process_record(
-                context, job, section_id, record, knowledge
+            record_outcome = self._process_record(context, job, section_id, record, knowledge)
+            events.extend(record_outcome.events)
+            processed_count += record_outcome.processed_count
+            failed_count += record_outcome.failed_count
+            first_error = first_error or record_outcome.first_error
+        return _Outcome(tuple(events), processed_count, failed_count, first_error)
+
+    def _resume_pending_candidates(
+        self,
+        context: PipelineContext,
+        job: Job,
+        section_id: PersonnelSectionId,
+        candidates: tuple[CandidateRecord, ...],
+        knowledge: _KnowledgeInputs,
+    ) -> _Outcome:
+        """Case B: 既存Candidateのうち`pending`のみをNormalizerから再開する。
+        `passed`/`failed`はskip（未計上）。FieldExtractorは呼び出さない。"""
+        events: list[PipelineEvent] = []
+        processed_count = 0
+        failed_count = 0
+        first_error: PipelineException | None = None
+        for candidate in candidates:
+            if candidate.validation_status != "pending":
+                continue
+            record_outcome = self._process_record(
+                context, job, section_id, candidate.raw, knowledge
             )
             events.extend(record_outcome.events)
             processed_count += record_outcome.processed_count
@@ -318,7 +380,7 @@ class JobRunner:
             first_error = first_error or record_outcome.first_error
         return _Outcome(tuple(events), processed_count, failed_count, first_error)
 
-    def _add_raw_and_process_record(
+    def _process_record(
         self,
         context: PipelineContext,
         job: Job,
@@ -326,13 +388,26 @@ class JobRunner:
         record: RawRecord,
         knowledge: _KnowledgeInputs,
     ) -> _Outcome:
-        try:
-            candidate_id = self._candidates.add_raw(section_id, record)
-        except RepositoryError as exc:
-            return self._repository_failure_outcome(context, "field_extractor", exc)
-        return self._process_record(context, job, record, candidate_id, knowledge)
+        """Record単位のResume判定（Task31 Case B）。`find_candidate()`で既存
+        Candidateの有無を確認し、未存在なら従来処理（`add_raw()`から開始）、
+        存在し`pending`ならRepositoryから取得した`CandidateRecord.raw`を使い
+        Normalizerから再開する（`add_raw()`は呼ばない）。存在し`passed`/
+        `failed`なら完全skip（未計上）とする。"""
+        candidate_id = self._candidates.find_candidate(section_id, record.record_index)
+        if candidate_id is None:
+            try:
+                candidate_id = self._candidates.add_raw(section_id, record)
+            except RepositoryError as exc:
+                return self._repository_failure_outcome(context, "field_extractor", exc)
+        else:
+            existing = self._candidates.get(candidate_id)
+            if existing is None or existing.validation_status != "pending":
+                return _Outcome((), 0, 0, None)
+            record = existing.raw
 
-    def _process_record(
+        return self._run_normalizer_and_validator(context, job, record, candidate_id, knowledge)
+
+    def _run_normalizer_and_validator(
         self,
         context: PipelineContext,
         job: Job,

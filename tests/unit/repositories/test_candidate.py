@@ -8,6 +8,7 @@ from mod_personnel_db.models import (
     ConfidenceBand,
     NormalizedRecord,
     NormalizedValue,
+    ParserVersion,
     ParserVersionId,
     PdfId,
     PersonnelSection,
@@ -20,6 +21,7 @@ from mod_personnel_db.models import (
 )
 from mod_personnel_db.models.values import Confidence
 from mod_personnel_db.repositories.sqlite.candidate import SqliteCandidateRepository
+from mod_personnel_db.repositories.sqlite.job import SqliteJobRepository
 from mod_personnel_db.utils.exceptions import RepositoryError
 
 
@@ -261,3 +263,111 @@ def test_add_raw_wraps_integrity_error_as_repository_error(
     with pytest.raises(RepositoryError) as excinfo:
         repo.add_raw(section_id, raw)
     assert not isinstance(excinfo.value, sqlite3.IntegrityError)
+
+
+def test_find_section_returns_id_when_exists(
+    conn: sqlite3.Connection, pdf_id: PdfId, layout_era_id: str, parser_version_id: ParserVersionId
+) -> None:
+    repo = SqliteCandidateRepository(conn, parser_version_id)
+    section_id = repo.add_section(_make_section(pdf_id, layout_era_id))
+
+    assert repo.find_section(pdf_id, section_index=0) == section_id
+
+
+def test_find_section_returns_none_when_not_exists(
+    conn: sqlite3.Connection, pdf_id: PdfId, parser_version_id: ParserVersionId
+) -> None:
+    repo = SqliteCandidateRepository(conn, parser_version_id)
+
+    assert repo.find_section(pdf_id, section_index=0) is None
+
+
+def test_find_candidate_returns_id_when_exists(
+    conn: sqlite3.Connection, pdf_id: PdfId, layout_era_id: str, parser_version_id: ParserVersionId
+) -> None:
+    repo = SqliteCandidateRepository(conn, parser_version_id)
+    section_id = repo.add_section(_make_section(pdf_id, layout_era_id))
+    raw = RawRecord(
+        section_ref=None,
+        layout_id=layout_era_id,
+        record_index=0,
+        raw_fields={"rank": "陸将補"},
+        extracted_at=datetime(2026, 1, 1, tzinfo=UTC),
+    )
+    candidate_id = repo.add_raw(section_id, raw)
+
+    assert repo.find_candidate(section_id, record_index=0) == candidate_id
+
+
+def test_find_candidate_returns_none_when_not_exists(
+    conn: sqlite3.Connection, pdf_id: PdfId, layout_era_id: str, parser_version_id: ParserVersionId
+) -> None:
+    repo = SqliteCandidateRepository(conn, parser_version_id)
+    section_id = repo.add_section(_make_section(pdf_id, layout_era_id))
+
+    assert repo.find_candidate(section_id, record_index=0) is None
+
+
+def test_find_active_section_returns_old_version_id(
+    conn: sqlite3.Connection, pdf_id: PdfId, layout_era_id: str, parser_version_id: ParserVersionId
+) -> None:
+    """Task31 Step5/Step6: Case C（parser_version更新後の再解析）向け。
+    `find_active_section`はparser_version_idを条件に含めないため、新versionの
+    Repositoryインスタンスからでも旧version（status='parsed'のまま）のSectionを
+    発見できることを検証する。"""
+    old_repo = SqliteCandidateRepository(conn, parser_version_id)
+    old_section_id = old_repo.add_section(_make_section(pdf_id, layout_era_id))
+
+    jobs = SqliteJobRepository(conn)
+    new_version_id = jobs.record_parser_version(
+        ParserVersion(
+            id=None,
+            code_version="v2.0.0",
+            knowledge_snapshot_checksum="d" * 64,
+            released_at=datetime(2026, 2, 1, tzinfo=UTC),
+            notes=None,
+        )
+    )
+    new_repo = SqliteCandidateRepository(conn, new_version_id)
+
+    assert new_repo.find_active_section(pdf_id, section_index=0) == old_section_id
+
+
+def test_find_active_section_returns_none_when_not_exists(
+    conn: sqlite3.Connection, pdf_id: PdfId, parser_version_id: ParserVersionId
+) -> None:
+    repo = SqliteCandidateRepository(conn, parser_version_id)
+
+    assert repo.find_active_section(pdf_id, section_index=0) is None
+
+
+def test_supersede_section_parsed_to_superseded(
+    conn: sqlite3.Connection, pdf_id: PdfId, layout_era_id: str, parser_version_id: ParserVersionId
+) -> None:
+    repo = SqliteCandidateRepository(conn, parser_version_id)
+    section_id = repo.add_section(_make_section(pdf_id, layout_era_id))
+
+    repo.supersede_section(section_id)
+
+    row = conn.execute(
+        "SELECT status FROM personnel_sections WHERE id = ?", (section_id,)
+    ).fetchone()
+    assert row["status"] == "superseded"
+    assert repo.find_active_section(pdf_id, section_index=0) is None
+
+
+def test_supersede_section_is_idempotent_when_already_superseded(
+    conn: sqlite3.Connection, pdf_id: PdfId, layout_era_id: str, parser_version_id: ParserVersionId
+) -> None:
+    """Task31 Step5/Step6: `WHERE status='parsed'`により2回目の呼び出しは0件更新に
+    なるが、これは正常系であり例外を送出しない（冪等性の確認）。"""
+    repo = SqliteCandidateRepository(conn, parser_version_id)
+    section_id = repo.add_section(_make_section(pdf_id, layout_era_id))
+
+    repo.supersede_section(section_id)
+    repo.supersede_section(section_id)
+
+    row = conn.execute(
+        "SELECT status FROM personnel_sections WHERE id = ?", (section_id,)
+    ).fetchone()
+    assert row["status"] == "superseded"

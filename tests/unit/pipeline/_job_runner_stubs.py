@@ -212,6 +212,25 @@ def make_normalized_record(raw: RawRecord) -> NormalizedRecord:
     )
 
 
+def make_candidate_record(
+    *,
+    candidate_id: int,
+    section_id: int,
+    record_index: int = 0,
+    validation_status: str = "pending",
+) -> CandidateRecord:
+    """Task31 Case A/B: `find_section`/`find_candidate`経由で解決される既存
+    `CandidateRecord`のStub生成ヘルパー。"""
+    raw = make_raw_record(record_index)
+    return CandidateRecord(
+        id=CandidateId(candidate_id),
+        section_id=PersonnelSectionId(section_id),
+        raw=raw,
+        normalized=None,
+        validation_status=validation_status,  # type: ignore[arg-type]
+    )
+
+
 def make_validation_result(*, passed: bool = True) -> ValidationResult:
     evidence = ValidationEvidence(record_index=0, layout_id="reiwa", rules_evaluated=0)
     candidate = ValidationCandidate(
@@ -377,6 +396,37 @@ class StubCandidateRepository:
     _next_section_id: int = 1
     _next_candidate_id: int = 1
 
+    # Task31 Case A/B（Step7）: Resume判定用のStub設定・呼び出し記録。
+    # キーはいずれも`int`化した値（`(pdf_id, section_index)` / `(section_id, record_index)`）。
+    find_section_results: dict[tuple[int, int], PersonnelSectionId] = field(default_factory=dict)
+    find_active_section_results: dict[tuple[int, int], PersonnelSectionId] = field(
+        default_factory=dict
+    )
+    find_candidate_results: dict[tuple[int, int], CandidateId] = field(default_factory=dict)
+    candidates_by_id: dict[int, CandidateRecord] = field(default_factory=dict)
+    section_candidates: dict[int, tuple[CandidateRecord, ...]] = field(default_factory=dict)
+    find_section_calls: list[tuple[PdfId, int]] = field(default_factory=list)
+    find_candidate_calls: list[tuple[PersonnelSectionId, int]] = field(default_factory=list)
+    supersede_section_calls: list[PersonnelSectionId] = field(default_factory=list)
+
+    def find_section(self, pdf_id: PdfId, section_index: int) -> PersonnelSectionId | None:
+        # order_logには記録しない（読み取りであり、Artifact Flowの書込み順序
+        # を検証する既存テストの対象外とするため、Task31 Step7）。
+        self.find_section_calls.append((pdf_id, section_index))
+        return self.find_section_results.get((int(pdf_id), section_index))
+
+    def find_active_section(self, pdf_id: PdfId, section_index: int) -> PersonnelSectionId | None:
+        return self.find_active_section_results.get((int(pdf_id), section_index))
+
+    def supersede_section(self, section_id: PersonnelSectionId) -> None:
+        self.supersede_section_calls.append(section_id)
+
+    def find_candidate(
+        self, section_id: PersonnelSectionId, record_index: int
+    ) -> CandidateId | None:
+        self.find_candidate_calls.append((section_id, record_index))
+        return self.find_candidate_results.get((int(section_id), record_index))
+
     def add_section(self, section: PersonnelSection) -> PersonnelSectionId:
         if self.add_section_should_fail:
             raise RepositoryError("add_section failed")
@@ -412,12 +462,10 @@ class StubCandidateRepository:
             self.order_log.append("update_validation")
 
     def get(self, candidate_id: CandidateId) -> CandidateRecord | None:
-        del candidate_id
-        return None
+        return self.candidates_by_id.get(int(candidate_id))
 
     def list_by_section(self, section_id: PersonnelSectionId) -> tuple[CandidateRecord, ...]:
-        del section_id
-        return ()
+        return self.section_candidates.get(int(section_id), ())
 
     def list_pending_validation(self) -> tuple[CandidateRecord, ...]:
         return ()
