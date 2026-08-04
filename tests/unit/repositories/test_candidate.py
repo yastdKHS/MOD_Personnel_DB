@@ -226,3 +226,38 @@ def test_candidate_id_missing_returns_none(
 ) -> None:
     repo = SqliteCandidateRepository(conn, parser_version_id)
     assert repo.get(CandidateId(999)) is None
+
+
+def test_add_section_wraps_integrity_error_as_repository_error(
+    conn: sqlite3.Connection, pdf_id: PdfId, layout_era_id: str, parser_version_id: ParserVersionId
+) -> None:
+    """Task29: `personnel_sections`のUNIQUE制約違反（`sqlite3.IntegrityError`）が
+    `RepositoryError`へラップされ、JobRunnerが吸収できる形になることを検証する
+    （architecture-contract.md保証7「RepositoryはSQLiteを隠蔽する」）。"""
+    repo = SqliteCandidateRepository(conn, parser_version_id)
+    section = _make_section(pdf_id, layout_era_id)
+    repo.add_section(section)
+
+    with pytest.raises(RepositoryError) as excinfo:
+        repo.add_section(section)
+    assert not isinstance(excinfo.value, sqlite3.IntegrityError)
+
+
+def test_add_raw_wraps_integrity_error_as_repository_error(
+    conn: sqlite3.Connection, pdf_id: PdfId, layout_era_id: str, parser_version_id: ParserVersionId
+) -> None:
+    """Task29: `candidate_records`のUNIQUE制約違反も同様に`RepositoryError`へラップする。"""
+    repo = SqliteCandidateRepository(conn, parser_version_id)
+    section_id = repo.add_section(_make_section(pdf_id, layout_era_id))
+    raw = RawRecord(
+        section_ref=None,
+        layout_id=layout_era_id,
+        record_index=0,
+        raw_fields={"rank": "陸将補"},
+        extracted_at=datetime(2026, 1, 1, tzinfo=UTC),
+    )
+    repo.add_raw(section_id, raw)
+
+    with pytest.raises(RepositoryError) as excinfo:
+        repo.add_raw(section_id, raw)
+    assert not isinstance(excinfo.value, sqlite3.IntegrityError)
