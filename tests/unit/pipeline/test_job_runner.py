@@ -241,6 +241,7 @@ def test_candidate_repository_order_matches_artifact_flow(monkeypatch: pytest.Mo
         "document_analyzer",
         "layout_detector",
         "section_parser",
+        "find_active_section",  # Task32 Step2 Case C: add_sectionの前に必ず呼ばれる
         "add_section",
         "field_extractor",
         "add_raw",
@@ -870,6 +871,143 @@ def test_record_resume_does_not_reinvoke_field_extractor(
     runner.run_for_pdf(_make_pdf(pdf_id=1))
 
     assert calls.count("field_extractor") == 0
+
+
+def test_case_c_supersedes_old_active_section_after_new_version_processing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Task32 Step2 Case C（ADR-0047）: 現在のparser_versionでは未処理
+    （`find_section`が`None`）だが、旧versionのアクティブなSectionが
+    `find_active_section`で見つかる場合、`add_section()`で新Sectionを追加した
+    上で、旧SectionをSupersedeする。"""
+    calls: list[str] = []
+    _patch_stages(monkeypatch, calls, section_count=1, records_per_section={0: 1})
+    candidates = StubCandidateRepository()
+    candidates.find_active_section_results[(1, 0)] = PersonnelSectionId(50)
+    runner, *_ = _make_job_runner(candidates=candidates)
+
+    result = runner.run_for_pdf(_make_pdf(pdf_id=1))
+
+    assert len(candidates.add_section_calls) == 1
+    assert candidates.supersede_section_calls == [PersonnelSectionId(50)]
+    assert result.job.processed_count == 1
+    assert result.job.failed_count == 0
+
+
+def test_case_c_does_not_supersede_on_first_time_processing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Task32 Step2 Case C: 旧アクティブSectionが存在しない（初回処理）場合、
+    `supersede_section()`は一切呼ばれない。"""
+    calls: list[str] = []
+    _patch_stages(monkeypatch, calls, section_count=1, records_per_section={0: 1})
+    candidates = StubCandidateRepository()
+    runner, *_ = _make_job_runner(candidates=candidates)
+
+    result = runner.run_for_pdf(_make_pdf(pdf_id=1))
+
+    assert len(candidates.add_section_calls) == 1
+    assert candidates.supersede_section_calls == []
+    assert result.job.processed_count == 1
+
+
+def test_case_c_find_active_section_called_before_add_section_and_supersede(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Task32 Step2 Case C（ADR-0047「add_section前にfind_active_sectionを
+    呼ぶ理由」）: `find_active_section`→`add_section`→`supersede_section`の順序
+    が保証されていることを、`order_log`で検証する。"""
+    calls: list[str] = []
+    _patch_stages(monkeypatch, calls, section_count=1, records_per_section={0: 1})
+    order: list[str] = []
+    candidates = StubCandidateRepository(order_log=order)
+    candidates.find_active_section_results[(1, 0)] = PersonnelSectionId(50)
+    runner, *_ = _make_job_runner(candidates=candidates)
+
+    runner.run_for_pdf(_make_pdf(pdf_id=1))
+
+    ordered_relevant = [
+        event
+        for event in order
+        if event in {"find_active_section", "add_section", "supersede_section"}
+    ]
+    assert ordered_relevant == ["find_active_section", "add_section", "supersede_section"]
+
+
+def test_case_c_does_not_supersede_when_existing_section_found_by_find_section(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Task32 Step2 Case C: 現行versionで既にSectionが見つかる（Case A resume）
+    場合は、`_add_section_and_process`自体に到達しないため、
+    `find_active_section`/`supersede_section`はいずれも呼ばれない。"""
+    calls: list[str] = []
+    _patch_stages(monkeypatch, calls, section_count=1, records_per_section={0: 1})
+    candidates = StubCandidateRepository()
+    candidates.find_section_results[(1, 0)] = PersonnelSectionId(99)
+
+    runner, *_ = _make_job_runner(candidates=candidates)
+    runner.run_for_pdf(_make_pdf(pdf_id=1))
+
+    assert candidates.find_active_section_calls == []
+    assert candidates.supersede_section_calls == []
+
+
+def test_case_c_add_section_failure_does_not_call_supersede(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Task32 Step3: `add_section()`が`RepositoryError`で失敗した場合、
+    旧アクティブSectionが見つかっていても`supersede_section()`は呼ばれない
+    （supersedeは新Sectionの永続化成功を前提とするため）。"""
+    calls: list[str] = []
+    _patch_stages(monkeypatch, calls, section_count=1, records_per_section={0: 1})
+    candidates = StubCandidateRepository(add_section_should_fail=True)
+    candidates.find_active_section_results[(1, 0)] = PersonnelSectionId(50)
+    runner, *_ = _make_job_runner(candidates=candidates)
+
+    result = runner.run_for_pdf(_make_pdf(pdf_id=1))
+
+    assert candidates.supersede_section_calls == []
+    assert result.job.status == "failed"
+
+
+def test_case_c_guard_prevents_supersede_when_old_id_equals_new_id(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Task32 Step3: `old_section_id != section_id`の防御条件を、Stub採番の
+    最初のID（1）が偶然一致するよう仕込んで検証する。実運用では
+    `find_active_section()`が`add_section()`より前に呼ばれるため新IDと一致する
+    ことはないが（ADR-0047）、条件自体が正しく機能することを確認する。"""
+    calls: list[str] = []
+    _patch_stages(monkeypatch, calls, section_count=1, records_per_section={0: 1})
+    candidates = StubCandidateRepository()
+    candidates.find_active_section_results[(1, 0)] = PersonnelSectionId(1)
+    runner, *_ = _make_job_runner(candidates=candidates)
+
+    runner.run_for_pdf(_make_pdf(pdf_id=1))
+
+    assert candidates.add_section_calls
+    assert candidates.supersede_section_calls == []
+
+
+def test_case_c_supersedes_independently_per_section(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Task32 Step3: 複数Sectionを含むPDFで、各Sectionが自分自身の旧Section
+    のみをSupersedeし、他Sectionの旧IDと混同しないことを確認する。"""
+    calls: list[str] = []
+    _patch_stages(monkeypatch, calls, section_count=2, records_per_section={0: 1, 1: 1})
+    candidates = StubCandidateRepository()
+    candidates.find_active_section_results[(1, 0)] = PersonnelSectionId(50)
+    candidates.find_active_section_results[(1, 1)] = PersonnelSectionId(51)
+    runner, *_ = _make_job_runner(candidates=candidates)
+
+    runner.run_for_pdf(_make_pdf(pdf_id=1))
+
+    assert len(candidates.add_section_calls) == 2
+    assert set(candidates.supersede_section_calls) == {
+        PersonnelSectionId(50),
+        PersonnelSectionId(51),
+    }
 
 
 def test_job_runner_public_api_matches_protocol() -> None:

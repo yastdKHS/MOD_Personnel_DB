@@ -59,3 +59,9 @@ tmp/*
 # 大容量の実データPDF（sample_pdfs/README.md の基準を満たさないもの）
 # 意図的にコミットする場合のみ git add -f を使う運用とする
 /data/
+
+# 実行時の作業領域（CLI/JobRunner等が生成するローカルDB・ステージング済みPDF・
+# エクスポート出力。logs/・tmp/と同様、実データ・生成物を含みうるため追跡しない。
+# runtime/はプロジェクト構成上のディレクトリではなく、手元検証用の一時領域の
+# ため、logs/・tmp/と異なりREADME.md/.gitkeepは設けない）
+/runtime/
