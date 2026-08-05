@@ -35,7 +35,8 @@ def _insert_pdf(conn: sqlite3.Connection, content_hash: str) -> int:
         (content_hash,),
     )
     conn.commit()
-    return int(cursor.lastrowid)
+    assert cursor.lastrowid is not None
+    return cursor.lastrowid
 
 
 def _insert_layout(conn: sqlite3.Connection) -> int:
@@ -44,7 +45,8 @@ def _insert_layout(conn: sqlite3.Connection) -> int:
         "VALUES ('reiwa', 'layouts/reiwa/manifest.yaml', 'x', '2019-05-01')"
     )
     conn.commit()
-    return int(cursor.lastrowid)
+    assert cursor.lastrowid is not None
+    return cursor.lastrowid
 
 
 def _insert_parser_version(conn: sqlite3.Connection, code_version: str) -> int:
@@ -53,7 +55,8 @@ def _insert_parser_version(conn: sqlite3.Connection, code_version: str) -> int:
         (code_version,),
     )
     conn.commit()
-    return int(cursor.lastrowid)
+    assert cursor.lastrowid is not None
+    return cursor.lastrowid
 
 
 def _insert_section(
@@ -66,7 +69,8 @@ def _insert_section(
         (pdf_id, layout_id, parser_version_id, status),
     )
     conn.commit()
-    return int(cursor.lastrowid)
+    assert cursor.lastrowid is not None
+    return cursor.lastrowid
 
 
 def test_clean_db_reports_no_findings(conn: sqlite3.Connection) -> None:
