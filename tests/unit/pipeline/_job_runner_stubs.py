@@ -406,6 +406,7 @@ class StubCandidateRepository:
     candidates_by_id: dict[int, CandidateRecord] = field(default_factory=dict)
     section_candidates: dict[int, tuple[CandidateRecord, ...]] = field(default_factory=dict)
     find_section_calls: list[tuple[PdfId, int]] = field(default_factory=list)
+    find_active_section_calls: list[tuple[PdfId, int]] = field(default_factory=list)
     find_candidate_calls: list[tuple[PersonnelSectionId, int]] = field(default_factory=list)
     supersede_section_calls: list[PersonnelSectionId] = field(default_factory=list)
 
@@ -416,10 +417,17 @@ class StubCandidateRepository:
         return self.find_section_results.get((int(pdf_id), section_index))
 
     def find_active_section(self, pdf_id: PdfId, section_index: int) -> PersonnelSectionId | None:
+        # Task32 Step2: Case C（find_active_section→add_section→supersede_section
+        # の呼び出し順序）をorder_log経由で検証できるよう記録する。
+        self.find_active_section_calls.append((pdf_id, section_index))
+        if self.order_log is not None:
+            self.order_log.append("find_active_section")
         return self.find_active_section_results.get((int(pdf_id), section_index))
 
     def supersede_section(self, section_id: PersonnelSectionId) -> None:
         self.supersede_section_calls.append(section_id)
+        if self.order_log is not None:
+            self.order_log.append("supersede_section")
 
     def find_candidate(
         self, section_id: PersonnelSectionId, record_index: int

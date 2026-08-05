@@ -295,7 +295,8 @@ class JobRunner:
         """Section単位のResume判定（Task31 Case A、Step5/Step7の7段階手順）。
 
         1. `find_section()`で既存Sectionの有無を確認する。
-        2. 存在しなければ従来処理（`add_section()`から開始）。
+        2. 存在しなければ、Case C（`find_active_section()`→`add_section()`→
+           条件付き`supersede_section()`、Task32 Step2、ADR-0047）を経て新規処理する。
         3-4. 存在し`candidate_records`が0件なら、Section再利用のみ行い
              FieldExtractorへ進む。
         5-6. 存在し全Candidateが`passed`/`failed`ならSection全体をskipする
@@ -307,11 +308,7 @@ class JobRunner:
             section.document_ref, section.section_index
         )
         if existing_section_id is None:
-            try:
-                section_id = self._candidates.add_section(section)
-            except RepositoryError as exc:
-                return self._repository_failure_outcome(context, "section_parser", exc)
-            return self._extract_and_process_records(context, job, section, section_id, knowledge)
+            return self._add_section_and_process(context, job, section, knowledge)
 
         candidates = self._candidates.list_by_section(existing_section_id)
         if not candidates:
@@ -325,6 +322,35 @@ class JobRunner:
         return self._resume_pending_candidates(
             context, job, existing_section_id, candidates, knowledge
         )
+
+    def _add_section_and_process(
+        self,
+        context: PipelineContext,
+        job: Job,
+        section: PersonnelSection,
+        knowledge: _KnowledgeInputs,
+    ) -> _Outcome:
+        """Case C: parser_version更新後の再解析（Task32 Step2、ADR-0047）。
+
+        `find_active_section()`は必ず`add_section()`より前に呼ぶ——追加後に
+        呼ぶと新旧2行が両方`status='parsed'`になり、どちらが旧versionかを
+        区別できなくなるため（ADR-0047「add_section前にfind_active_sectionを
+        呼ぶ理由」）。取得した旧Section IDが存在し、かつ新Section IDと異なる
+        場合のみ`supersede_section()`を呼ぶ（初回処理・旧Sectionなしの場合は
+        呼ばない）。
+        """
+        old_section_id = self._candidates.find_active_section(
+            section.document_ref, section.section_index
+        )
+        try:
+            section_id = self._candidates.add_section(section)
+        except RepositoryError as exc:
+            return self._repository_failure_outcome(context, "section_parser", exc)
+
+        if old_section_id is not None and old_section_id != section_id:
+            self._candidates.supersede_section(old_section_id)
+
+        return self._extract_and_process_records(context, job, section, section_id, knowledge)
 
     def _extract_and_process_records(
         self,
