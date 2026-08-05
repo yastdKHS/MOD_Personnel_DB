@@ -17,6 +17,8 @@ era_idへ解決する、ADR-0040のConsequences参照）。
 
 import json
 import sqlite3
+from collections.abc import Iterator
+from contextlib import contextmanager
 
 from mod_personnel_db.models import (
     CandidateId,
@@ -106,6 +108,57 @@ class SqliteCandidateRepository(SqliteRepositoryBase):
     def __init__(self, connection: sqlite3.Connection, parser_version_id: ParserVersionId) -> None:
         super().__init__(connection)
         self._parser_version_id = parser_version_id
+        self._in_transaction = False
+
+    @contextmanager
+    def transaction(self) -> Iterator[None]:
+        """Case C（find_active_section→add_section→supersede_section）を
+        原子的に実行するためのトランザクション境界（Task33、ADR-0047 TOCTOU対応）。
+
+        `BEGIN IMMEDIATE`で開始時点から書き込み意図ロックを取得し、ブロック内で
+        呼ばれる`add_section()`/`supersede_section()`は自身のcommitを行わず、
+        本メソッドの`__exit__`相当（正常終了時のみ）でまとめてcommitする。
+        例外発生時は`rollback()`する。
+
+        ネスト利用（トランザクション中に`transaction()`を再度呼ぶ）は
+        `RepositoryError`を送出して拒否する。
+
+        **注意（スレッドセーフ性）**: `_in_transaction`はインスタンス単位の状態で
+        あり、同一`SqliteCandidateRepository`インスタンスを複数スレッドで共有する
+        設計は想定していない（Composition Root、ADR-0046によりRepositoryインスタンス
+        はJobRunner実行単位で1つ生成される前提）。並行実行は、それぞれ独立した
+        コネクション・Repositoryインスタンスを介して行うこと。
+        """
+        if self._in_transaction:
+            raise RepositoryError("nested transaction is not supported")
+        try:
+            self.conn.execute("BEGIN IMMEDIATE")
+        except sqlite3.OperationalError as exc:
+            raise RepositoryError(f"failed to begin transaction: {exc}") from exc
+        self._in_transaction = True
+        try:
+            yield
+        except RepositoryError:
+            # Task29が確立したRepositoryErrorの契約（メッセージ・__cause__・
+            # traceback）をtransaction()が上書きしない。add_section()等が
+            # 既にRepositoryErrorへ変換済みの例外は、そのままrollbackのみ行い
+            # 再ラップせず送出する（Task33 Step3'）。
+            self.conn.rollback()
+            raise
+        except sqlite3.Error as exc:
+            # RepositoryErrorへまだ変換されていない生のsqlite3.Error
+            # （transaction()自身のBEGIN IMMEDIATE以外の箇所で発生しうるもの、
+            # 例: supersede_section()実行中のロック競合等）のみ、ここで
+            # RepositoryErrorへ変換する（保証7）。
+            self.conn.rollback()
+            raise RepositoryError(f"transaction failed: {exc}") from exc
+        except Exception:
+            self.conn.rollback()
+            raise
+        else:
+            self.conn.commit()
+        finally:
+            self._in_transaction = False
 
     def add_section(self, section: PersonnelSection) -> PersonnelSectionId:
         layout_id = _resolve_layout_id(self.conn, section.layout_id)
@@ -131,7 +184,8 @@ class SqliteCandidateRepository(SqliteRepositoryBase):
             # JobRunnerが吸収できるよう、sqlite3固有の例外を保証7（RepositoryはSQLiteを
             # 隠蔽する）に沿ってRepositoryErrorへ変換する（Task28/Task29）。
             raise RepositoryError(f"failed to add personnel_section: {exc}") from exc
-        self.conn.commit()
+        if not self._in_transaction:
+            self.conn.commit()
         return PersonnelSectionId(last_id(cursor))
 
     def get_section(self, section_id: PersonnelSectionId) -> PersonnelSection | None:
@@ -168,7 +222,8 @@ class SqliteCandidateRepository(SqliteRepositoryBase):
             "WHERE id = ? AND status = 'parsed'",
             (section_id,),
         )
-        self.conn.commit()
+        if not self._in_transaction:
+            self.conn.commit()
 
     def add_raw(self, section_id: PersonnelSectionId, record: RawRecord) -> CandidateId:
         try:

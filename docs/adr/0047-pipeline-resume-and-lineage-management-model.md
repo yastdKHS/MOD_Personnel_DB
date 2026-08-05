@@ -111,15 +111,29 @@ Case A用の`find_section(pdf_id, section_index)`は、内部で`self._parser_ve
 
 `supersede_section()`は`UPDATE personnel_sections SET status='superseded' WHERE id=? AND status='parsed'`を実行する（Task31 Step6実装済み）。2回目以降の呼び出しは`rowcount=0`になるが、これを異常とはみなさず例外を送出しない。最終状態（`status='superseded'`）は初回・再呼び出しいずれでも同一であり、呼び出し側（`JobRunner`）は戻り値を見て分岐する必要がない。
 
-### TOCTOU（Time-of-Check to Time-of-Use）競合について
+### TOCTOU（Time-of-Check to Time-of-Use）競合について（Task33で解消）
 
-`find_active_section()`による確認と、その後の`add_section()`/`supersede_section()`実行の間には、SQLite接続レベルでの原子性保証がない（`docs/database/schema.md`が定めるとおり、本プロジェクトは明示的なトランザクション管理（`BEGIN`/`ROLLBACK`）を持たず、各Repository書込みメソッドは単独の文をオートコミットする設計である）。したがって、同一PDFに対する2つの`run_for_pdf()`呼び出しが並行実行された場合、以下のような競合が理論上あり得る。
+策定当初（Task32時点）、`find_active_section()`による確認と、その後の`add_section()`/`supersede_section()`実行の間にはSQLite接続レベルでの原子性保証がなく、以下のような競合が理論上あり得た。
 
-- 2つの実行が同時に`find_active_section()`を呼び、両方が同じ旧Section IDを「supersede対象」として検出する。
-- 両方が`add_section()`に成功する可能性がある——ただし新version側の`add_section()`自体は`UNIQUE(pdf_id, section_index, parser_version_id)`により、同一`parser_version_id`での重複は防がれる（同一`JobRunner`インスタンス・同一versionでの並行実行であれば、片方は`RepositoryError`で失敗し、既存の吸収ロジック（Task29）で安全に処理される）。
-- `supersede_section()`自体は`WHERE status='parsed'`の条件付き更新であるため、2つの実行が同じ旧Section IDに対して呼んでも、2回目は`rowcount=0`の無害な no-op になる（冪等性により実害はない）。
+- 異なる`parser_version_id`を束縛する2つの`JobRunner`実行（別接続）が、同一PDFに対して同時に`find_active_section()`を呼び、両方が同じ旧Section IDを「supersede対象」として検出する。
+- 両方が`add_section()`に成功する（新version同士なので`UNIQUE(pdf_id, section_index, parser_version_id)`には抵触しない）。
+- 結果として、`(pdf_id, section_index)`に対して`status='parsed'`の行が2件同時に生じ、5節の不変条件（高々1件）が崩れる。
 
-以上より、TOCTOU競合は**完全には解消されない**が、（1）`supersede_section()`の条件付きUPDATEにより「誤って二重にsupersedeする」实害は防がれ、（2）`add_section()`のUNIQUE制約により「同一version内での二重書込み」も既存の例外吸収機構でカバーされるため、**データ破損には至らない**。この既知の制限は「結果（トレードオフ）」節に明記する。運用上、[ADR-0019](0019-workflow-orchestration.md)が前提とするGitHub Actionsベースの実行環境では、同一PDFに対する並行実行は起こりにくいと見込まれる。
+この競合を解消するため、Task33で`CandidateRepository`にトランザクション境界`transaction()`（`AbstractContextManager[None]`を返すProtocolメソッド、SQLite固有の型・構文はシグネチャに現れず保証7を満たす）を新設した。`JobRunner._add_section_and_process()`は、Case Cの3手順（`find_active_section()`→`add_section()`→`supersede_section()`）全体を`with self._candidates.transaction():`で包む。呼び出しの意味・順序自体はTask32から変更していない。
+
+`SqliteCandidateRepository.transaction()`はブロック開始時に`BEGIN IMMEDIATE`を発行し、**読み取り（`find_active_section()`）より前**に書き込み意図ロックを取得する。これにより、2つの並行実行のうち一方が先に`BEGIN IMMEDIATE`に成功すると、他方の`BEGIN IMMEDIATE`はロック解放（先行実行の`COMMIT`/`ROLLBACK`）まで待機する。先行実行が完了した後で後続実行が`find_active_section()`を呼ぶため、後続実行は先行実行が追加・supersedeした後の最新状態を観測し、結果として`(pdf_id, section_index)`ごとに`status='parsed'`が高々1件という不変条件（5節）は並行実行下でも維持される。
+
+ロック待機の上限は、`repositories/sqlite/_base.py::connect()`で設定する`PRAGMA busy_timeout = 5000`（5秒）で制御する。待機なし（即時失敗）では通常の並行実行でも`sqlite3.OperationalError`が起きやすく、逆にアプリケーション層でのリトライ機構を別途設けるのは[ADR-0019](0019-workflow-orchestration.md)が前提とする低並行性の運用規模に対して過剰実装であるため、`busy_timeout`による待機のみを採用した（Task33 Step2で比較した3案のうち、待機ありを選択）。待機後もロックが取得できない場合は`sqlite3.OperationalError`を`RepositoryError`へ変換して送出する（保証7）。
+
+`transaction()`内で発生した例外は、種類に応じて以下のように扱う。
+
+- 既に`RepositoryError`へ変換済みの例外（`add_section()`/`supersede_section()`が送出するもの）は、`rollback()`のみ行い**再ラップせずそのまま**送出する。Task29が確立した`RepositoryError`のメッセージ・`__cause__`・tracebackの契約を、トランザクション境界の追加によって壊さないためである（Task33 Step3'）。
+- まだ変換されていない生の`sqlite3.Error`（`transaction()`自身の`BEGIN IMMEDIATE`失敗等）は、`rollback()`した上で`RepositoryError`へ変換する（保証7）。
+- その他の例外も`rollback()`した上でそのまま送出する。
+
+`transaction()`のネスト利用（トランザクション中に再度`transaction()`を呼ぶ）は`RepositoryError`で拒否する。`add_section()`/`supersede_section()`は、`transaction()`ブロック内では自身のcommitを行わず（トランザクション終了時にまとめてcommitされる）、ブロック外から単独で呼ばれた場合は従来どおり即commitする——Task28/29で確立した単独呼び出し時の挙動は変更していない。
+
+以上により、`find_active_section()`→`add_section()`→`supersede_section()`の一連の手順は原子的に実行されるようになり、異なるparser_versionによる並行Case C実行でもTOCTOU競合によるデータ破損リスクは解消された。`transaction()`の導入はCase Cの3手順のみを対象とし、`add_raw()`・`attach_normalized()`・`update_validation()`（Case A/B側）や他のRepository実装には適用していない（Task33のスコープ、詳細は「Task33実装の記録」節を参照）。`JobRunner`は引き続き`CandidateRepository`の抽象化のみを介してこれを利用し、SQL・`sqlite3`固有の知識を一切持たない（[ADR-0044](0044-pipelinerunner-jobrunner-boundary.md)・保証7を維持）。
 
 ## 検討した代替案
 
@@ -153,7 +167,7 @@ Case A用の`find_section(pdf_id, section_index)`は、内部で`self._parser_ve
 
 - **得られるもの**: Section/Record単位での安全な再開（Case A/B）、およびparser_versionをまたいだ再解析でも新旧データが物理削除されず`status`列で来歴を追跡できる仕組み（Case C）。いずれもTask32 Step2/Step3時点で実装・テストとも完了している。
 - **失うもの・残る制限**:
-  - TOCTOU競合は完全には解消されない（上記参照）。将来的にトランザクション境界（`BEGIN`/`COMMIT`）を導入する場合は、別途ADRでの再検討が必要になる。
+  - TOCTOU競合はTask33で導入した`transaction()`（`BEGIN IMMEDIATE`+`busy_timeout`）により解消済みである（「TOCTOU競合について（Task33で解消）」節を参照）。
   - Case Cの「新旧versionの`candidate_records`比較」（差分表示等）は本ADRのスコープ外のまま据え置く。必要になった時点で別ADRとする。
   - `find_active_section()`は`.fetchone()`により1件のみを返す実装（Task31 Step6時点、Task32 Step2/Step3でも変更していない）であり、複数の`status='parsed'`行が万一存在した場合の挙動は、どの行が返るか未定義のままである。Task32 Step2/Step3では、本ADR確定後にCase Cの手順で処理された正常系の整合性（実SQLite統合テスト）は確認したが、**本ADR確定・Case C実装より前に処理された既存データ（supersede未実施のまま複数versionで処理されたレコードが既にDBに存在する場合等）との整合性確認は行っていない**。実データでの確認は別途運用タスクとして必要である。
 - **既存ADRとの整合性**: [ADR-0006](0006-pipeline-provenance.md)（物理削除しない）、[ADR-0019](0019-workflow-orchestration.md)（再実行はGitHub Actionsのリトライに委ねる、本ADRはその前提を実効化する）、[ADR-0023](0023-parser-versioning-policy.md)（parser_versionはリリース単位、本ADRは採番方針を変更しない）のいずれとも矛盾しない。
@@ -164,6 +178,13 @@ Case A用の`find_section(pdf_id, section_index)`は、内部で`self._parser_ve
 - 上記「結果（トレードオフ）」で述べた`find_active_section()`の複数行存在時の未定義動作については、実データでの事前確認は行われないまま実装が完了している。既知の制限として残る。
 - Case Cのテストは、`tests/unit/pipeline/test_job_runner.py`（Stubによる呼び出し順序・境界条件: `add_section()`失敗時の非supersede、旧新ID一致時の防御、複数Section時の独立性）と`tests/unit/pipeline/test_job_runner_resume_sqlite.py`（実SQLiteによる`status='parsed'`高々1件の維持確認）の2層で実施した（Task32 Step3）。
 - 本ADRはCase A/Bの実装（Task31 Step6/Step7）を追認する内容を含むが、Case A/Bのコード自体に変更は生じていない。
+
+## Task33実装の記録（TOCTOU解消）
+
+- 実装箇所: `CandidateRepository`Protocol（`repositories/__init__.py`）へ`transaction() -> AbstractContextManager[None]`を追加し、`SqliteCandidateRepository`（`repositories/sqlite/candidate.py`）で`@contextmanager`として実装した。`repositories/sqlite/_base.py::connect()`に`PRAGMA busy_timeout = 5000`を追加した。`JobRunner._add_section_and_process()`（`pipeline/job_runner.py`）を、Case Cの3手順全体を`with self._candidates.transaction():`で包む形に変更した（呼び出し順序・意味はTask32から不変）。
+- 上記「TOCTOU競合について（Task33で解消）」節で述べたとおり、Step1で洗い出した未解決事項（並行実行下での2重`parsed`行）は本実装により解消された。ただし、本ADR確定・Case C実装より前に処理された既存データとの整合性確認（「結果（トレードオフ）」節の別の限定事項）は、引き続き本ADR・Task33いずれのスコープ外である。
+- テストは、`tests/unit/repositories/test_candidate.py`（`transaction()`のcommit/rollback/ネスト拒否/ロック競合時の`RepositoryError`変換/`RepositoryError`非再ラップの単体テスト）と`tests/unit/pipeline/test_job_runner_resume_sqlite.py`（実ファイルSQLite・2スレッド・異なるparser_versionによる並行Case C実行で`status='parsed'`が最終的に1件のみとなることを`threading.Barrier`で決定的に検証する統合テスト、Task33 Step1のシナリオ2-2の再現）の2層で実施した。
+- `transaction()`の適用範囲はCase Cの3手順（`find_active_section`/`add_section`/`supersede_section`）に限定し、`add_raw()`・`attach_normalized()`・`update_validation()`（Case A/B側）は変更していない。Case A/Bの仕様・実装（Task31 Step6/Step7）およびSection Lineage（Supersedeの意味）自体は本改訂でも変更していない。
 
 ## 関連ADR
 

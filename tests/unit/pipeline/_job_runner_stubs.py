@@ -1,5 +1,7 @@
 """JobRunnerテスト専用のStub群。具象実装はsrc/には置かない（Phase3 Task10-1, Task10-4）。"""
 
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
 from datetime import UTC, date, datetime
 from typing import cast
@@ -428,6 +430,14 @@ class StubCandidateRepository:
         self.supersede_section_calls.append(section_id)
         if self.order_log is not None:
             self.order_log.append("supersede_section")
+
+    @contextmanager
+    def transaction(self) -> Iterator[None]:
+        # Task33: StubはRepository契約を満たすためのno-op実装。実SQLiteの
+        # トランザクション境界検証はtest_candidate.py/test_job_runner_resume_sqlite.py
+        # （実SQLite）側で行う。order_logへは記録しない（既存Case Cテストの
+        # 期待シーケンスを変えないため）。
+        yield
 
     def find_candidate(
         self, section_id: PersonnelSectionId, record_index: int
