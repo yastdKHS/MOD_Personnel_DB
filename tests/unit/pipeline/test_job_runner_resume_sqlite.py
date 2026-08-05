@@ -11,14 +11,20 @@
 """
 
 import sqlite3
+import tempfile
+import threading
+from collections.abc import Iterator
+from contextlib import contextmanager
 from datetime import UTC, date, datetime
+from pathlib import Path
 
 import pytest
 
-from mod_personnel_db.models import ParserVersion, ParserVersionId, PdfRecord
+from mod_personnel_db.models import ParserVersion, ParserVersionId, PdfId, PdfRecord
 from mod_personnel_db.pipeline import job_runner as job_runner_module
 from mod_personnel_db.pipeline.job_runner import JobRunner, JobRunnerRepositories
 from mod_personnel_db.repositories.sqlite import apply_schema
+from mod_personnel_db.repositories.sqlite._base import connect as sqlite_connect
 from mod_personnel_db.repositories.sqlite.candidate import SqliteCandidateRepository
 from mod_personnel_db.repositories.sqlite.job import SqliteJobRepository
 from mod_personnel_db.repositories.sqlite.pdf import SqlitePdfRepository
@@ -208,3 +214,116 @@ def test_case_c_second_run_same_version_resumes_without_superseding(
     assert len(rows) == 1
     assert rows[0]["status"] == "parsed"
     assert rows[0]["parser_version_id"] == int(v1)
+
+
+def _record_parser_version(conn: sqlite3.Connection, code_version: str) -> ParserVersionId:
+    return SqliteJobRepository(conn).record_parser_version(
+        ParserVersion(
+            id=None,
+            code_version=code_version,
+            knowledge_snapshot_checksum="f" * 64,
+            released_at=datetime(2026, 1, 1, tzinfo=UTC),
+            notes=None,
+        )
+    )
+
+
+def _seed_concurrent_case_c_db(
+    monkeypatch: pytest.MonkeyPatch, db_path: str
+) -> tuple[PdfId, ParserVersionId, ParserVersionId]:
+    """スキーマ・レイアウト・parser_version（v1〜v3）・PDFを用意し、v1で1回
+    処理して「旧アクティブSection」を作っておく。v2・v3が同じ旧Sectionを
+    supersede対象として競合する状況を再現するための下準備。"""
+    setup_conn = sqlite_connect(db_path)
+    apply_schema(setup_conn)
+    _insert_active_layout(setup_conn)
+    v1 = _record_parser_version(setup_conn, "v1.0.0")
+    v2 = _record_parser_version(setup_conn, "v2.0.0")
+    v3 = _record_parser_version(setup_conn, "v3.0.0")
+    pdf_id = SqlitePdfRepository(setup_conn).add(_make_pdf_record())
+    setup_conn.close()
+
+    seed_conn = sqlite_connect(db_path)
+    _patch_single_section_stages(monkeypatch, [])
+    pdf_for_seed = SqlitePdfRepository(seed_conn).get(pdf_id)
+    assert pdf_for_seed is not None
+    result_seed = _make_runner(seed_conn, v1).run_for_pdf(pdf_for_seed)
+    assert result_seed.succeeded is True
+    seed_conn.close()
+
+    return pdf_id, v2, v3
+
+
+def _run_concurrent_case_c(
+    monkeypatch: pytest.MonkeyPatch,
+    db_path: str,
+    pdf_id: PdfId,
+    v2: ParserVersionId,
+    v3: ParserVersionId,
+) -> list[BaseException]:
+    """v2・v3をそれぞれ別スレッド・別接続で並行実行し、両スレッドが
+    `BEGIN IMMEDIATE`直前で足並みを揃えるよう`transaction()`をBarrierで
+    ラップする（sleepによるタイミング頼みの再現を避けるため）。パッチは
+    スレッド開始前に1回だけ適用する（`SqliteCandidateRepository`クラス自体への
+    書き換えのため、スレッドごとに個別適用するとスレッドセーフでない）。"""
+    barrier = threading.Barrier(2)
+    original_transaction = SqliteCandidateRepository.transaction
+
+    @contextmanager
+    def synced_transaction(self: SqliteCandidateRepository) -> Iterator[None]:
+        barrier.wait(timeout=5)
+        with original_transaction(self):
+            yield
+
+    monkeypatch.setattr(SqliteCandidateRepository, "transaction", synced_transaction)
+
+    errors: list[BaseException] = []
+
+    def _run(version_id: ParserVersionId) -> None:
+        try:
+            thread_conn = sqlite_connect(db_path)
+            pdf = SqlitePdfRepository(thread_conn).get(pdf_id)
+            assert pdf is not None
+            _make_runner(thread_conn, version_id).run_for_pdf(pdf)
+            thread_conn.close()
+        except BaseException as exc:  # noqa: BLE001 -- テストスレッドの例外を捕捉して後で失敗させる
+            errors.append(exc)
+
+    thread_v2 = threading.Thread(target=_run, args=(v2,))
+    thread_v3 = threading.Thread(target=_run, args=(v3,))
+    thread_v2.start()
+    thread_v3.start()
+    thread_v2.join(timeout=10)
+    thread_v3.join(timeout=10)
+    return errors
+
+
+def test_case_c_concurrent_versions_produce_single_active_section(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Task33: 異なるparser_versionによる並行Case C実行でも、`transaction()`
+    （`BEGIN IMMEDIATE`+`busy_timeout`）により最終的に`status='parsed'`が1件
+    のみとなることを、実ファイルDB・2つの独立した接続・2スレッドで検証する
+    （ADR-0047 TOCTOU対応、Task33 Step1シナリオ2-2の再現）。"""
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        db_path = str(Path(tmp_dir) / "concurrent_case_c.db")
+        pdf_id, v2, v3 = _seed_concurrent_case_c_db(monkeypatch, db_path)
+
+        errors = _run_concurrent_case_c(monkeypatch, db_path, pdf_id, v2, v3)
+        assert not errors, f"並行実行中に例外が発生した: {errors}"
+
+        verify_conn = sqlite_connect(db_path)
+        rows = verify_conn.execute(
+            "SELECT parser_version_id, status FROM personnel_sections "
+            "WHERE pdf_id = ? AND section_index = 0",
+            (int(pdf_id),),
+        ).fetchall()
+        verify_conn.close()
+
+        assert len(rows) == 3
+        parsed = [row for row in rows if row["status"] == "parsed"]
+        superseded = [row for row in rows if row["status"] == "superseded"]
+        # ADR-0047の設計前提: (pdf_id, section_index)ごとにstatus='parsed'は高々1件。
+        assert len(parsed) == 1
+        assert len(superseded) == 2
+        assert parsed[0]["parser_version_id"] in (int(v2), int(v3))

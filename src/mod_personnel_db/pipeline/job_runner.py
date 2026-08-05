@@ -338,17 +338,22 @@ class JobRunner:
         呼ぶ理由」）。取得した旧Section IDが存在し、かつ新Section IDと異なる
         場合のみ`supersede_section()`を呼ぶ（初回処理・旧Sectionなしの場合は
         呼ばない）。
+
+        Task33: 上記3呼び出し（読み取りを含む）全体を`transaction()`で囲み、
+        異なるparser_version間の並行実行でも`status='parsed'`が高々1件という
+        設計前提（ADR-0047）が崩れないようにする（TOCTOU対応）。呼び出しの
+        意味・順序自体はTask32から変更しない。
         """
-        old_section_id = self._candidates.find_active_section(
-            section.document_ref, section.section_index
-        )
         try:
-            section_id = self._candidates.add_section(section)
+            with self._candidates.transaction():
+                old_section_id = self._candidates.find_active_section(
+                    section.document_ref, section.section_index
+                )
+                section_id = self._candidates.add_section(section)
+                if old_section_id is not None and old_section_id != section_id:
+                    self._candidates.supersede_section(old_section_id)
         except RepositoryError as exc:
             return self._repository_failure_outcome(context, "section_parser", exc)
-
-        if old_section_id is not None and old_section_id != section_id:
-            self._candidates.supersede_section(old_section_id)
 
         return self._extract_and_process_records(context, job, section, section_id, knowledge)
 

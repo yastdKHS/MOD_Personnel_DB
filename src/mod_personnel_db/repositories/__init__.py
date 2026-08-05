@@ -5,6 +5,7 @@ UnitOfWorkは本タスク（Phase2 Task1）の対象外。LearningRepositoryはA
 （具象実装は対象外、docs/api/repositories.md#learningrepository）。
 """
 
+from contextlib import AbstractContextManager
 from datetime import date, datetime
 from typing import Protocol
 
@@ -63,6 +64,11 @@ class CandidateRepository(Protocol):
     def find_candidate(
         self, section_id: PersonnelSectionId, record_index: int
     ) -> CandidateId | None: ...
+
+    # Task33: Case C（find_active_section→add_section→supersede_section）を
+    # 原子的に実行するためのトランザクション境界（ADR-0047 TOCTOU対応）。
+    # SQLite固有の型・構文はこのシグネチャに一切現れない（保証7）。
+    def transaction(self) -> AbstractContextManager[None]: ...
 
 
 class GoldRepository(Protocol):

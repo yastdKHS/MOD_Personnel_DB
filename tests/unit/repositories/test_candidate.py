@@ -1,5 +1,6 @@
 import sqlite3
 from datetime import UTC, datetime
+from pathlib import Path
 
 import pytest
 
@@ -20,6 +21,7 @@ from mod_personnel_db.models import (
     ValidationResult,
 )
 from mod_personnel_db.models.values import Confidence
+from mod_personnel_db.repositories.sqlite import apply_schema
 from mod_personnel_db.repositories.sqlite.candidate import SqliteCandidateRepository
 from mod_personnel_db.repositories.sqlite.job import SqliteJobRepository
 from mod_personnel_db.utils.exceptions import RepositoryError
@@ -263,6 +265,108 @@ def test_add_raw_wraps_integrity_error_as_repository_error(
     with pytest.raises(RepositoryError) as excinfo:
         repo.add_raw(section_id, raw)
     assert not isinstance(excinfo.value, sqlite3.IntegrityError)
+
+
+def test_transaction_commits_on_success(
+    conn: sqlite3.Connection, pdf_id: PdfId, layout_era_id: str, parser_version_id: ParserVersionId
+) -> None:
+    """Task33: `transaction()`ブロックが正常終了すれば、内部の`add_section()`/
+    `supersede_section()`の変更がまとめてcommitされる（ADR-0047 TOCTOU対応）。"""
+    repo = SqliteCandidateRepository(conn, parser_version_id)
+    section = _make_section(pdf_id, layout_era_id)
+
+    with repo.transaction():
+        section_id = repo.add_section(section)
+
+    fetched = repo.get_section(section_id)
+    assert fetched is not None
+
+
+def test_transaction_rolls_back_on_exception(
+    conn: sqlite3.Connection, pdf_id: PdfId, layout_era_id: str, parser_version_id: ParserVersionId
+) -> None:
+    """Task33: ブロック内で例外が送出された場合、`add_section()`の変更は
+    ロールバックされ永続化されない。"""
+    repo = SqliteCandidateRepository(conn, parser_version_id)
+    section = _make_section(pdf_id, layout_era_id)
+
+    with pytest.raises(ValueError, match="boom"), repo.transaction():
+        repo.add_section(section)
+        raise ValueError("boom")
+
+    row = conn.execute("SELECT COUNT(*) AS cnt FROM personnel_sections").fetchone()
+    assert row["cnt"] == 0
+
+
+def test_transaction_does_not_rewrap_repository_error(
+    conn: sqlite3.Connection, pdf_id: PdfId, layout_era_id: str, parser_version_id: ParserVersionId
+) -> None:
+    """Task33 Step3': `transaction()`ブロック内で`add_section()`が送出する
+    `RepositoryError`（Task29のIntegrityErrorラップ）は再ラップされず、元の
+    メッセージ・`__cause__`（`sqlite3.IntegrityError`）がそのまま伝播する。"""
+    repo = SqliteCandidateRepository(conn, parser_version_id)
+    section = _make_section(pdf_id, layout_era_id)
+    repo.add_section(section)
+
+    with pytest.raises(RepositoryError) as excinfo, repo.transaction():
+        repo.add_section(section)  # UNIQUE制約違反でRepositoryErrorを送出
+
+    assert "failed to add personnel_section" in str(excinfo.value)
+    assert "transaction failed" not in str(excinfo.value)
+    assert isinstance(excinfo.value.__cause__, sqlite3.IntegrityError)
+
+
+def test_transaction_rejects_nested_use(
+    conn: sqlite3.Connection, parser_version_id: ParserVersionId
+) -> None:
+    """Task33: `transaction()`のネスト利用は`RepositoryError`で拒否する。"""
+    repo = SqliteCandidateRepository(conn, parser_version_id)
+
+    with pytest.raises(RepositoryError, match="nested transaction"), repo.transaction():  # noqa: SIM117 -- ネスト自体を検証するため意図的に入れ子にする
+        with repo.transaction():
+            pass
+
+
+def test_transaction_wraps_lock_contention_as_repository_error(
+    tmp_path: Path, parser_version_id: ParserVersionId
+) -> None:
+    """Task33: `BEGIN IMMEDIATE`実行時に他接続が書き込みロックを保持している
+    場合、生の`sqlite3.OperationalError`ではなく`RepositoryError`へ変換される
+    （保証7、ADR-0047 TOCTOU対応）。"""
+    db_path = str(tmp_path / "lock_contention.db")
+    blocking_conn = sqlite3.connect(db_path)
+    apply_schema(blocking_conn)
+    blocking_conn.execute("BEGIN IMMEDIATE")  # 書き込みロックを保持したまま維持する
+
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA busy_timeout = 100")  # テスト高速化のため本番既定値より短縮
+    repo = SqliteCandidateRepository(conn, parser_version_id)
+
+    try:
+        with pytest.raises(RepositoryError) as excinfo, repo.transaction():
+            pass
+        assert not isinstance(excinfo.value, sqlite3.OperationalError)
+    finally:
+        blocking_conn.rollback()
+        blocking_conn.close()
+        conn.close()
+
+
+def test_add_section_commits_immediately_outside_transaction(
+    conn: sqlite3.Connection, pdf_id: PdfId, layout_era_id: str, parser_version_id: ParserVersionId
+) -> None:
+    """Task33回帰確認: `transaction()`を使わない単体呼び出しでは、従来どおり
+    `add_section()`が即commitする（Task28/29確立済みの挙動を変えない）。
+    `_in_transaction`フラグがFalseのままであることも確認する。"""
+    repo = SqliteCandidateRepository(conn, parser_version_id)
+
+    assert repo._in_transaction is False
+    section_id = repo.add_section(_make_section(pdf_id, layout_era_id))
+    assert repo._in_transaction is False
+
+    row = conn.execute("SELECT id FROM personnel_sections WHERE id = ?", (section_id,)).fetchone()
+    assert row is not None
 
 
 def test_find_section_returns_id_when_exists(
