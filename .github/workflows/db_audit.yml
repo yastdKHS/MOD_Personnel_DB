@@ -1,0 +1,129 @@
+# DB Audit: 本番DBの整合性を定期的に監査する
+#
+# 設計方針: docs/operations/db_audit.md（監査項目・整合性チェックSQL）、
+#          docs/operations/db_repair_procedures.md（異常検知時の手動修復手順）
+#
+# tools/db_audit.py（Task34）をGitHub Actions上で定期実行し、本番DBの
+# 整合性を監査する（Task35）。scheduler.ymlと同じFTP Secretsを使って本番DBを
+# 読み取り専用でダウンロードするのみで、アップロード（書き戻し）は行わない。
+#
+# scheduler.ymlとのFTPダウンロード処理の共通化（Composite Action化・
+# Reusable Workflow化）は、本番運用の中核であるscheduler.ymlへの変更を
+# 伴う・現時点で重複箇所が2ワークフローのみであることを踏まえ、あえて
+# 採用しない（Task35 Step2で比較・判断。scheduler.ymlは本ワークフロー追加に
+# あたり一切変更していない）。
+#
+# tools/db_audit.pyのExitCode（0=問題なし/1=Warningのみ/2=Error、Task34で
+# 確定した契約）の意味自体は変更せず、本ワークフロー側でのみ「ExitCode 2の
+# 場合だけジョブをFailさせる」という判定を行う（0/1はいずれもSuccess、
+# WarningはJob Summaryで可視化するのみでFailにしない、Task35 Step2）。
+# Job Summary生成・Artifactアップロードは`if: always()`で実行し、その後に
+# Failure判定を行う（Errorの場合でも監査結果自体は必ず残す）。
+
+name: DB Audit
+
+on:
+  schedule:
+    - cron: "15 9 * * *" # 毎日18:15 JST（UTC+9） = 09:15 UTC。scheduler.yml（08:45 UTC）・nightly.yml（17:00 UTC）と重ならない時間帯
+  workflow_dispatch:
+
+jobs:
+  db-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install package
+        run: pip install -e .
+
+      - name: Download DB from FTP
+        env:
+          MOD_PERSONNEL_DB_DB_PATH: ${{ secrets.MOD_PERSONNEL_DB_DB_PATH }}
+          MOD_PERSONNEL_DB_KNOWLEDGE_ROOT: ${{ secrets.MOD_PERSONNEL_DB_KNOWLEDGE_ROOT }}
+          MOD_PERSONNEL_DB_LAYOUTS_ROOT: ${{ secrets.MOD_PERSONNEL_DB_LAYOUTS_ROOT }}
+          MOD_PERSONNEL_DB_FTP__HOST: ${{ secrets.MOD_PERSONNEL_DB_FTP__HOST }}
+          MOD_PERSONNEL_DB_FTP__PORT: ${{ secrets.MOD_PERSONNEL_DB_FTP__PORT }}
+          MOD_PERSONNEL_DB_FTP__USERNAME: ${{ secrets.MOD_PERSONNEL_DB_FTP__USERNAME }}
+          MOD_PERSONNEL_DB_FTP__PASSWORD: ${{ secrets.MOD_PERSONNEL_DB_FTP__PASSWORD }}
+          MOD_PERSONNEL_DB_FTP__REMOTE_DIRECTORY: ${{ secrets.MOD_PERSONNEL_DB_FTP__REMOTE_DIRECTORY }}
+          MOD_PERSONNEL_DB_FTP__TIMEOUT: ${{ secrets.MOD_PERSONNEL_DB_FTP__TIMEOUT }}
+          MOD_PERSONNEL_DB_DB_REMOTE_PATH: ${{ secrets.MOD_PERSONNEL_DB_DB_REMOTE_PATH }}
+        run: |
+          python -m mod_personnel_db.cli \
+            --db-path "$MOD_PERSONNEL_DB_DB_PATH" \
+            --knowledge-root "$MOD_PERSONNEL_DB_KNOWLEDGE_ROOT" \
+            --layouts-root "$MOD_PERSONNEL_DB_LAYOUTS_ROOT" \
+            download-db "$MOD_PERSONNEL_DB_DB_REMOTE_PATH"
+        # scheduler.ymlのDownload DBステップと同一内容（Task35 Step2 A案:
+        # コピー）。upload-dbは監査が読み取り専用のため不要。
+
+      - name: Run DB audit
+        id: audit
+        env:
+          MOD_PERSONNEL_DB_DB_PATH: ${{ secrets.MOD_PERSONNEL_DB_DB_PATH }}
+        run: |
+          # tools/db_audit.pyの--jsonは標準出力へJSONを書き出す仕様
+          # （ファイルパスを受け取る引数ではない）ため、リダイレクトで
+          # ファイル化する。`set +e`によりこのステップ自体はExitCodeに
+          # 関わらず必ず成功させ、実際のExitCodeはGITHUB_OUTPUTへ渡して
+          # 後続ステップでの判定に使う（tools/db_audit.py自体は変更しない）。
+          set +e
+          python tools/db_audit.py --db-path "$MOD_PERSONNEL_DB_DB_PATH" --json > db_audit_result.json
+          echo "exit_code=$?" >> "$GITHUB_OUTPUT"
+
+      - name: Write job summary
+        if: always()
+        run: |
+          EXIT_CODE="${{ steps.audit.outputs.exit_code }}"
+          case "$EXIT_CODE" in
+            0) JUDGEMENT="Success（問題なし）" ;;
+            1) JUDGEMENT="Success（Warningあり）" ;;
+            2) JUDGEMENT="Failure（Errorあり）" ;;
+            *) JUDGEMENT="Failure（想定外のExitCode）" ;;
+          esac
+
+          {
+            echo "## DB Audit 結果"
+            echo ""
+            echo "| 項目 | 値 |"
+            echo "|---|---|"
+            echo "| 監査対象DB | 本番DB（FTP経由取得） |"
+            echo "| 実行日時（UTC） | $(date -u '+%Y-%m-%dT%H:%M:%SZ') |"
+            echo "| ExitCode | $EXIT_CODE |"
+            echo "| 判定 | $JUDGEMENT |"
+            if [ -f db_audit_result.json ]; then
+              echo "| Error件数 | $(jq '[.checks[] | select(.severity == "error")] | length' db_audit_result.json) |"
+              echo "| Warning件数 | $(jq '[.checks[] | select(.severity == "warning")] | length' db_audit_result.json) |"
+            else
+              echo "| Error件数 | (JSON未生成) |"
+              echo "| Warning件数 | (JSON未生成) |"
+            fi
+            echo "| Artifact名 | db-audit-result |"
+            echo ""
+            if [ -f db_audit_result.json ] && [ "$(jq '.checks | length' db_audit_result.json)" != "0" ]; then
+              echo "### 検出項目"
+              echo ""
+              echo "| ID | Severity | 名前 | 件数 |"
+              echo "|---|---|---|---|"
+              jq -r '.checks[] | "| \(.id) | \(.severity) | \(.name) | \(.count) |"' db_audit_result.json
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload audit result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: db-audit-result
+          path: db_audit_result.json
+          retention-days: 30
+
+      - name: Fail on audit error
+        if: steps.audit.outputs.exit_code == '2'
+        run: |
+          echo "DB audit detected Error(s). See job summary / artifact for details." >&2
+          exit 1

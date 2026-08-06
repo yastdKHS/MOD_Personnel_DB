@@ -7,8 +7,9 @@
 1. [監査項目一覧（Step1）](#監査項目一覧step1)
 2. [整合性チェックSQL（Step2）](#整合性チェックsqlstep2)
 3. [DB監査ツール](#db監査ツール)
-4. [Migration不要確認（Step5）](#migration不要確認step5)
-5. [関連文書](#関連文書)
+4. [GitHub Actionsによる自動実行（Task35）](#github-actionsによる自動実行task35)
+5. [Migration不要確認（Step5）](#migration不要確認step5)
+6. [関連文書](#関連文書)
 
 ---
 
@@ -306,6 +307,16 @@ python tools/db_audit.py [--db-path DB/personnel.db] [--json] [--stale-running-h
 - **Repository経由不要**: 監査は業務ロジック（`JobRunner`・各Repository実装）を一切呼び出さず、`sqlite3`標準ライブラリでQ1〜Q15を直接実行する。
 - **終了コード**: `0`=問題なし、`1`=Warningのみ、`2`=Errorを含む（Errorが1件でもあれば`2`を優先する）。
 - **CandidateRepository.transaction()との関係**: 監査ツールは読み取り専用であり、`transaction()`（Case Cの書き込み専用境界）を一切使用しない。Repository契約・JobRunner・Case A/B/Cの実装には変更を加えていない。
+
+---
+
+## GitHub Actionsによる自動実行（Task35）
+
+`tools/db_audit.py`は、[`.github/workflows/db_audit.yml`](../../.github/workflows/db_audit.yml)により`schedule`（毎日09:15 UTC）・`workflow_dispatch`で定期・手動実行される。既存の`scheduler.yml`と同じFTP Secretsで本番DBを読み取り専用でダウンロードし（書き戻しは行わない）、監査結果をJSON Artifact（`db-audit-result`、`retention-days: 30`）として保存する。
+
+ExitCode（本ドキュメントが定める0/1/2の意味自体は変更しない）の扱いはWorkflow側で判定する。ExitCode 2（Error検出）の場合のみジョブをFailさせ、ExitCode 0・1（問題なし・Warningのみ）はいずれもSuccessとし、Warningの内容はGitHub Actions Job Summaryで可視化する。詳細は`db_audit.yml`内のコメントを参照。
+
+**GitHub Actionsの仕様上の制約**: `workflow_dispatch`はデフォルトブランチ（`main`）上に存在するワークフローに対してのみ実行できる。`db_audit.yml`導入時（Task35 Step4）は`main`反映前だったため実環境での`workflow_dispatch`実行確認ができず、`main`反映後に確認した（詳細は`.github/workflows/README.md`を参照）。
 
 ---
 
