@@ -205,6 +205,12 @@ python -m mod_personnel_db.cli help
 - [`docs/workflow/`](docs/workflow/) — Workflow State Machine（Queued〜Archivedのライフサイクル）
 - [`docs/operations/observability.md`](docs/operations/observability.md) — Observability設計
 - [`docs/operations/release.md`](docs/operations/release.md) — 運用設計（Release Flow/Rollback/Migration/Backfill/Disaster Recovery等）
+- [`docs/operations/db_audit.md`](docs/operations/db_audit.md) — DB監査項目・整合性チェックSQL・監査ツール・GitHub Actions自動実行の設計（Task34/35）
+- [`docs/operations/db_repair_procedures.md`](docs/operations/db_repair_procedures.md) — DB監査で異常検知した場合の手動修復手順（Task34）
+- [`docs/operations/daily_operation.md`](docs/operations/daily_operation.md) — 運用担当者向け日常運用Runbook（Task36）
+- [`docs/operations/incident_response.md`](docs/operations/incident_response.md) — 運用担当者向け障害対応Runbook（Task36）
+- [`docs/operations/backup_restore.md`](docs/operations/backup_restore.md) — バックアップ・リストアRunbook（Task36）
+- [`docs/operations/faq.md`](docs/operations/faq.md) — 運用担当者向けFAQ（Task36）
 - [`docs/glossary.md`](docs/glossary.md) — ドメイン用語集
 - [`docs/adr/`](docs/adr/) — Architecture Decision Records（全46本）
 - [`CONTRIBUTING.md`](CONTRIBUTING.md) — 開発への参加方法
@@ -241,6 +247,8 @@ ADR-0023が定める「タグ付与をトリガーに`parser_versions`テーブ�
 ## Scheduler運用（GitHub Actions）
 
 [`.github/workflows/scheduler.yml`](.github/workflows/scheduler.yml)（Phase8 Task18-3）が、既存CLIの`schedule-now run_pending_pipeline`コマンドを定期的に起動する。`Scheduler`・`JobOrchestrator`等のPythonコードをワークフローが直接importすることはなく、常にCLIコマンド経由でのみ実行する。運用フロー全体（GitHub Actions → `schedule-now` → `Scheduler` → `JobOrchestrator`）は[`docs/operations/release.md`](docs/operations/release.md#scheduler運用フローgithub-actions--schedule-now--scheduler--joborchestrator)を参照。
+
+日々の確認作業（Pipeline実行状況・Resume・DB監査等）は[`docs/operations/daily_operation.md`](docs/operations/daily_operation.md)に、障害発生時の対応は[`docs/operations/incident_response.md`](docs/operations/incident_response.md)にまとめている（Task36）。
 
 ### 手動実行方法
 
