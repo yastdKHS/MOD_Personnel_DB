@@ -70,6 +70,12 @@ CREATE INDEX idx_personnel_sections_pdf_id ON personnel_sections (pdf_id);
 CREATE INDEX idx_personnel_sections_layout_id ON personnel_sections (layout_id);
 CREATE INDEX idx_personnel_sections_parser_version_id ON personnel_sections (parser_version_id);
 CREATE INDEX idx_personnel_sections_status ON personnel_sections (status);
+-- Task37: find_active_section()（Case C Resume）のCovering Index化、および
+-- DB Audit Q1（複数parsed検出、GROUP BY pdf_id, section_index）のTEMP B-TREE
+-- 解消のために追加。列順(status, pdf_id, section_index)はEXPLAIN QUERY PLAN
+-- による実測比較で(pdf_id, section_index, status)より優位と確認済み。
+CREATE INDEX idx_personnel_sections_status_pdf_id_section_index
+    ON personnel_sections (status, pdf_id, section_index);
 
 CREATE TABLE candidate_records (
     id                     INTEGER PRIMARY KEY,

@@ -270,12 +270,14 @@ CREATE INDEX idx_personnel_sections_pdf_id ON personnel_sections (pdf_id);
 CREATE INDEX idx_personnel_sections_layout_id ON personnel_sections (layout_id);
 CREATE INDEX idx_personnel_sections_parser_version_id ON personnel_sections (parser_version_id);
 CREATE INDEX idx_personnel_sections_status ON personnel_sections (status);
+CREATE INDEX idx_personnel_sections_status_pdf_id_section_index
+    ON personnel_sections (status, pdf_id, section_index);
 ```
 
 - **主キー**: `id`
 - **一意制約**: `(pdf_id, section_index, parser_version_id)`
 - **外部キー**: `pdf_id → pdfs.id`, `layout_id → layouts.id`, `parser_version_id → parser_versions.id`
-- **インデックス**: `pdf_id`（PDFからの逆引き）、`layout_id`、`parser_version_id`、`status`
+- **インデックス**: `pdf_id`（PDFからの逆引き）、`layout_id`、`parser_version_id`、`status`、`(status, pdf_id, section_index)`（Task37。`find_active_section()`のCovering Index化とDB Audit「複数parsed検出」のTEMP B-TREE解消を目的とする複合Index）
 
 ---
 
@@ -651,6 +653,7 @@ CREATE INDEX idx_jobs_pdf_id ON jobs (pdf_id);
 | `personnel_sections` | `idx_personnel_sections_layout_id` | `layout_id` | 様式別の集計 |
 | `personnel_sections` | `idx_personnel_sections_parser_version_id` | `parser_version_id` | バージョン別の再処理範囲特定 |
 | `personnel_sections` | `idx_personnel_sections_status` | `status` | 有効セクションの絞り込み |
+| `personnel_sections` | `idx_personnel_sections_status_pdf_id_section_index` | `(status, pdf_id, section_index)` | Case C Resume（`find_active_section()`）のCovering Index化、DB Audit「複数parsed検出」のTEMP B-TREE解消（Task37） |
 | `candidate_records` | `idx_candidate_records_section_id` | `personnel_section_id` | セクションからの逆引き |
 | `candidate_records` | `idx_candidate_records_parser_version_id` | `parser_version_id` | バージョン別集計 |
 | `candidate_records` | `idx_candidate_records_validation_status` | `validation_status` | Validator処理対象の抽出 |
