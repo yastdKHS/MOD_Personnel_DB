@@ -5,6 +5,15 @@ Document Analyzer（段階1）とは独立に、`document.file_path`を用いて
 `LayoutDefinition`群と照合する。戻り値は`LayoutArtifact`（ADR-0037）であり、
 判定結果（`LayoutDetectionResult`、`.detection`）に加え、再読込した各ページの
 生テキストを保持する——これがSection ParserがPDF本文を得る唯一の経路となる。
+
+PDFテキストはページごとに2種類抽出する（Task-E10 Option A、2段階抽出）。
+Layout判定用（signature/Evidence算出）はpypdfのdefault modeを維持し、
+`LayoutArtifact.pages`（Section Parser以降が本文として受け取るテキスト）は
+`extraction_mode="layout"`で抽出する。2列レイアウトPDFではdefault modeが
+視覚的な行順を保証せず本文の行対応を破壊するため（Task-E8）。この分岐は
+`LayoutDetector`内部（`_PageFeatures.text`と`.extraction_text`）に閉じており、
+判定ロジック自体は変更しない。
+
 Section生成・Field抽出・Regexによる値抽出・Knowledge参照・Normalizer/
 Validator/Repository参照・SQLite参照は行わない。
 """
@@ -45,7 +54,14 @@ _AMBIGUITY_MARGIN = 0.05
 
 @dataclass(frozen=True, slots=True)
 class _PageFeatures:
-    """PDFの1ページ分から抽出した生特徴量（`layout/`パッケージ外には公開しない）。"""
+    """PDFの1ページ分から抽出した生特徴量（`layout/`パッケージ外には公開しない）。
+
+    `text`はLayout判定用（signature/Evidence算出、pypdf default mode）、
+    `extraction_text`はSection Parser以降が本文として受け取る用（pypdf
+    `extraction_mode="layout"`）。両者は用途が異なるため意図的に分離しており、
+    Layout判定ロジック（`_build_evidence`等）は`text`のみを参照し続ける
+    （Task-E10 Option A、`/tmp/taskE10/extraction_architecture_comparison.md`）。
+    """
 
     char_count: int
     width: float
@@ -53,6 +69,7 @@ class _PageFeatures:
     rotation: int
     font_names: frozenset[str]
     text: str
+    extraction_text: str
 
 
 class LayoutDetector:
@@ -87,7 +104,8 @@ class LayoutDetector:
             source_pdf_id=document.source_pdf_id,
             detection=detection,
             pages=tuple(
-                LayoutArtifactPage(index=index, text=page.text) for index, page in enumerate(pages)
+                LayoutArtifactPage(index=index, text=page.extraction_text)
+                for index, page in enumerate(pages)
             ),
         )
 
@@ -114,6 +132,7 @@ def _extract_page_features(reader: PdfReader) -> tuple[_PageFeatures, ...]:
 
 def _page_features(page: PageObject) -> _PageFeatures:
     text = _extract_text(page)
+    extraction_text = _extract_text_layout(page)
     mediabox = page.mediabox
     rotation = page.rotation % 360
     return _PageFeatures(
@@ -123,6 +142,7 @@ def _page_features(page: PageObject) -> _PageFeatures:
         rotation=rotation,
         font_names=_font_names(page),
         text=text,
+        extraction_text=extraction_text,
     )
 
 
@@ -134,6 +154,26 @@ def _extract_text(page: PageObject) -> str:
     except PyPdfError:
         return ""
     except UnicodeError:
+        return ""
+
+
+def _extract_text_layout(page: PageObject) -> str:
+    # 2列レイアウトPDFではpypdfのdefault modeが列順ではなく描画順でテキストを
+    # 抽出し、行の対応関係を破壊する（Task-E8）。Section Parser以降が受け取る
+    # 本文は視覚的な行順を保つ`extraction_mode="layout"`から取得する。
+    # Layout判定（signature/Evidence）は`_extract_text`のdefault modeを維持し、
+    # 本関数の結果を参照しない（Task-E10 Option A）。
+    # `/Contents`を持たないページ（例: 白紙ページ）に対し、pypdfのdefault mode
+    # は空文字列を返すが、`extraction_mode="layout"`はKeyErrorを送出する
+    # （pypdf側の非対称な挙動、Task-E11実装時に発見）。default modeと同じ
+    # 「空文字列」に揃えるため、KeyErrorも他の2例外と同様に空文字列化する。
+    try:
+        return page.extract_text(extraction_mode="layout")
+    except PyPdfError:
+        return ""
+    except UnicodeError:
+        return ""
+    except KeyError:
         return ""
 
 

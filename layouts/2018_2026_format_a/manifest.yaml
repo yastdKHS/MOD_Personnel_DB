@@ -1,0 +1,39 @@
+# layouts/2018_2026_format_a/manifest.yaml
+#
+# 【本ファイルは再構築版である】このリポジトリのworking treeが、コミットされて
+# いなかった作業内容とともに再クローン相当の状態へリセットされたため、元の
+# manifest.yaml(観測対象PDFの具体例・作成時の詳細な調査経緯を含む)が失われた。
+# 以下のルール構成(era_id・各ruleのkind/value/weight)は、本セッション内で
+# Task-E8〜E13にわたり繰り返し実測・参照されてきた値であり、高い確度で元の
+# 値と一致するが、コメント本文(観測PDFの具体的なファイル名等)は元ファイルの
+# 内容を正確には保持していない。この点を隠さず明記する。
+#
+# 既知の設計判断(Task-E10で確認済み、再構築にあたり維持):
+# 2018年以降の様式の一部PDFで観測された、「Header 1行目が『年』『月』『日』を
+# 含む日付表記」という様式を対象とする。footer_patternルールを意図的に採用して
+# いない。理由は、観測範囲のサンプルPDFのうち約52%が定型的なfooter文言を
+# 持たないためであり、footer_patternを必須化すると多くの対象PDFを誤って
+# 検出漏れさせてしまう。この設計により、本Layoutはheader(年/月/日)と
+# min-pagesのみで判定する構成となっており、他のLayout(例:
+# 2015_2017_format_a、header+footer+font+min-pagesの4系統に分散)と比べて
+# 判定根拠が薄く、signatureが崩れた際に脆弱である(Task-E9/E10で実証済み)。
+
+era_id: 2018_2026_format_a
+version: 1
+rules:
+  - rule_id: header-date-year
+    kind: header_pattern
+    value: 年
+    weight: 0.5
+  - rule_id: header-date-month
+    kind: header_pattern
+    value: 月
+    weight: 0.15
+  - rule_id: header-date-day
+    kind: header_pattern
+    value: 日
+    weight: 0.15
+  - rule_id: min-pages
+    kind: min_page_count
+    value: "1"
+    weight: 0.2

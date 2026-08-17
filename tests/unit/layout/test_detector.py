@@ -260,6 +260,75 @@ def test_detector_artifact_pages_carry_extracted_text(
     assert "END OF DOCUMENT" in result.pages[0].text
 
 
+# --- 2段階抽出（Task-E10 Option A） ---
+
+
+def test_detector_pages_use_layout_mode_while_evidence_uses_default_mode(
+    context: PipelineContext,
+    write_pdf: Callable[[str, bytes], Path],
+    make_document: Callable[[Path], Document],
+) -> None:
+    path = write_pdf("format_a.pdf", text_pdf_bytes())
+    document = make_document(path)
+    detector = LayoutDetector(layout_definitions=())
+
+    def fake_extract_text(
+        self: PageObject, *, extraction_mode: str = "plain", **kwargs: object
+    ) -> str:
+        del self, kwargs
+        return "LAYOUT MODE TEXT" if extraction_mode == "layout" else "DEFAULT MODE TEXT"
+
+    with patch.object(PageObject, "extract_text", fake_extract_text):
+        result = detector.run(context, document)
+
+    # Section Parser以降が受け取るテキスト(pages[].text)はlayout mode
+    assert result.pages[0].text == "LAYOUT MODE TEXT"
+    # Layout判定用のsignature/Evidenceはdefault modeのまま(Option Aの核心)
+    assert result.detection.evidence.header_signature == "DEFAULT MODE TEXT"
+
+
+def test_detector_pages_extraction_falls_back_to_empty_string_on_missing_contents(
+    context: PipelineContext,
+    write_pdf: Callable[[str, bytes], Path],
+    make_document: Callable[[Path], Document],
+) -> None:
+    # pypdfは`/Contents`を持たないページに対し、default modeでは""を返すが
+    # `extraction_mode="layout"`はKeyErrorを送出する(非対称な挙動、Task-E11で
+    # 実装時に発見)。LayoutArtifactPage.textはdefault modeと同じく""になる
+    # べきで、KeyErrorが伝播してはならない。
+    path = write_pdf("blank.pdf", blank_pdf_bytes())
+    document = make_document(path)
+    detector = LayoutDetector(layout_definitions=())
+
+    result = detector.run(context, document)
+
+    assert result.pages[0].text == ""
+
+
+def test_detector_wraps_pypdf_extract_text_error_for_layout_mode(
+    context: PipelineContext,
+    write_pdf: Callable[[str, bytes], Path],
+    make_document: Callable[[Path], Document],
+) -> None:
+    path = write_pdf("format_a.pdf", text_pdf_bytes())
+    document = make_document(path)
+    detector = LayoutDetector(layout_definitions=())
+
+    def fake_extract_text(
+        self: PageObject, *, extraction_mode: str = "plain", **kwargs: object
+    ) -> str:
+        del self, kwargs
+        if extraction_mode == "layout":
+            raise PdfReadError("simulated")
+        return "DEFAULT MODE TEXT"
+
+    with patch.object(PageObject, "extract_text", fake_extract_text):
+        result = detector.run(context, document)
+
+    assert result.pages[0].text == ""
+    assert result.detection.evidence.header_signature == "DEFAULT MODE TEXT"
+
+
 def test_detector_artifact_pages_empty_for_empty_pdf(
     context: PipelineContext,
     write_pdf: Callable[[str, bytes], Path],
