@@ -1,0 +1,58 @@
+# knowledge/layout_notes/2015_2017_format_a-column-mapping.yaml
+#
+# category: layout（knowledge/layout_notes/README.md）
+# Task38 Step5-Bで追加。era_id=2015_2017_format_aについて、Field Extractorが
+# 生成する列位置ベースの汎用フィールド名（column_N、ADR-0038）から、
+# Normalizerが解釈する意味的フィールド名への対応付け（ADR-0039）を保持する。
+# item_key は "{era_id}.{raw_field_name}" 形式（normalizers/normalizer.py の
+# _resolve_semantic_field_name参照）。
+#
+# 列構成の根拠: Task38 Step2で取得した実PDF（2015_2017_format_aで
+# confidence>=0.6と判定される328件のうち、複数年代・複数producerを跨いで
+# サンプリング）の本文をFieldExtractorと同一の列分割ロジック（\s{2,}）で
+# 分割し、実測した結果に基づく。最も一般的な人物レコード行（例:
+# 「 （陸上幕僚監部）  ２等陸佐  石 原  由 尊 」）はcolumn_1〜4の4列に
+# 分割される。
+#
+# 既知の制約（正直に記録する）:
+# 1. column_3/column_4（姓・名）は、Normalizerの_FIELD_TO_CATEGORY
+#    （src/mod_personnel_db/normalizers/normalizer.py）が認識する4種
+#    （name/rank/organization/position）に該当する値を持たないため、
+#    本マッピングを追加してもtypography正規化（NFKC・knowledge/typography
+#    による表記ゆれ補正）以上の意味的な氏名解決（aliasカテゴリ照合）には
+#    至らない。氏名が2列に分割される構造自体は、現行のcolumn_N→単一
+#    意味的フィールド名という1:1対応モデルでは表現しきれない（Task38
+#    Step5で実コードにより実測確認済み）。
+# 2. column_1（旧職・前職）はorganization（部隊等の組織名）とposition
+#    （役職・ポスト名）が実データ上で混在しており、単一カテゴリへの
+#    切り分けは近似である。ここではpositionとして扱う。
+# 3. Normalizerのconfidence_threshold（既定0.5）は1レコードあたりの
+#    フィールド平均スコアで判定されるため、column_2（階級）がKnowledgeの
+#    rankカテゴリと意味的に一致（score 1.0）しても、他の3列がidentity
+#    （score 0.3）に留まる限り平均は0.5を下回り、NormalizedRecordが
+#    生成されない（Task38 Step5で実コードにより実測確認済み、平均0.475）。
+#    本ファイルの追加のみでは、実際に意味のある正規化済みレコードが
+#    得られるとは限らないことを明記する。
+#
+# 読み込み実装: src/mod_personnel_db/knowledge/loader.py
+# （トップレベル items: のフラットなエントリ形式。docs/knowledge/schema.mdが
+# 定めるカテゴリ別リッチスキーマとの関係は knowledge/layout_notes/README.md
+# の「現在の実データ形式について」を参照）。
+
+items:
+  - item_key: 2015_2017_format_a.column_1
+    canonical_value: position
+    provenance_source: Task38 Step2-5 実PDFサンプリング（2015_2017_format_a、複数年代・複数producer横断確認）
+    version: 1
+  - item_key: 2015_2017_format_a.column_2
+    canonical_value: rank
+    provenance_source: Task38 Step2-5 実PDFサンプリング（2015_2017_format_a、複数年代・複数producer横断確認）
+    version: 1
+  - item_key: 2015_2017_format_a.column_3
+    canonical_value: surname
+    provenance_source: Task38 Step2-5 実PDFサンプリング（2015_2017_format_a、複数年代・複数producer横断確認）
+    version: 1
+  - item_key: 2015_2017_format_a.column_4
+    canonical_value: given_name
+    provenance_source: Task38 Step2-5 実PDFサンプリング（2015_2017_format_a、複数年代・複数producer横断確認）
+    version: 1
