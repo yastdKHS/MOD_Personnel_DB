@@ -1,6 +1,6 @@
 # E14/E17 Roadmap — Resolver実装前の設計確定フェーズ
 
-Status: DRAFT
+Status: DRAFT（Gate 1は部分的に承認済み、Task-E30。Gate 2〜6は引き続き未承認）
 Approval: PENDING
 
 > 本ドキュメントは、Task-E14(1643-PDF実データ検証)・Task-E17(ADR-0048正式化＋Resolver実データ検証)で
@@ -28,6 +28,21 @@ Hybrid-rate definition」の設計確定フェーズ
     ↓
 今後
     1. Ground Truth設計・構築
+       1-A. Content Scope(内容スコープ)
+            [APPROVED, Task-E30] Block/Hybrid/Threshold検証は(i)位置参照+(ii)構造的判定
+            ラベルを基本とし、(iii)抽出値は原則不要。CategoryD 1:N/N:1の(iii)必要性は
+            D.未確認のまま維持(勝手に不要と確定しない)。
+       1-B. Storage(格納方式)
+            [APPROVED(方向性のみ), Task-E30] 実データはGit外で管理し、Gitにはmanifest・
+            構造的判定情報を管理する方式2の方向性を承認。永続性・バックアップ・
+            アクセス管理・再現性等の具体的設計は別Taskで検討(未確定)。
+       1-C. Human Approval Process(人間承認プロセス、1-Bと並行検討可能)
+            [APPROVED(候補B除外のみ), Task-E30] ルールベース自動確定(候補B)は不採用。
+            AIによる候補生成(または参考情報提示)と人間による承認を基本原則として維持。
+            候補A/Cの最終選択は別途承認対象(未確定)。
+       ※ Ground Truth実データ構築自体は、1-Bの副次的設計(永続性等)・1-Cの最終選択が
+         確定するまで着手しない(いずれも未承認)。
+         詳細: `docs/design/ground-truth/ground-truth-gate-1-approval-record.md`
     2. Block classification定義検証
     3. CategoryDResolver 1:1 assumption再評価
     4. Hybrid 78.0% vs 17.6% discrepancy解消
@@ -41,6 +56,9 @@ Hybrid-rate definition」の設計確定フェーズ
 この順序を現時点の基本ロードマップとする。ただし、上記順序を実行中に得られた新証拠によって
 変更が必要になった場合は、「現在位置」「変更理由」「影響範囲」を明示してから承認を求める
 (勝手に順序を変更しない)。
+
+**Gate 1(Ground Truth設計・構築)の内部構造(1-A/1-B/1-C)は、Task-E29で識別され、
+Task-E30で上記のとおり部分的に承認された。** Gate 2〜6は本節時点では未承認のまま。
 
 ## 2. Confirmed Facts(実測・再現確認済み)
 
@@ -134,7 +152,10 @@ Resolverを実装してから問題を発見するのではなく、**実装前�
 
 | ゲート | 内容 | 状態 |
 |---|---|---|
-| Gate 1 | Ground Truth整備方法(新規人手ラベル付け / 別手法)の決定 | 未承認 |
+| Gate 1 | Ground Truth整備方法(新規人手ラベル付け / 別手法)の決定 | **部分的に承認済み**
+  (Task-E30)。内訳: 1-A(内容スコープ)承認済み、1-B(格納方式)方向性のみ承認済み・
+  副次的設計は未承認、1-C(人間承認プロセス)候補B除外のみ承認済み・A/C最終選択は未承認。
+  詳細は`docs/design/ground-truth/ground-truth-gate-1-approval-record.md` |
 | Gate 2 | Block classification operational definitionの確定方法 | 未承認 |
 | Gate 3 | CategoryDResolver 1:1 assumptionの再設計方針 | 未承認 |
 | Gate 4 | Hybrid Section率78.0% vs 17.6%のどちらを設計基準とするか(または両論併記のまま保留するか) | 未承認 |
@@ -178,7 +199,8 @@ ADRを変更する場合は、変更理由と既存設計への影響を明示�
 
 - [`docs/adr/0048-block-classification-cmass-category-d-resolver-architecture.md`](../adr/0048-block-classification-cmass-category-d-resolver-architecture.md) — アーキテクチャ決定(Accepted)
 - [`docs/roadmap.md`](../roadmap.md) — 実装変更を伴わない将来の設計改善候補一覧(本ドキュメントとは別軸。`docs/roadmap.md`はADR起票済み事項の再評価候補、本ドキュメントはADR-0048配下の未確定事項の管理)
-- `docs/design/ground-truth/` — Ground Truth整備の設計・進捗(Gate 1確定後に作成)
+- `docs/design/ground-truth/` — Ground Truth整備の設計・進捗。Gate 1-A/1-B/1-C比較
+  (Task-E29)・承認記録(Task-E30、[`ground-truth-gate-1-approval-record.md`](ground-truth/ground-truth-gate-1-approval-record.md))を格納済み
 - `docs/design/block-classification/` — Block classification operational definitionの検証記録(Gate 2確定後に作成)
 - `docs/design/category-d/` — CategoryDResolver 1:1 assumption再評価の記録(Gate 3確定後に作成)
 - `docs/design/hybrid-section/` — Hybrid Section定義乖離解消の記録(Gate 4確定後に作成)
@@ -197,5 +219,5 @@ ADRを変更する場合は、変更理由と既存設計への影響を明示�
 
 ---
 
-Status: DRAFT
+Status: DRAFT（Gate 1は部分的に承認済み、Task-E30。Gate 2〜6は引き続き未承認）
 Approval: PENDING
