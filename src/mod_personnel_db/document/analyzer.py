@@ -8,6 +8,7 @@ import hashlib
 import io
 import re
 import secrets
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -158,7 +159,7 @@ def _probe(raw_bytes: bytes) -> _ProbeResult:
     return _ProbeResult(page_count, image_count, rotation_count, text_length, frozenset(warnings))
 
 
-def _inspect_pages(pages: list[PageObject]) -> tuple[int, int, int, bool]:
+def _inspect_pages(pages: Sequence[PageObject]) -> tuple[int, int, int, bool]:
     image_count = 0
     rotation_count = 0
     text_length = 0
