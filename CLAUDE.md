@@ -46,6 +46,30 @@ Document Analyzer → Layout Detector → Section Parser → Field Extractor →
 - 既存のADRと矛盾する変更をする場合は、既存ADRを "Superseded" にして新しいADRを追加する。ADRを無断で書き換えて履歴を消さない。
 - `pyproject.toml` がツール設定の唯一の情報源。lint/format/型チェック/テスト設定を他ファイルに重複して作らない。
 
+## 複数Taskにまたがる設計作業の運用（DESIGN POSITION）
+
+Ground Truth整備・Resolver設計など、単一Taskで完結せず複数Taskにまたがって進む設計作業（[`docs/design/`](docs/design/)配下で管理する事項、例: [`docs/design/e14-e17-roadmap.md`](docs/design/e14-e17-roadmap.md)）を扱うTaskでは、以下を遵守する。
+
+- **Task冒頭でDESIGN POSITIONを明示する**: `Roadmap` / `Current Phase` / `Current Subtask` / `Completed` / `In Progress` / `Blocked` / `This Task's Exit Condition` を記載し、そのTaskが設計上どこに位置するかを明確にする。
+- **Task終了時にPOSITION AFTER TASKを記録する**: `Current Phase` / `Completed` / `Newly discovered` / `Still blocked` / `Next approved decision` を記載する。
+- **設計文書には状態を明示する**: `Status: DRAFT` / `Approval: PENDING`、または `Status: APPROVED` / `Approved-by: USER` / `Approved-at: <date/task>` のいずれかを文書冒頭に記載する。ユーザー承認前の設計を、承認済み設計として扱わない。
+- **設計上重要な判断（順序変更、前提の破棄、閾値・定義の確定等）を、Task内で勝手に決定しない**。「現在位置」「変更理由」「影響範囲」を明示した上でユーザー承認を求める。
+- **未確定の実測値・仮説を、新しい事実として無断で確定しない**。過去の異なる測定値と乖離がある場合は、原因が特定できるまで両論併記する。
+
+### 設計成果物の保存（`docs/design/` と `/tmp` の使い分け）
+
+- 設計方針・検証結果・判断理由・未確定事項・承認済み事項・次Taskへの引継ぎ情報など、複数Taskにまたがって参照される設計成果物は `docs/design/` に保存してよい（`src/` の実装とは明確に分離する）。
+- 一方、未承認の実装、仮説を確定仕様として扱うコード、Ground Truthそのもの、一時的な大量生成データ、PDF corpusのコピー等は `docs/design/` に保存しない。
+- `/tmp` にのみ成果物を残すと、コンテナ再作成等でセッションをまたいで消失しうる。次Taskで確実に参照する必要がある設計成果物は、`git checkpoint`（下記）の要否を検討する。
+
+### Git checkpoint（設計成果物の仮保存）
+
+- 設計成果物の消失リスクを避けるため、`docs/design/` 配下の変更をgit上へ仮保存（commit）してよい。ただし**仮保存は実装承認を意味しない**。
+- 仮保存のcommitメッセージには `design: checkpoint ...` のように、実装commitと区別できる形で明示する。
+- commit対象・commitしない対象・保存が必要な理由・承認状態（DRAFT/APPROVED）を、そのTaskの成果物に記録する。
+- **push（リモートへの反映）は、ユーザーが明示的に承認した場合にのみ実施する**。commitとpushを自動的に一体で扱わない。
+- 次のいずれかに該当する場合は、git checkpointの要否をユーザー承認事項として提示する: 設計を失うリスクが高い／次Taskで必ず参照する必要がある／長大な`/tmp`成果物に設計の実体が依存している。
+
 ## 禁止事項
 
 - 実在の人事発令PDF（サンプル目的以外）や、それらから抽出した個人データをリポジトリにコミットしない。サンプルは `sample_pdfs/README.md` の基準を満たすもののみ。
@@ -78,3 +102,5 @@ Document Analyzer → Layout Detector → Section Parser → Field Extractor →
 - [`CONTRIBUTING.md`](CONTRIBUTING.md) — 人間の開発者向けガイド
 - [`docs/architecture.md`](docs/architecture.md) — システム設計の全体像
 - [`docs/adr/`](docs/adr/) — 設計判断の記録（本ファイルの運用ルールの根拠は [ADR-0009](docs/adr/0009-ai-agent-operating-policy.md)）
+- [`docs/design/`](docs/design/) — 複数Taskにまたがる進行中の設計検討の記録（ADR化前の作業台帳。例: [`docs/design/e14-e17-roadmap.md`](docs/design/e14-e17-roadmap.md)）
+- [`docs/roadmap.md`](docs/roadmap.md) — 実装変更を伴わない、将来のメジャーバージョンに向けた設計改善候補一覧
